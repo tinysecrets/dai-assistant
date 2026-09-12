@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from lib.dai.routing import PROVIDERS  # noqa: E402
+from tests.support import is_stdlib_module, stdlib_via_find_spec  # noqa: E402
 
 PYTHON_DIRS = ("lib", "services", "skills", "tests")
 TEXT_SUFFIXES = {".py", ".sh", ".md", ".json", ".txt", ".yml", ".yaml", ".toml", ".cfg", ""}
@@ -543,7 +544,6 @@ class TestSkills(unittest.TestCase):
 class TestStdlibOnly(unittest.TestCase):
     """No third-party dependencies: this repo must run on a bare Debian python3."""
 
-    STDLIB_OK: ClassVar[set] = set(sys.stdlib_module_names)
     LOCAL_OK: ClassVar[set] = {"lib", "tests", "services", "skills", "support"}
 
     def test_no_third_party_imports(self):
@@ -562,10 +562,45 @@ class TestStdlibOnly(unittest.TestCase):
                 for name in names:
                     if not name:
                         continue
-                    if name in self.STDLIB_OK or name in self.LOCAL_OK:
+                    if is_stdlib_module(name) or name in self.LOCAL_OK:
                         continue
                     offenders.append(f"{path.relative_to(ROOT)}: {name}")
         self.assertEqual(offenders, [], f"third-party imports found: {offenders}")
+
+    def test_the_python39_stdlib_fallback_agrees_with_the_authoritative_set(self):
+        """The 3.9 code path must be verified on a modern interpreter too.
+
+        `stdlib_via_find_spec` runs only where `sys.stdlib_module_names` is
+        missing, which in practice is CI's 3.9 job and nowhere else. A fix that
+        is never exercised on the machine it is written on is how a version
+        problem gets "fixed" with another version problem, so on 3.10+ compare
+        the fallback against the authoritative set for every name it will really
+        be asked about — every top-level import in the repo — plus third-party
+        names it must reject and local package names it must not mistake for
+        stdlib.
+        """
+        known = getattr(sys, "stdlib_module_names", None)
+        if known is None:
+            self.skipTest("on 3.9 the fallback is the only path; nothing to compare against")
+
+        imported = set()
+        for path in python_sources():
+            tree = ast.parse(read(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    imported |= {a.name.split(".")[0] for a in node.names}
+                elif isinstance(node, ast.ImportFrom) and not node.level and node.module:
+                    imported.add(node.module.split(".")[0])
+        self.assertTrue(imported, "no imports discovered; the comparison would be vacuous")
+
+        third_party = {"pytest", "requests", "numpy", "yaml", "ruff", "flask", "httpx", "aiohttp"}
+        for name in sorted(imported | third_party):
+            with self.subTest(name):
+                self.assertEqual(
+                    stdlib_via_find_spec(name),
+                    name in known,
+                    f"the 3.9 fallback disagrees with sys.stdlib_module_names about {name!r}",
+                )
 
     def test_no_pip_install_instructions_without_a_venv(self):
         """Anything telling the user to pip install must isolate it in a venv."""

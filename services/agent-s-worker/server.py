@@ -80,6 +80,10 @@ SAFETY_KEYS = ("enabled", "dry_run_default", "bind_owner_live_desktop", "require
 DEFAULT_DISPLAY = ":99"
 DEFAULT_MAX_STEPS = 15
 DEFAULT_MAX_STEPS_CAP = 20
+# How long shutdown waits for each consumer thread to finish.  Bounded so one
+# wedged task cannot hold the process open forever; in-flight tasks have already
+# been cancelled by the time we get here.
+WORKER_JOIN_TIMEOUT = 5.0
 DEFAULT_TIMEOUT = 600
 
 
@@ -356,6 +360,21 @@ class WorkerRuntime:
             # A sentinel per worker; if the queue is full there is nothing to drain.
             with contextlib.suppress(queue.Full):
                 self._queue.put_nowait("")
+
+        # Setting _stop and queueing sentinels only *asks* the consumers to stop.
+        # Without joining them, stop() returned while a worker could still be
+        # inside save_task(), so anything the caller did next raced that write:
+        # under SIGTERM the process could exit mid-write and lose a task record,
+        # and in the tests a fixture removing its temp state_dir underneath a
+        # live consumer raised FileNotFoundError — an intermittent failure that
+        # showed up only under CI's timing and looked like a flaky test.
+        current = threading.current_thread()
+        for thread in self._workers:
+            if thread is not current and thread.is_alive():
+                thread.join(timeout=WORKER_JOIN_TIMEOUT)
+        self._workers.clear()
+
+        # Only now: a consumer may still have been driving the display.
         proc = self._xvfb
         if proc is not None and proc.poll() is None:
             with contextlib.suppress(OSError, ProcessLookupError):

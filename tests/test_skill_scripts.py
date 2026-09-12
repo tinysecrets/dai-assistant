@@ -29,7 +29,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tests.support import TempSpine, start_worker  # noqa: E402
+from tests.support import TempSpine, is_stdlib_module, start_worker  # noqa: E402
 
 SKILL = ROOT / "skills/agent-s-delegate/scripts"
 DELEGATE = SKILL / "delegate_task.py"
@@ -176,7 +176,12 @@ class TestScriptHygiene(unittest.TestCase):
                     )
 
     def test_scripts_use_only_stdlib_and_lib_dai(self):
-        allowed = set(sys.stdlib_module_names) | {"lib", "tests", "__future__"}
+        """Skill scripts run from an assistant workspace, so they get no install step.
+
+        `is_stdlib_module` rather than `sys.stdlib_module_names`: that attribute
+        is 3.10+, and this project supports 3.9.
+        """
+        local_ok = {"lib", "tests"}
         for script in (DELEGATE, HEALTH):
             tree = ast.parse(script.read_text(encoding="utf-8"))
             for node in ast.walk(tree):
@@ -187,7 +192,10 @@ class TestScriptHygiene(unittest.TestCase):
                     names = [node.module.split(".")[0]]
                 for name in names:
                     with self.subTest(f"{script.name}: {name}"):
-                        self.assertIn(name, allowed, f"{script.name} needs a third-party dep: {name}")
+                        self.assertTrue(
+                            is_stdlib_module(name) or name in local_ok,
+                            f"{script.name} needs a third-party dep: {name}",
+                        )
 
     def test_documented_exit_codes_are_declared_in_the_source(self):
         """The SKILL.md and the scripts must agree on the code meanings."""

@@ -8,6 +8,7 @@ without touching a real display.
 from __future__ import annotations
 
 import json
+import shutil
 import tempfile
 import time
 import unittest
@@ -681,6 +682,57 @@ class TestWorkerAuth(WorkerCase):
             "/v1/tasks", {"instruction": INSTRUCTION}, headers={"Authorization": "Bearer worker-gate"}
         )
         self.assertEqual(status, 202)
+
+
+class TestShutdownQuiesces(WorkerCase):
+    """stop() must not return while a consumer can still write a task record.
+
+    Setting `_stop` and queueing sentinels only asks the consumers to stop. Until
+    they were joined, `stop()` returned while one could still be inside
+    `save_task()`, so under SIGTERM the process could exit mid-write and lose a
+    record, and a test fixture removing its temp state_dir immediately afterwards
+    raised FileNotFoundError from a background thread. That looked exactly like a
+    flaky test: it did not reproduce on a fast idle machine and did under CI.
+    """
+
+    def test_stop_joins_the_consumer_threads(self):
+        threads = list(self.runtime._workers)
+        self.assertTrue(threads, "start_worker should have started consumers")
+        self.assertTrue(any(t.is_alive() for t in threads), "consumers were never running")
+
+        # Real work first, so a consumer has plausibly been mid-write recently.
+        task_id = self.submit({"dry_run": True})[1]["id"]
+        self.wait_terminal(task_id)
+
+        self.service.stop()
+        self.runtime.stop()
+
+        alive = [t.name for t in threads if t.is_alive()]
+        self.assertEqual(alive, [], "stop() returned with consumers still running")
+        self.assertEqual(list(self.runtime._workers), [], "consumers were not released")
+
+    def test_state_dir_survives_removal_immediately_after_stop(self):
+        """The race itself: removing state right after stop() must not raise.
+
+        `ignore_errors=False` is the point — a consumer still writing would make
+        this fail loudly instead of being silently tolerated the way the fixture
+        teardown's `ignore_errors=True` tolerated it.
+        """
+        task_id = self.submit({"dry_run": True})[1]["id"]
+        self.wait_terminal(task_id)
+
+        self.service.stop()
+        self.runtime.stop()
+        shutil.rmtree(self.spine.dir, ignore_errors=False)
+        self.assertFalse(self.spine.dir.exists())
+
+    def test_stop_is_idempotent(self):
+        """Teardown calls stop() again, so a second call must be a no-op."""
+        self.service.stop()
+        self.runtime.stop()
+        self.service.stop()
+        self.runtime.stop()
+        self.assertEqual(list(self.runtime._workers), [])
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ import shutil
 import socket
 import stat
 import sys
+import sysconfig
 import tempfile
 import threading
 import time
@@ -28,6 +29,70 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 _MODULES: Dict[str, Any] = {}
+
+
+def stdlib_via_find_spec(name: str) -> bool:
+    """True when `name` resolves into the interpreter's own stdlib tree.
+
+    This is the version-proof implementation: it works on Python 3.9, where
+    ``sys.stdlib_module_names`` does not exist.  It resolves the module and
+    checks that its file lives under the stdlib directory rather than under
+    site-packages / dist-packages.
+
+    Kept separate from ``is_stdlib_module`` so it can be tested directly on a
+    modern interpreter and compared against the authoritative set — otherwise
+    the code path that runs on the oldest supported Python would only ever be
+    exercised in CI.
+    """
+    if not name:
+        return False
+    if name in sys.builtin_module_names:
+        return True
+    try:
+        spec = importlib.util.find_spec(name)
+    except (ImportError, AttributeError, ValueError):
+        # ValueError: a parent package with a bogus __path__; ImportError: the
+        # module's own loader choked.  Either way it is not plain stdlib.
+        return False
+    if spec is None:
+        return False
+    origin = spec.origin or ""
+    if origin in ("built-in", "frozen"):
+        return True
+    if not origin:
+        # A namespace package has no origin; fall back to its search path.
+        locations = list(getattr(spec, "submodule_search_locations", None) or [])
+        origin = locations[0] if locations else ""
+    if not origin:
+        return False
+    paths = sysconfig.get_paths()
+    stdlib = paths.get("stdlib", "")
+    if not stdlib or not origin.startswith(stdlib):
+        return False
+    # On layouts where site-packages lives *under* the stdlib prefix, exclude it
+    # explicitly so a third-party install is not mistaken for stdlib.
+    for key in ("purelib", "platlib"):
+        extra = paths.get(key) or ""
+        if extra and extra != stdlib and origin.startswith(extra):
+            return False
+    return "site-packages" not in origin and "dist-packages" not in origin
+
+
+def is_stdlib_module(name: str) -> bool:
+    """True when `name` is part of the standard library, on any supported Python.
+
+    Uses ``sys.stdlib_module_names`` when it exists (3.10+) because it is
+    authoritative and cheap, and falls back to ``stdlib_via_find_spec`` on 3.9.
+
+    Reading that attribute directly is what broke the 3.9 CI job: it was
+    evaluated in a class body, so tests/test_repo_consistency.py failed at import
+    time, which dropped ~69 drift tests and reported as a mystery suite failure
+    rather than as a version problem.
+    """
+    known = getattr(sys, "stdlib_module_names", None)
+    if known is not None:
+        return name in known or name in sys.builtin_module_names
+    return stdlib_via_find_spec(name)
 
 
 def load_service(name: str, relpath: str) -> Any:
@@ -452,6 +517,9 @@ class ServiceFixture:
     def stop(self) -> None:
         self.httpd.shutdown()
         self.httpd.server_close()
+        # shutdown() blocks until serve_forever returns, so this join is about
+        # being explicit that no request thread outlives the fixture.
+        self._thread.join(timeout=5)
 
 
 def start_router(
