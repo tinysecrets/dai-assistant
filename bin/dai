@@ -61,7 +61,7 @@ case "$cmd" in
     for name in model-router agent-s-worker xvfb; do
       log="$DAI_LOG_DIR/$name.log"
       [[ -f "$log" ]] || continue
-      dai_head "== $name (last $lines lines of ${log#$ROOT/}) =="
+      dai_head "== $name (last $lines lines of ${log#"$ROOT"/}) =="
       tail -n "$lines" "$log"
       dai_say ""
     done

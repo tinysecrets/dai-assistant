@@ -70,14 +70,17 @@ item below was verified against a running service or a test, not assumed.
 **Project files** — `Makefile`, `pyproject.toml`, `LICENSE` (MIT),
 `SECURITY.md`, `CONTRIBUTING.md`, this changelog, and CI
 (`.github/workflows/ci.yml`) covering three Python versions plus shellcheck,
-ruff and repo hygiene.
+ruff and repo hygiene. Failing jobs re-emit their captured output as check
+annotations, because Actions logs are not downloadable from every environment;
+the reporter extracts whole unittest failure blocks so the traceback frames —
+the part that says *where* — survive into the annotation.
 
 **Docs** — `docs/API.md` (both services advertise it from `/health`; it did not
 exist), `docs/CONFIG.md` (every setting and the precedence rules),
 `docs/OPERATIONS.md` (runbook). `policy/approvals.example.json` documents the
 token record shape.
 
-**Tests** — 441 tests, none needing keys, network or a display:
+**Tests** — 445 tests, none needing keys, network or a display:
 
 * unit: `redact`, `env`, `jsonio`, `approvals`, `routing`
 * HTTP integration against a stub provider: `router_http`, `worker_http`
@@ -187,6 +190,23 @@ Correctness:
   display geometry said 800.** Since `.env` overrides policy for host knobs,
   this silently misaligned GUI grounding — clicks would land in the wrong place.
   Those variables are now left commented so the policy values apply.
+* **An approval token could not always be passed on a command line.**
+  `secrets.token_urlsafe` draws from the base64url alphabet, so about one token
+  in 64 began with `-`.  Given as `--approval-token <tok>`, argparse read it as
+  an option flag and exited **2 with an empty stdout** — the code
+  `delegate_task.py` documents as "the task ran but did not succeed", and the
+  JSON its skill instructions tell the agent to parse was not there at all.  A
+  valid approval therefore reported itself as a failed task, roughly one run in
+  sixty.  Tokens are now re-rolled until they are argv-safe, which costs about
+  0.02 bits of entropy on a 144-bit token; already-issued tokens stay valid, and
+  the `--approval-token=<tok>` form accepts any token.
+* **Both skill scripts answered an argument error with the wrong exit code.**
+  argparse's built-in handler exits 2 — documented as a *task* failure by
+  `delegate_task.py` and not defined at all by `worker_health.py` — and writes
+  nothing to stdout.  Usage problems are now exit 4 with a JSON `usage_error`
+  document, so no documented code is ambiguous and every exit path of both
+  scripts is parseable.  The published exit-code table is unchanged; this makes
+  the behaviour match it.
 
 Hygiene:
 

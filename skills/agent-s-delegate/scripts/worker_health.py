@@ -178,8 +178,24 @@ def explain(health: Dict[str, Any]) -> list:
     return notes
 
 
+class UsageErrorParser(argparse.ArgumentParser):
+    """An ``ArgumentParser`` that honours this script's exit-code contract.
+
+    The stock parser reports bad usage by writing to stderr and exiting **2** —
+    a code this script does not define at all — and it leaves stdout empty for a
+    caller that parses JSON.  Usage problems are EXIT_USAGE, and they still
+    produce a document on stdout like every other exit path.
+    """
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        print(json.dumps({"ok": False, "error": "usage_error", "detail": message}, default=str))
+        self.exit(EXIT_USAGE)
+
+
 def main(argv: Optional[list] = None) -> int:
-    parser = argparse.ArgumentParser(
+    parser = UsageErrorParser(
         prog="worker_health.py",
         description="Report agent-s-worker and policy health as JSON.",
         epilog="exit codes: 0 healthy · 1 unreachable or not ready · 4 usage/config error",

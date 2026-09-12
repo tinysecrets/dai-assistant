@@ -157,8 +157,38 @@ def task_summary(task: Dict[str, Any]) -> Dict[str, Any]:
     return out
 
 
+def usage_error(message: str) -> int:
+    """Report a usage problem the way every other exit path reports a result.
+
+    The consuming agent parses stdout as JSON (see SKILL.md), so a usage error
+    that wrote only to stderr would leave stdout empty and unparseable.  The
+    human-readable copy still goes to stderr for a person watching a terminal.
+    """
+    emit({"error": "usage_error", "detail": message}, False)
+    print(f"error: {message}", file=sys.stderr)
+    return EXIT_USAGE
+
+
+class UsageErrorParser(argparse.ArgumentParser):
+    """An ``ArgumentParser`` that honours this script's exit-code contract.
+
+    The stock parser reports bad usage by writing to stderr and exiting **2** —
+    a code this script documents as "the task ran but did not succeed" — and it
+    leaves stdout empty.  So an argument typo used to be indistinguishable from
+    a failed task for any caller that only looked at the exit status.  Usage
+    problems are EXIT_USAGE, and they carry a JSON document like every other
+    exit path does.
+    """
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        emit({"error": "usage_error", "detail": message}, False)
+        self.exit(EXIT_USAGE)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
+    parser = UsageErrorParser(
         prog="delegate_task.py",
         description="Submit a bounded Agent S task and wait for it to finish.",
         epilog=(
@@ -195,37 +225,30 @@ def main(argv: Optional[list] = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.timeout <= 0:
-        print("error: --timeout must be positive", file=sys.stderr)
-        return EXIT_USAGE
+        return usage_error("--timeout must be positive")
     if args.poll_interval <= 0:
-        print("error: --poll-interval must be positive", file=sys.stderr)
-        return EXIT_USAGE
+        return usage_error("--poll-interval must be positive")
 
     agent_s_policy, note = load_agent_s_policy()
     base = worker_url(args, agent_s_policy)
     if note:
         print(f"note: {note}", file=sys.stderr)
     if not base:
-        print("error: could not resolve a worker URL", file=sys.stderr)
-        return EXIT_USAGE
+        return usage_error("could not resolve a worker URL")
 
     instruction = args.instruction.strip()
     if not instruction:
-        print("error: --instruction must not be empty", file=sys.stderr)
-        return EXIT_USAGE
+        return usage_error("--instruction must not be empty")
     if len(instruction) > 4000:
-        print("error: --instruction must be 4000 characters or fewer", file=sys.stderr)
-        return EXIT_USAGE
+        return usage_error("--instruction must be 4000 characters or fewer")
 
     token = args.approval_token or os.environ.get("DAI_APPROVAL_TOKEN") or ""
     if args.live and not token.strip():
-        print(
-            "error: --live needs an approval token.\n"
-            '  TOKEN=$(./bin/issue-approval.sh agent_s_gui_task "<exact instruction>")\n'
-            '  export DAI_APPROVAL_TOKEN="$TOKEN"   # preferred over --approval-token',
-            file=sys.stderr,
+        return usage_error(
+            "--live needs an approval token. "
+            'TOKEN=$(./bin/issue-approval.sh agent_s_gui_task "<exact instruction>"); '
+            'export DAI_APPROVAL_TOKEN="$TOKEN"  # preferred over --approval-token'
         )
-        return EXIT_USAGE
 
     payload: Dict[str, Any] = {"instruction": instruction, "dry_run": not args.live}
     if args.max_steps is not None:
