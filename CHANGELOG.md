@@ -77,7 +77,7 @@ exist), `docs/CONFIG.md` (every setting and the precedence rules),
 `docs/OPERATIONS.md` (runbook). `policy/approvals.example.json` documents the
 token record shape.
 
-**Tests** — 438 tests, none needing keys, network or a display:
+**Tests** — 441 tests, none needing keys, network or a display:
 
 * unit: `redact`, `env`, `jsonio`, `approvals`, `routing`
 * HTTP integration against a stub provider: `router_http`, `worker_http`

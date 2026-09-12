@@ -21,11 +21,13 @@ import ast
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Dict, List
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -614,6 +616,139 @@ class TestStdlibOnly(unittest.TestCase):
                         "venv" in text[max(0, match.start() - 300) : match.start() + 100].lower() or "--user" in line,
                         "a bare `pip install` should be a venv or --user install",
                     )
+
+
+class TestPython39Compatibility(unittest.TestCase):
+    """The floor is Python 3.9, enforced statically.
+
+    CI does run 3.9, but a violation there costs a round trip and can hide
+    itself: `sys.stdlib_module_names` (3.10+) was read in a class body, so on 3.9
+    this very module failed at *import* time and 69 drift checks vanished from
+    the run instead of failing — the job reported "Ran 365 tests" and everything
+    that ran passed.
+
+    These constructs are all detectable from the AST, and this module is itself
+    3.9-safe: the newer node types are fetched with getattr because ast.Match and
+    ast.TryStar do not exist on 3.9.  Checking the AST rather than the text also
+    avoids the false positives a grep produces — `getattr(sys,
+    "stdlib_module_names", None)` and a docstring mentioning the name are both
+    correct, and neither is an attribute node.
+    """
+
+    # attribute or imported name -> the version that introduced it
+    NEWER_THAN_39: ClassVar[Dict[str, str]] = {
+        "stdlib_module_names": "3.10",
+        "bit_count": "3.10",
+        "pairwise": "3.10",
+        "KW_ONLY": "3.10",
+        "TypeAlias": "3.10",
+        "ParamSpec": "3.10",
+        "Concatenate": "3.10",
+        "dataclass_transform": "3.11",
+        "ExceptionGroup": "3.11",
+        "BaseExceptionGroup": "3.11",
+        "StrEnum": "3.11",
+        "Self": "3.11",
+        "override": "3.12",
+        "TypeAliasType": "3.12",
+    }
+    NEWER_MODULES: ClassVar[Dict[str, str]] = {"tomllib": "3.11"}
+    # Keyword arguments added after 3.9, by the callable they belong to.
+    NEWER_KWARGS: ClassVar[Dict[str, str]] = {"zip.strict": "3.10"}
+
+    def offenders_in(self, path: Path) -> List[str]:
+        tree = ast.parse(read(path))
+        # Not always under ROOT: the self-check below feeds this a temp file.
+        try:
+            rel = str(path.relative_to(ROOT))
+        except ValueError:
+            rel = path.name
+        found: List[str] = []
+
+        match_node = getattr(ast, "Match", None)
+        trystar_node = getattr(ast, "TryStar", None)
+
+        for node in ast.walk(tree):
+            if match_node is not None and isinstance(node, match_node):
+                found.append(f"{rel}:{node.lineno}: match/case statement (3.10+)")
+            if trystar_node is not None and isinstance(node, trystar_node):
+                found.append(f"{rel}:{node.lineno}: except* (3.11+)")
+
+            if isinstance(node, ast.Attribute) and node.attr in self.NEWER_THAN_39:
+                found.append(f"{rel}:{node.lineno}: .{node.attr} ({self.NEWER_THAN_39[node.attr]}+)")
+
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    root = alias.name.split(".")[0]
+                    if root in self.NEWER_MODULES:
+                        found.append(f"{rel}:{node.lineno}: import {root} ({self.NEWER_MODULES[root]}+)")
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    if alias.name in self.NEWER_THAN_39:
+                        found.append(
+                            f"{rel}:{node.lineno}: from {node.module} import {alias.name} "
+                            f"({self.NEWER_THAN_39[alias.name]}+)"
+                        )
+
+            if isinstance(node, ast.Call):
+                name = node.func.id if isinstance(node.func, ast.Name) else getattr(node.func, "attr", "")
+                for kw in node.keywords:
+                    key = f"{name}.{kw.arg}"
+                    if key in self.NEWER_KWARGS:
+                        found.append(f"{rel}:{node.lineno}: {key}= ({self.NEWER_KWARGS[key]}+)")
+                    if name == "dataclass" and kw.arg == "slots":
+                        found.append(f"{rel}:{node.lineno}: dataclass(slots=) (3.10+)")
+        return found
+
+    def test_no_constructs_newer_than_the_supported_floor(self):
+        offenders: List[str] = []
+        for path in python_sources():
+            offenders.extend(self.offenders_in(path))
+        self.assertEqual(
+            offenders,
+            [],
+            "Python 3.9 is the supported floor (pyproject requires-python, CI "
+            "matrix); these break on it: " + "; ".join(offenders[:12]),
+        )
+
+    def test_the_floor_is_still_declared_as_3_9(self):
+        """Keep the declared floor and this test's assumption in step.
+
+        If requires-python moves to 3.10+, this class should be revisited rather
+        than left asserting a floor the project no longer supports — and the
+        pyupgrade rules disabled in pyproject.toml should be re-enabled.
+        """
+        text = read(ROOT / "pyproject.toml")
+        self.assertRegex(text, r'requires-python\s*=\s*">=\s*3\.9"')
+        workflows = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+        self.assertTrue(workflows, "no CI workflow found")
+        joined = "\n".join(read(w) for w in workflows)
+        self.assertIn('"3.9"', joined, "CI no longer tests the declared floor")
+
+    def test_the_check_itself_detects_a_violation(self):
+        """Guard the guard: an empty result must mean clean, not broken.
+
+        Without this, a typo in the rule tables above would make the check pass
+        vacuously forever.
+        """
+        tmp = Path(tempfile.mkdtemp(prefix="dai-py39-"))
+        self.addCleanup(shutil.rmtree, tmp, True)
+        sample = tmp / "sample.py"
+        sample.write_text(
+            "import sys\n"
+            "import tomllib\n"
+            "names = sys.stdlib_module_names\n"
+            "pairs = list(zip([1], [2], strict=True))\n"
+            "count = (5).bit_count()\n",
+            encoding="utf-8",
+        )
+        found = self.offenders_in(sample)
+        for expected in ("stdlib_module_names", "tomllib", "zip.strict", "bit_count"):
+            with self.subTest(expected):
+                self.assertTrue(
+                    any(expected in item for item in found),
+                    f"the compatibility check missed {expected}; found: {found}",
+                )
 
 
 class TestFileHygiene(unittest.TestCase):
