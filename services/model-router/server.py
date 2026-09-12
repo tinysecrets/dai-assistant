@@ -153,6 +153,8 @@ class RouterRuntime:
 
     def provider_enabled(self, name: str) -> bool:
         """A provider is on unless the policy explicitly switches it off."""
+        if self.inference_policy().get("free_cloud_only") is True and name != "openrouter":
+            return False
         cfg = self.inference_policy().get(name)
         return not (isinstance(cfg, dict) and cfg.get("enabled") is False)
 
@@ -160,6 +162,8 @@ class RouterRuntime:
         return [name for name in PROVIDERS if self.provider_enabled(name)]
 
     def paid_openrouter_enabled(self) -> bool:
+        if self.inference_policy().get("free_cloud_only") is True:
+            return False
         cfg = self.inference_policy().get("openrouter")
         return bool(isinstance(cfg, dict) and cfg.get("paid_enabled"))
 
@@ -232,6 +236,7 @@ class RouterRuntime:
             preferred=preferred,
             strict_models=self.strict_models,
             enabled_providers=self.enabled_providers(),
+            free_cloud_only=self.inference_policy().get("free_cloud_only") is True,
         )
 
     def providers_configured(self) -> Dict[str, bool]:

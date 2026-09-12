@@ -444,6 +444,7 @@ def plan_candidates(
     preferred: Optional[str] = None,
     strict_models: bool = False,
     enabled_providers: Optional[Sequence[str]] = None,
+    free_cloud_only: bool = False,
 ) -> Plan:
     """Build the ordered candidate list for one request.
 
@@ -462,6 +463,8 @@ def plan_candidates(
 
     def make(provider_name: str, model: str, *, origin: str, free: Optional[bool] = None) -> Optional[Candidate]:
         spec = PROVIDERS[provider_name]
+        if free_cloud_only and (provider_name != "openrouter" or not model.endswith(":free")):
+            return None
         if provider_name not in allowed:
             return None
         if spec.requires_key and not spec.configured(env):
