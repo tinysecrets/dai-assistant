@@ -48,7 +48,7 @@ Do **not** delete or overwrite these. Vellum becomes the canonical identity/memo
 | Fact | Evidence |
 |------|----------|
 | License | Apache-2.0 |
-| Package | `gui-agents` (`pip install gui-agents`) |
+| Package | `gui-agents` — install into the dedicated venv: `python3 -m venv ~/.local/agent-s-venv && ~/.local/agent-s-venv/bin/pip install gui-agents` |
 | Platforms | Linux, macOS, Windows (README badges + Linux deps) |
 | Control | Screen + mouse/keyboard (`pyautogui`; Linux needs display) |
 | Main models | OpenAI, Anthropic, Gemini, Azure, **vLLM**, OpenRouter |

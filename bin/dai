@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# dai — one entry point for the Debian AI Assistant spine.
+#
+#   dai doctor      check files, keys, services, GUI deps
+#   dai up          start the spine (router + worker + agent display)
+#   dai down        stop the spine
+#   dai status      one-line service status
+#   dai logs [n]    tail service logs (default 40 lines)
+#   dai smoke       end-to-end self-test
+#   dai test        run the unit + integration suite
+#   dai keys        import keys from other local installs into .env
+#   dai approve     issue an approval token (agent_s_gui_task | openrouter_paid)
+#   dai tokens      list / revoke / prune approval tokens
+#   dai skills      install skills into the Vellum workspace
+#   dai hatch       hatch the Vellum assistant
+#   dai models      list the models the router can serve right now
+#   dai chat "..."  one-shot chat through the rotator
+#   dai plan [id]   show what the router would try, without calling anything
+#   dai config      print resolved (secret-free) configuration
+#   dai version     print component versions
+#
+# Every subcommand is a thin wrapper: the underlying scripts stay usable
+# directly, and nothing here duplicates their logic.
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export ROOT
+source "$ROOT/bin/lib.sh"
+
+usage() { dai_usage; }
+
+router_url() {
+  printf 'http://%s:%s' "$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)" "$(dai_env_get DAI_ROUTER_PORT 11435)"
+}
+worker_url() {
+  printf 'http://%s:%s' "$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1)" "$(dai_env_get DAI_AGENT_S_PORT 8765)"
+}
+
+require_router() {
+  dai_http_up "$(router_url)" 3 || dai_die "model-router is not running — dai up"
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  doctor)  exec "$ROOT/bin/doctor.sh" "$@" ;;
+  up|start) exec "$ROOT/bin/start-spine.sh" "$@" ;;
+  down|stop) exec "$ROOT/bin/stop-spine.sh" "$@" ;;
+  smoke)   exec "$ROOT/bin/smoke.sh" "$@" ;;
+  keys)    exec "$ROOT/bin/import-keys.sh" "$@" ;;
+  skills)  exec "$ROOT/bin/install-vellum-skill.sh" "$@" ;;
+  hatch)   exec "$ROOT/bin/hatch-vellum.sh" "$@" ;;
+
+  status)
+    exec "$ROOT/bin/start-spine.sh" --status
+    ;;
+
+  logs)
+    lines="${1:-40}"
+    for name in model-router agent-s-worker xvfb; do
+      log="$DAI_LOG_DIR/$name.log"
+      [[ -f "$log" ]] || continue
+      dai_head "== $name (last $lines lines of ${log#$ROOT/}) =="
+      tail -n "$lines" "$log"
+      dai_say ""
+    done
+    [[ -f "$DAI_LOG_DIR/model-router.log" ]] || dai_warn "no logs yet — dai up"
+    ;;
+
+  test)
+    cd "$ROOT"
+    exec python3 -m unittest discover -s tests -t . "${@:--v}"
+    ;;
+
+  approve)
+    exec "$ROOT/bin/issue-approval.sh" "$@"
+    ;;
+
+  tokens)
+    exec "$ROOT/bin/issue-approval.sh" --list "$@"
+    ;;
+
+  models)
+    require_router
+    dai_http "$(router_url)/v1/models" 5 | python3 -c '
+import json, sys
+
+doc = json.load(sys.stdin)
+for model in doc.get("data", []):
+    meta = model.get("dai") or {}
+    tags = []
+    if meta.get("origin"):
+        tags.append(meta["origin"])
+    if meta.get("free") is False:
+        tags.append("paid")
+    suffix = ("  [" + ", ".join(tags) + "]") if tags else ""
+    print("  %-52s %s%s" % (model["id"], model.get("owned_by", ""), suffix))
+'
+    ;;
+
+  plan)
+    require_router
+    model="${1:-}"
+    url="$(router_url)/v1/status/plan"
+    [[ -n "$model" ]] && url="$url?model=$model"
+    dai_http "$url" 5 | python3 -m json.tool
+    ;;
+
+  chat)
+    require_router
+    prompt="${*:-Say hi}"
+    export DAI_ROUTER_URL="$(router_url)"
+    python3 - "$prompt" <<'PY'
+import json, os, sys, urllib.request
+
+base = os.environ["DAI_ROUTER_URL"]
+body = {
+    "model": "dai/auto",
+    "messages": [{"role": "user", "content": sys.argv[1]}],
+}
+req = urllib.request.Request(
+    f"{base}/v1/chat/completions",
+    data=json.dumps(body).encode(),
+    headers={"Content-Type": "application/json"},
+    method="POST",
+)
+try:
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        doc = json.loads(resp.read().decode())
+except urllib.error.HTTPError as exc:
+    doc = json.loads(exc.read().decode() or "{}")
+    print(json.dumps(doc, indent=2), file=sys.stderr)
+    sys.exit(1)
+
+routed = doc.get("dai_routed") or {}
+print(doc["choices"][0]["message"]["content"])
+if routed:
+    note = f"\n[{routed.get('provider')}/{routed.get('model')} · {routed.get('attempts')} attempt(s)"
+    if routed.get("fallback_from"):
+        note += f" · fell back from {routed['fallback_from']}"
+    print(note + "]")
+PY
+    ;;
+
+  config)
+    require_router
+    dai_http "$(router_url)/v1/status/config" 5 | python3 -m json.tool
+    dai_head "agent-s-worker"
+    if dai_http_up "$(worker_url)" 3; then
+      dai_http "$(worker_url)/v1/settings" 5 | python3 -m json.tool
+    else
+      dai_warn "worker is not running"
+    fi
+    ;;
+
+  version|-v|--version)
+    for svc in model-router agent-s-worker; do
+      printf '%-18s ' "$svc"
+      python3 "$ROOT/services/$svc/server.py" --version 2>/dev/null || echo "(unavailable)"
+    done
+    printf '%-18s ' "lib/dai"
+    python3 -c 'import sys; sys.path.insert(0, "'"'"$ROOT"'"'"); import lib.dai; print(lib.dai.__version__)'
+    printf '%-18s ' "python"
+    python3 -V 2>&1
+    ;;
+
+  help|-h|--help)
+    usage
+    ;;
+
+  *)
+    usage >&2
+    dai_die "unknown command: $cmd"
+    ;;
+esac

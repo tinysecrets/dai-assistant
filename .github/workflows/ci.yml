@@ -1,0 +1,129 @@
+name: CI
+
+# The spine is stdlib-only and localhost-only, so CI needs no secrets and no
+# network access to a provider.  Inference is exercised against a stub upstream
+# that the test suite starts itself.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is the floor the code targets; 3.11 is what Debian stable ships.
+        python-version: ["3.9", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Byte-compile
+        run: python -m compileall -q lib services skills tests
+
+      - name: Validate service configuration
+        run: |
+          python services/model-router/server.py --check
+          python services/agent-s-worker/server.py --check
+
+      - name: Print resolved configuration (secret-free)
+        run: |
+          python services/model-router/server.py --print-config
+          python services/agent-s-worker/server.py --print-config
+
+      - name: Shell syntax
+        run: |
+          for f in bin/*.sh bin/dai; do bash -n "$f"; done
+
+      - name: Test suite
+        run: python -m unittest discover -s tests -t . -v
+
+      - name: Smoke (suite + static checks; no services running)
+        run: ./bin/smoke.sh --tests-only
+
+      - name: Doctor must not fail on a clean checkout
+        run: ./bin/doctor.sh
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        # bin/lib.sh is sourced, so it is checked through its consumers with -x.
+        run: shellcheck -x -S warning bin/*.sh bin/dai
+
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: python -m pip install --upgrade ruff
+
+      - name: Lint
+        run: ruff check lib services skills tests
+
+      - name: Format check
+        run: ruff format --diff lib services skills tests
+
+  hygiene:
+    name: repo hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No secrets committed
+        run: |
+          ! git grep -nIE \
+            'sk-or-v1-[A-Za-z0-9]{16,}|gsk_[A-Za-z0-9]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----' \
+            -- ':!tests' ':!*.example' ':!docs'
+
+      - name: No trailing whitespace
+        run: |
+          ! git grep -nI ' $' -- '*.py' '*.sh' '*.md' '*.json' 'bin/dai'
+
+      - name: Every text file ends with a newline
+        run: |
+          fail=0
+          for f in $(git ls-files); do
+            case "$f" in *.png|*.jpg|*.ico) continue;; esac
+            [ -s "$f" ] || continue
+            [ -z "$(tail -c 1 "$f")" ] || { echo "missing newline: $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: Executable bits are correct
+        run: |
+          for f in bin/*.sh bin/dai; do
+            [ "$f" = "bin/lib.sh" ] && continue
+            [ -x "$f" ] || { echo "not executable: $f"; exit 1; }
+          done
+          [ ! -x bin/lib.sh ] || { echo "bin/lib.sh is sourced and must not be executable"; exit 1; }

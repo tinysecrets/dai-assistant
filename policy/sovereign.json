@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "mode": "cloud_first_free_rotation",
   "ask_before": [
     "paid_inference",
@@ -22,12 +22,12 @@
       "enabled": true,
       "paid_enabled": false,
       "free_only_default": true,
-      "note": "Rotate :free models. Paid requires approval token + paid_enabled true."
+      "note": "Rotate :free models. Paid needs paid_enabled=true or a one-shot openrouter_paid approval token."
     },
     "groq": { "enabled": true },
+    "cerebras": { "enabled": true },
     "ollama_cloud": { "enabled": true },
     "ollama_local": { "enabled": true, "role": "last_resort" },
-    "cerebras": { "enabled": true },
     "secret_redaction": true,
     "private_data_must_stay_local": false,
     "never_send_to_cloud": [
@@ -40,23 +40,42 @@
   },
   "agent_s": {
     "enabled": true,
-    "dry_run_default": false,
+    "dry_run_default": true,
     "bind_owner_live_desktop": false,
-    "display": ":99",
-    "worker_url": "http://127.0.0.1:8765",
     "require_approval_token": true,
-    "max_steps_default": 15,
-    "timeout_seconds": 600,
+    "display": ":99",
+    "geometry": "1280x800x24",
+    "worker_url": "http://127.0.0.1:8765",
+    "venv_path": "~/.local/agent-s-venv",
+    "provider": "openai",
+    "model": "dai/auto",
+    "ground_provider": "openai",
     "grounding_model": "dai/vision-auto",
     "grounding_width": 1280,
-    "grounding_height": 800
+    "grounding_height": 800,
+    "max_steps_default": 15,
+    "max_steps_hard_cap": 20,
+    "timeout_seconds": 600,
+    "notes": [
+      "dry_run_default=true is the safe shipped state: tasks are validated and the exact command is recorded, but no input device is touched.",
+      "To go live: set dry_run_default=false AND issue a token per instruction (bin/issue-approval.sh agent_s_gui_task \"...\").",
+      "Safety keys in this block (enabled, dry_run_default, bind_owner_live_desktop, require_approval_token, max_steps_hard_cap) are read from here only — an environment variable cannot weaken them.",
+      "Host knobs (display, geometry, provider, model, grounding_*, timeout_seconds, venv_path) may be overridden in .env; see docs/CONFIG.md."
+    ]
+  },
+  "approvals": {
+    "file": "policy/approvals.json",
+    "default_ttl_seconds": 3600,
+    "default_max_uses": 1,
+    "require_scope_match": true,
+    "note": "Empty scopes are rejected; use \"*\" to authorise any value explicitly."
   },
   "vellum": {
     "role": "primary_personal_assistant",
     "source": "vendor/vellum-assistant",
     "cli": "~/.bun/bin/vellum",
     "point_inference_at": "http://127.0.0.1:11435/v1",
-    "skill_to_install": "skills/agent-s-delegate"
+    "skills_to_install": ["skills/agent-s-delegate", "skills/english-to-code"]
   },
   "channels": {
     "phone_pairing": "use_vellum_native_when_available",

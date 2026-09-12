@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dai-assistant"
+version = "1.1.0"
+description = "Local-first inference spine: an OpenAI-compatible model router with free-tier rotation, plus a bounded GUI-agent worker."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+keywords = ["llm", "router", "openai-compatible", "agent-s", "local-first", "debian"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Unix Shell",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+# No runtime dependencies. Stdlib only, deliberately: the spine has to run on a
+# bare Debian python3 with no install step and no network access.
+dependencies = []
+
+[project.optional-dependencies]
+# Linters are optional and never required to run or test the spine.
+dev = ["ruff>=0.5", "shellcheck-py>=0.10"]
+
+[project.urls]
+Documentation = "https://github.com/tinysecrets/dai-assistant/blob/main/README.md"
+Issues = "https://github.com/tinysecrets/dai-assistant/issues"
+
+[tool.setuptools]
+# The spine is run in place (bin/, services/), not installed. Packages are
+# declared so `lib.dai` is importable for tooling that resolves them.
+packages = ["lib", "lib.dai"]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+# Services live in directories that are not importable package names
+# (services/model-router), so they are linted as files, not modules.
+extend-exclude = [".venv", "vendor", "state", "logs", "skills-ready"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear (mutable defaults, except-too-broad, ...)
+    "C4",   # comprehension cleanups
+    "UP",   # pyupgrade
+    "SIM",  # simplifications
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "E501",   # line length is handled by the formatter; long f-strings are fine
+    "SIM108", # ternaries are not always clearer than if/else
+    "B008",   # function call in a default argument: used for dataclass factories
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import fixtures and support modules for their side effects.
+"tests/*" = ["B011", "SIM300"]
+# Skill scripts are executed by path from an assistant workspace, so they must
+# stay self-contained and tolerate a missing lib.dai.
+"skills/*" = ["E402"]
+"services/*" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["lib", "tests"]
