@@ -15,6 +15,7 @@ auth, and a clean startup/shutdown path.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import signal
 import socket
@@ -113,7 +114,9 @@ class JsonHandler(BaseHTTPRequestHandler):
         raw_length = self.headers.get("Content-Length")
         if raw_length is None:
             if (self.headers.get("Transfer-Encoding") or "").lower() == "chunked":
-                raise HttpError(411, "length_required", "Chunked request bodies are not supported; send Content-Length.")
+                raise HttpError(
+                    411, "length_required", "Chunked request bodies are not supported; send Content-Length."
+                )
             return b""
         try:
             length = int(raw_length)
@@ -211,11 +214,13 @@ class JsonHandler(BaseHTTPRequestHandler):
                 {"error": "bad_request" if code == 400 else "http_protocol_error", "detail": (message or "").strip()},
                 headers={"Connection": "close"} if self.close_connection else None,
             )
-        except Exception:  # noqa: BLE001 - the socket is already unusable
+        except Exception:
             self.close_connection = True
 
     # --- streaming (chunked SSE) -----------------------------------------
-    def start_stream(self, *, content_type: str = "text/event-stream", headers: Optional[Dict[str, str]] = None) -> None:
+    def start_stream(
+        self, *, content_type: str = "text/event-stream", headers: Optional[Dict[str, str]] = None
+    ) -> None:
         all_headers = {
             "Content-Type": content_type,
             "Transfer-Encoding": "chunked",
@@ -271,7 +276,7 @@ class JsonHandler(BaseHTTPRequestHandler):
                 self.end_stream()
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
-        except Exception as exc:  # noqa: BLE001 - the client gets a clean 500
+        except Exception as exc:
             detail = self.redactor.redact("".join(traceback.format_exception_only(type(exc), exc)).strip())
             self.log_error("unhandled exception in %s %s: %s", method, path, detail)
             if getattr(self, "_streaming", False):
@@ -282,25 +287,25 @@ class JsonHandler(BaseHTTPRequestHandler):
                     self.send_error_json(
                         HttpError(500, "internal_error", "The service hit an unexpected error; see its log.")
                     )
-                except Exception:  # noqa: BLE001 - connection is already unusable
+                except Exception:
                     self.close_connection = True
         finally:
             elapsed_ms = (time.monotonic() - started) * 1000.0
             self.log_access(method, path, self._response_status or 0, elapsed_ms)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         self._dispatch("GET")
 
-    def do_HEAD(self) -> None:  # noqa: N802
+    def do_HEAD(self) -> None:
         self._dispatch("HEAD")
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         self._dispatch("POST")
 
-    def do_DELETE(self) -> None:  # noqa: N802
+    def do_DELETE(self) -> None:
         self._dispatch("DELETE")
 
-    def do_OPTIONS(self) -> None:  # noqa: N802
+    def do_OPTIONS(self) -> None:
         self._dispatch("OPTIONS")
 
     # --- logging ----------------------------------------------------------
@@ -319,7 +324,7 @@ class JsonHandler(BaseHTTPRequestHandler):
         try:
             stream.write(f"[{self.service_info.name}] {self.redactor.redact(text)}\n")
             stream.flush()
-        except Exception:  # noqa: BLE001 - logging must never break a request
+        except Exception:
             pass
 
 
@@ -328,7 +333,7 @@ class SpineServer(ThreadingHTTPServer):
     allow_reuse_address = True
     redactor: Redactor = Redactor()
 
-    def handle_error(self, request: Any, client_address: Any) -> None:  # noqa: ANN401
+    def handle_error(self, request: Any, client_address: Any) -> None:
         """Log socket-level errors without dumping a traceback on a hung-up client."""
         exc = sys.exc_info()[1]
         if isinstance(exc, (BrokenPipeError, ConnectionResetError, socket.timeout, ConnectionAbortedError)):
@@ -393,10 +398,10 @@ def serve_forever(
         threading.Thread(target=httpd.shutdown, daemon=True).start()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        try:
+        # ValueError/OSError means we are not on the main thread, so the signal
+        # handlers are not ours to install.
+        with contextlib.suppress(ValueError, OSError):
             signal.signal(sig, _stop)
-        except (ValueError, OSError):  # not on the main thread
-            pass
     try:
         httpd.serve_forever(poll_interval=0.2)
     finally:

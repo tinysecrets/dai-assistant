@@ -263,8 +263,8 @@ dai_start_service() {
 dai_stop_pid() {
   local pid="$1" label="${2:-process}"
   kill "$pid" 2>/dev/null || true
-  local i
-  for i in $(seq 1 20); do
+  # Wait ~2s for a graceful exit before escalating to SIGKILL.
+  for _ in $(seq 1 20); do
     kill -0 "$pid" 2>/dev/null || return 0
     sleep 0.1
   done

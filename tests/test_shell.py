@@ -11,6 +11,7 @@ pointed at a temporary DAI_STATE_DIR / DAI_LOG_DIR through the environment.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -60,10 +61,8 @@ def run(cmd, *, env=None, cwd=ROOT, timeout=120, input_text=None):
 def terminate(proc):
     """Kill a spawned helper process and reap it, so no ResourceWarning leaks."""
     proc.kill()
-    try:
+    with contextlib.suppress(subprocess.TimeoutExpired):
         proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
 
 
 def bash(*args, env=None, timeout=120):
@@ -79,7 +78,7 @@ class TestScriptHygiene(unittest.TestCase):
 
     def test_scripts_parse_with_bash_n(self):
         for name in SCRIPTS + ["lib.sh"]:
-            code, out, err = run(["bash", "-n", str(BIN / name)])
+            code, _out, err = run(["bash", "-n", str(BIN / name)])
             self.assertEqual(code, 0, f"bin/{name} failed bash -n:\n{err}")
 
     def test_entry_points_are_executable(self):
@@ -171,13 +170,13 @@ class TestLibHelpers(unittest.TestCase):
 
     def test_env_get_reads_dotenv_without_sourcing(self):
         (self.tmp / ".env").write_text('FOO=bar\nQUOTED="hello world"\n# comment\nEMPTY=\n', encoding="utf-8")
-        code, out, _ = self.lib('dai_env_get FOO; dai_env_get QUOTED; dai_env_get MISSING fallback')
+        code, out, _ = self.lib("dai_env_get FOO; dai_env_get QUOTED; dai_env_get MISSING fallback")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.splitlines(), ["bar", "hello world", "fallback"])
 
     def test_env_get_prefers_real_environment(self):
         (self.tmp / ".env").write_text("FOO=from_file\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_env_get FOO', env={"FOO": "from_env"})
+        _code, out, _ = self.lib("dai_env_get FOO", env={"FOO": "from_env"})
         self.assertEqual(out.strip(), "from_env")
 
     def test_json_check_status_codes(self):
@@ -224,7 +223,7 @@ class TestLibHelpers(unittest.TestCase):
         self.state.mkdir(parents=True, exist_ok=True)
         # A pid that is almost certainly not alive and certainly not ours.
         (self.state / "model-router.pid").write_text("999999\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid model-router && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid model-router && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "DEAD")
         self.assertFalse((self.state / "model-router.pid").exists(), "stale pid file should be removed")
@@ -234,7 +233,7 @@ class TestLibHelpers(unittest.TestCase):
         self.state.mkdir(parents=True, exist_ok=True)
         victim = self._spawn_with_marker("some-unrelated-program")
         (self.state / "model-router.pid").write_text(f"{victim.pid}\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid model-router && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid model-router && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "DEAD")
         self.assertEqual(victim.poll(), None, "the unrelated process must still be alive")
@@ -244,7 +243,7 @@ class TestLibHelpers(unittest.TestCase):
         marker = "services/model-router/server.py"
         ours = self._spawn_with_marker(marker)
         (self.state / "model-router.pid").write_text(f"{ours.pid}\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid model-router >/dev/null && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid model-router >/dev/null && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "ALIVE")
 
@@ -253,7 +252,7 @@ class TestLibHelpers(unittest.TestCase):
         self.state.mkdir(parents=True, exist_ok=True)
         ours = self._spawn_with_marker("Xvfb :99 -screen 0 1280x800x24")
         (self.state / "xvfb.pid").write_text(f"{ours.pid}\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid xvfb Xvfb >/dev/null && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid xvfb Xvfb >/dev/null && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "ALIVE")
 
@@ -261,46 +260,48 @@ class TestLibHelpers(unittest.TestCase):
         self.state.mkdir(parents=True, exist_ok=True)
         ours = self._spawn_with_marker("services/agent-s-worker/server.py")
         (self.state / "agent-s-worker.pid").write_text(f"{ours.pid}\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid agent-s-worker')
+        code, out, _ = self.lib("dai_read_pid agent-s-worker")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), str(ours.pid))
 
     def test_read_pid_handles_a_missing_state_dir(self):
-        code, out, _ = self.lib('dai_read_pid model-router && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid model-router && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "DEAD")
 
     def test_read_pid_handles_an_empty_pid_file(self):
         self.state.mkdir(parents=True, exist_ok=True)
         (self.state / "model-router.pid").write_text("\n", encoding="utf-8")
-        code, out, _ = self.lib('dai_read_pid model-router && echo ALIVE || echo DEAD')
+        code, out, _ = self.lib("dai_read_pid model-router && echo ALIVE || echo DEAD")
         self.assertEqual(code, 0, out)
         self.assertEqual(out.strip(), "DEAD")
 
     def test_port_probe_reports_a_free_port(self):
-        code, out, _ = self.lib('dai_port_in_use 1 && echo BUSY || echo FREE')
+        _code, out, _ = self.lib("dai_port_in_use 1 && echo BUSY || echo FREE")
         # Port 1 is privileged and nothing should be bound to it here.
         self.assertIn("FREE", out)
 
     def test_wait_up_times_out_cleanly(self):
-        code, out, err = self.lib('dai_wait_up http://127.0.0.1:1 2 probe && echo UP || echo DOWN')
+        code, out, _err = self.lib("dai_wait_up http://127.0.0.1:1 2 probe && echo UP || echo DOWN")
         self.assertEqual(code, 0)
         self.assertIn("DOWN", out)
 
     def test_counter_helpers_tally(self):
-        code, out, _ = self.lib('dai_ok a; dai_ok b; dai_warn c; dai_fail d; echo "$DAI_OK_COUNT/$DAI_WARN_COUNT/$DAI_FAIL_COUNT"')
+        _code, out, _ = self.lib(
+            'dai_ok a; dai_ok b; dai_warn c; dai_fail d; echo "$DAI_OK_COUNT/$DAI_WARN_COUNT/$DAI_FAIL_COUNT"'
+        )
         self.assertEqual(out.strip().splitlines()[-1], "2/1/1")
 
     def test_summary_exits_nonzero_on_failure(self):
-        code, out, _ = self.lib('dai_fail boom; dai_summary')
+        code, _out, _ = self.lib("dai_fail boom; dai_summary")
         self.assertEqual(code, 1)
 
     def test_summary_exits_zero_with_warnings_only(self):
-        code, out, _ = self.lib('dai_warn meh; dai_summary')
+        code, _out, _ = self.lib("dai_warn meh; dai_summary")
         self.assertEqual(code, 0, "warnings must not fail a run")
 
     def test_no_color_strips_ansi(self):
-        code, out, _ = self.lib('dai_ok green', env={"NO_COLOR": "1"})
+        _code, out, _ = self.lib("dai_ok green", env={"NO_COLOR": "1"})
         self.assertNotIn("\033[", out)
 
 
@@ -308,7 +309,7 @@ class TestDoctor(unittest.TestCase):
     """doctor.sh must be safe to run on a fresh clone."""
 
     def test_doctor_runs_without_services(self):
-        code, out, err = run([str(BIN / "doctor.sh")], timeout=180)
+        _code, out, err = run([str(BIN / "doctor.sh")], timeout=180)
         combined = out + err
         self.assertIn("Repository", combined)
         self.assertIn("summary:", combined)
@@ -318,7 +319,7 @@ class TestDoctor(unittest.TestCase):
         self.assertNotIn("FAIL  model-router is not running", combined)
 
     def test_doctor_json_is_valid_and_sole_stdout(self):
-        code, out, err = run([str(BIN / "doctor.sh"), "--json"], timeout=180)
+        _code, out, _err = run([str(BIN / "doctor.sh"), "--json"], timeout=180)
         doc = json.loads(out)  # raises if stdout carries anything but JSON
         self.assertIn("ok", doc)
         self.assertIn("checks", doc)
@@ -333,7 +334,7 @@ class TestDoctor(unittest.TestCase):
         self.assertEqual(doc["ok"], code == 0)
 
     def test_doctor_quiet_prints_nothing_but_summary(self):
-        code, out, err = run([str(BIN / "doctor.sh"), "--quiet"], timeout=180)
+        _code, out, _err = run([str(BIN / "doctor.sh"), "--quiet"], timeout=180)
         self.assertNotIn("== Debian AI doctor ==", out)
 
     def test_doctor_never_leaks_env_values(self):
@@ -341,7 +342,7 @@ class TestDoctor(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, True)
         secret = "sk-or-v1-SUPERSECRETVALUE123"
         (tmp / ".env").write_text(f"OPENROUTER_API_KEY={secret}\n", encoding="utf-8")
-        code, out, err = run(
+        _code, out, err = run(
             [str(BIN / "doctor.sh")],
             env={"DAI_ENV_FILE": str(tmp / ".env")},
             timeout=180,
@@ -367,7 +368,7 @@ class TestIssueApproval(unittest.TestCase):
 
     def test_creates_the_file_on_first_use(self):
         self.assertFalse(self.approvals.exists())
-        code, out, err = self.issue("agent_s_gui_task", "do the thing")
+        code, _out, err = self.issue("agent_s_gui_task", "do the thing")
         self.assertEqual(code, 0, err)
         self.assertTrue(self.approvals.is_file())
         self.assertEqual(self.approvals.stat().st_mode & 0o777, 0o600)
@@ -386,11 +387,11 @@ class TestIssueApproval(unittest.TestCase):
         self.assertIn("scope", (out + err).lower())
 
     def test_rejects_an_unknown_action(self):
-        code, out, err = self.issue("rm_rf_everything", "*")
+        code, _out, _err = self.issue("rm_rf_everything", "*")
         self.assertEqual(code, 1)
 
     def test_rejects_a_missing_action(self):
-        code, out, err = self.issue()
+        code, _out, _err = self.issue()
         self.assertEqual(code, 1)
 
     def test_list_is_valid_json(self):
@@ -407,14 +408,14 @@ class TestIssueApproval(unittest.TestCase):
     def test_revoke_removes_the_token(self):
         _, token, _ = self.issue("agent_s_gui_task", "revoke me")
         token = token.strip()
-        code, out, err = self.issue("--revoke", token)
+        code, _out, err = self.issue("--revoke", token)
         self.assertEqual(code, 0, err)
         _, listed, _ = self.issue("--list")
         self.assertEqual(json.loads(listed), [])
 
     def test_revoke_unknown_token_fails(self):
         self.issue("agent_s_gui_task", "seed")
-        code, out, err = self.issue("--revoke", "NOT-A-REAL-TOKEN")
+        code, _out, _err = self.issue("--revoke", "NOT-A-REAL-TOKEN")
         self.assertEqual(code, 1)
 
     def test_prune_reports_a_count(self):
@@ -455,14 +456,14 @@ class TestInstallVellumSkill(unittest.TestCase):
 
     def test_install_into_explicit_dest(self):
         dest = self.tmp / "ws" / "skills"
-        code, out, err = run([str(BIN / "install-vellum-skill.sh"), "--dest", str(dest), "agent-s-delegate"])
+        code, _out, err = run([str(BIN / "install-vellum-skill.sh"), "--dest", str(dest), "agent-s-delegate"])
         self.assertEqual(code, 0, err)
         self.assertTrue((dest / "agent-s-delegate" / "SKILL.md").is_file())
         self.assertTrue((dest / "agent-s-delegate" / "scripts" / "delegate_task.py").is_file())
 
     def test_link_mode_creates_a_symlink(self):
         dest = self.tmp / "ws-link" / "skills"
-        code, out, err = run([str(BIN / "install-vellum-skill.sh"), "--link", "--dest", str(dest), "english-to-code"])
+        code, _out, err = run([str(BIN / "install-vellum-skill.sh"), "--link", "--dest", str(dest), "english-to-code"])
         self.assertEqual(code, 0, err)
         target = dest / "english-to-code"
         self.assertTrue(target.is_symlink())
@@ -473,7 +474,7 @@ class TestInstallVellumSkill(unittest.TestCase):
         run([str(BIN / "install-vellum-skill.sh"), "--dest", str(dest), "english-to-code"])
         stale = dest / "english-to-code" / "LEFTOVER.txt"
         stale.write_text("stale", encoding="utf-8")
-        code, out, err = run([str(BIN / "install-vellum-skill.sh"), "--dest", str(dest), "english-to-code"])
+        code, _out, err = run([str(BIN / "install-vellum-skill.sh"), "--dest", str(dest), "english-to-code"])
         self.assertEqual(code, 0, err)
         self.assertFalse(stale.exists(), "a reinstall must not leave stale files behind")
 
@@ -512,7 +513,7 @@ class TestImportKeys(unittest.TestCase):
         self.assertIn("dry run", (out + err).lower())
 
     def test_creates_env_from_example(self):
-        code, out, err = run([str(BIN / "import-keys.sh")], env=self.env)
+        code, _out, err = run([str(BIN / "import-keys.sh")], env=self.env)
         self.assertEqual(code, 0, err)
         self.assertTrue(self.env_file.is_file())
         self.assertEqual(self.env_file.stat().st_mode & 0o777, 0o600)
@@ -520,7 +521,7 @@ class TestImportKeys(unittest.TestCase):
         self.assertIn("OPENROUTER_API_KEY", text)
 
     def test_reports_key_names_only(self):
-        code, out, err = run([str(BIN / "import-keys.sh"), "--dry-run"], env=self.env)
+        _code, out, err = run([str(BIN / "import-keys.sh"), "--dry-run"], env=self.env)
         combined = out + err
         self.assertIn("OPENROUTER_API_KEY", combined)
         self.assertIn("values are never printed", combined.lower())
@@ -543,7 +544,7 @@ class TestImportKeys(unittest.TestCase):
         self.assertNotIn(secret, out + err)
 
     def test_ignores_placeholders_from_the_environment(self):
-        code, out, err = run(
+        code, _out, err = run(
             [str(BIN / "import-keys.sh"), "--from-env"],
             env={**self.env, "OPENROUTER_API_KEY": "your-key-here"},
         )
@@ -551,7 +552,7 @@ class TestImportKeys(unittest.TestCase):
         self.assertNotIn("your-key-here", self.env_file.read_text(encoding="utf-8"))
 
     def test_preserves_comments_and_layout(self):
-        code, out, err = run([str(BIN / "import-keys.sh")], env=self.env)
+        code, _out, err = run([str(BIN / "import-keys.sh")], env=self.env)
         self.assertEqual(code, 0, err)
         text = self.env_file.read_text(encoding="utf-8")
         self.assertIn("# Debian AI Assistant", text)
@@ -581,7 +582,7 @@ class TestDaiDispatcher(unittest.TestCase):
         self.assertIn("python", out.lower())
 
     def test_no_arguments_shows_help(self):
-        code, out, err = run([str(BIN / "dai")])
+        code, out, _err = run([str(BIN / "dai")])
         self.assertEqual(code, 0)
         self.assertIn("dai doctor", out)
 
@@ -619,8 +620,7 @@ class TestStopSpine(unittest.TestCase):
     def stop(self, *args, env=None):
         merged = dict(self.env)
         merged.update(env or {})
-        return run([str(self.root / "bin" / "stop-spine.sh"), *args],
-                   env=merged, cwd=self.root, timeout=60)
+        return run([str(self.root / "bin" / "stop-spine.sh"), *args], env=merged, cwd=self.root, timeout=60)
 
     def test_stop_with_nothing_running(self):
         code, out, err = self.stop()
@@ -629,7 +629,7 @@ class TestStopSpine(unittest.TestCase):
 
     def test_stop_is_idempotent(self):
         for _ in range(2):
-            code, out, err = self.stop()
+            code, _out, err = self.stop()
             self.assertEqual(code, 0, err)
 
     def test_stop_ignores_a_foreign_pid_file(self):
@@ -639,7 +639,7 @@ class TestStopSpine(unittest.TestCase):
         victim = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
         self.addCleanup(terminate, victim)
         (state / "model-router.pid").write_text(f"{victim.pid}\n", encoding="utf-8")
-        code, out, err = self.stop()
+        code, _out, err = self.stop()
         self.assertEqual(code, 0, err)
         self.assertEqual(victim.poll(), None, "stop-spine killed an unrelated process")
 
@@ -707,7 +707,7 @@ class TestSmokeScript(unittest.TestCase):
         if self.RECURSIVE:
             self.skipTest("already running inside smoke.sh")
         # --live-only avoids the nested suite; with no spine up it finishes fast.
-        code, out, err = run(
+        _code, out, _err = run(
             [str(BIN / "smoke.sh"), "--live-only", "--json"],
             env={"DAI_ROUTER_PORT": "1", "DAI_AGENT_S_PORT": "1"},
             timeout=180,
@@ -724,7 +724,7 @@ class TestSmokeScript(unittest.TestCase):
         if self.RECURSIVE:
             self.skipTest("already running inside smoke.sh")
         # Narrow discovery so this does not re-run the whole suite inside itself.
-        code, out, err = run(
+        code, out, _err = run(
             [str(BIN / "smoke.sh"), "--tests-only", "--json"],
             env={"DAI_SMOKE_TEST_PATTERN": "test_env.py"},
             timeout=300,

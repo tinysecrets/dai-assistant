@@ -25,6 +25,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -48,7 +49,10 @@ def tracked_files() -> list[Path]:
     """
     out = subprocess.run(
         ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=ROOT, capture_output=True, text=True, check=True,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.split()
     files = set()
     for rel in out:
@@ -107,9 +111,7 @@ ROUTING_ONLY = ("lib/dai/routing.py",)
 
 # self.setting("policy_key", "ENV_VAR", default) — capture both arguments so the
 # safety keys (whose env argument is deliberately ignored) can be excluded.
-RE_SETTING = re.compile(
-    r"""self\.setting\(\s*["']([a-z_]+)["']\s*,\s*["']([A-Z][A-Z0-9_]*)["']"""
-)
+RE_SETTING = re.compile(r"""self\.setting\(\s*["']([a-z_]+)["']\s*,\s*["']([A-Z][A-Z0-9_]*)["']""")
 WORKER_ONLY = ("services/agent-s-worker/server.py",)
 
 
@@ -170,8 +172,8 @@ UNDOCUMENTED_OK = {
     # would be circular; .env.example explains this in a comment instead.
     "DAI_ENV",
     "DAI_INSIDE_SMOKE",  # recursion guard set by bin/smoke.sh
-    "NO_COLOR",       # conventional, honoured by bin/lib.sh
-    "DISPLAY",        # read from the environment, never set by us
+    "NO_COLOR",  # conventional, honoured by bin/lib.sh
+    "DISPLAY",  # read from the environment, never set by us
     # A single-use approval token is an ephemeral credential handed to one
     # script invocation.  Putting it in .env would be actively wrong: it is
     # spent on first use, so the file would hold a dead token.  Documented in
@@ -195,8 +197,7 @@ class TestEnvExampleHonesty(unittest.TestCase):
     def test_every_documented_var_is_actually_read(self):
         honored = honored_env_vars()
         dead = sorted(
-            name for name in documented_env_vars()
-            if name not in honored and name not in DOCUMENTED_BUT_UNUSED_OK
+            name for name in documented_env_vars() if name not in honored and name not in DOCUMENTED_BUT_UNUSED_OK
         )
         self.assertEqual(dead, [], f".env.example documents vars nothing reads: {dead}")
 
@@ -210,17 +211,16 @@ class TestEnvExampleHonesty(unittest.TestCase):
                 documented[name],
                 f"{name} is documented as unused but is set (uncommented) in .env.example",
             )
-        self.assertIn("not used by the spine yet", text.lower(),
-                      ".env.example must say plainly which vars are unused")
+        self.assertIn("not used by the spine yet", text.lower(), ".env.example must say plainly which vars are unused")
 
     def test_every_read_var_is_documented(self):
         documented = documented_env_vars()
         missing = sorted(
-            name for name, where in honored_env_vars().items()
-            if name not in documented and name not in UNDOCUMENTED_OK
+            name for name, where in honored_env_vars().items() if name not in documented and name not in UNDOCUMENTED_OK
         )
         self.assertEqual(
-            missing, [],
+            missing,
+            [],
             f"code reads vars that .env.example never mentions: {missing}",
         )
 
@@ -229,8 +229,8 @@ class TestEnvExampleHonesty(unittest.TestCase):
         for them would invite an override that silently does nothing."""
         documented = documented_env_vars()
         offenders = [
-            name for name in ("DAI_AGENT_S_ENABLED", "DAI_AGENT_S_DRY_RUN",
-                              "DAI_AGENT_S_MAX_STEPS_CAP")
+            name
+            for name in ("DAI_AGENT_S_ENABLED", "DAI_AGENT_S_DRY_RUN", "DAI_AGENT_S_MAX_STEPS_CAP")
             if name in documented
         ]
         self.assertEqual(offenders, [], f"safety-key env vars must not be documented: {offenders}")
@@ -239,8 +239,7 @@ class TestEnvExampleHonesty(unittest.TestCase):
         keys = set(safety_keys())
         self.assertEqual(
             keys,
-            {"enabled", "dry_run_default", "bind_owner_live_desktop",
-             "require_approval_token", "max_steps_hard_cap"},
+            {"enabled", "dry_run_default", "bind_owner_live_desktop", "require_approval_token", "max_steps_hard_cap"},
         )
 
     def test_env_example_is_not_executable_shell(self):
@@ -258,8 +257,7 @@ class TestEnvExampleHonesty(unittest.TestCase):
             if line.strip().startswith("#"):
                 continue
             _, _, value = line.partition("=")
-            self.assertLess(len(value.strip()), 40,
-                            f".env.example should ship empty values, got: {line[:60]}")
+            self.assertLess(len(value.strip()), 40, f".env.example should ship empty values, got: {line[:60]}")
 
 
 class TestPolicyFile(unittest.TestCase):
@@ -274,12 +272,11 @@ class TestPolicyFile(unittest.TestCase):
 
     def test_ships_safe_agent_s_defaults(self):
         agent_s = self.policy["agent_s"]
-        self.assertTrue(agent_s["dry_run_default"],
-                        "shipped policy must default to dry-run")
-        self.assertFalse(agent_s["bind_owner_live_desktop"],
-                         "shipped policy must never bind the owner's live desktop")
-        self.assertTrue(agent_s["require_approval_token"],
-                        "shipped policy must require an approval token for live runs")
+        self.assertTrue(agent_s["dry_run_default"], "shipped policy must default to dry-run")
+        self.assertFalse(agent_s["bind_owner_live_desktop"], "shipped policy must never bind the owner's live desktop")
+        self.assertTrue(
+            agent_s["require_approval_token"], "shipped policy must require an approval token for live runs"
+        )
 
     def test_declares_every_safety_key(self):
         agent_s = self.policy["agent_s"]
@@ -287,8 +284,7 @@ class TestPolicyFile(unittest.TestCase):
             self.assertIn(key, agent_s, f"policy/sovereign.json omits safety key '{key}'")
 
     def test_paid_inference_is_off_by_default(self):
-        self.assertFalse(self.policy["inference"]["openrouter"]["paid_enabled"],
-                         "paid inference must be opt-in")
+        self.assertFalse(self.policy["inference"]["openrouter"]["paid_enabled"], "paid inference must be opt-in")
         self.assertIn("paid_inference", self.policy["ask_before"])
         self.assertIn("openrouter_paid", self.policy["ask_before"])
 
@@ -334,20 +330,26 @@ class TestPolicyFile(unittest.TestCase):
 
         for token, documented in example["tokens"].items():
             with self.subTest(token):
-                self.assertEqual(set(documented), live_fields,
-                                 "example record fields disagree with ApprovalStore.issue()")
+                self.assertEqual(
+                    set(documented), live_fields, "example record fields disagree with ApprovalStore.issue()"
+                )
 
     def test_example_documents_the_real_actions(self):
         from lib.dai.approvals import KNOWN_ACTIONS
 
         example = json.loads(read(ROOT / "policy/approvals.example.json"))
         documented = set(example.get("_actions", {}))
-        self.assertEqual(documented, set(KNOWN_ACTIONS),
-                         "approvals.example.json must document exactly the known actions")
+        self.assertEqual(
+            documented, set(KNOWN_ACTIONS), "approvals.example.json must document exactly the known actions"
+        )
 
     def test_policy_files_parse(self):
-        for rel in ("policy/sovereign.json", "policy/approvals.example.json",
-                    "config/rotation-pool.json", "config/free-models.json"):
+        for rel in (
+            "policy/sovereign.json",
+            "policy/approvals.example.json",
+            "config/rotation-pool.json",
+            "config/free-models.json",
+        ):
             with self.subTest(rel):
                 json.loads(read(ROOT / rel))
 
@@ -372,11 +374,13 @@ class TestRotationPool(unittest.TestCase):
         declared = {spec.pool_key for spec in PROVIDERS.values() if spec.pool_key}
         present = set(self.pool)
         missing = sorted(declared - present)
-        self.assertEqual(missing, [],
-                         f"providers reference pools absent from rotation-pool.json: {missing}")
+        self.assertEqual(missing, [], f"providers reference pools absent from rotation-pool.json: {missing}")
         extras = sorted(present - declared)
-        self.assertEqual(extras, ["openrouter_free_vision"],
-                         f"unexpected extra pools (add them to a provider or explain them): {extras}")
+        self.assertEqual(
+            extras,
+            ["openrouter_free_vision"],
+            f"unexpected extra pools (add them to a provider or explain them): {extras}",
+        )
 
     def test_metadata_declares_the_strategy(self):
         self.assertEqual(self.metadata.get("strategy"), "rotate_on_rate_limit")
@@ -390,8 +394,7 @@ class TestRotationPool(unittest.TestCase):
                 for entry in models:
                     self.assertIsInstance(entry, str, f"{pool_key} has a non-string entry")
                     self.assertTrue(entry.strip(), f"{pool_key} has a blank entry")
-                self.assertEqual(len(models), len(set(models)),
-                                 f"{pool_key} lists duplicates")
+                self.assertEqual(len(models), len(set(models)), f"{pool_key} lists duplicates")
 
     def test_openrouter_pool_entries_are_free_tier(self):
         """The whole strategy is 'top free models'; a paid id here would bill."""
@@ -400,8 +403,7 @@ class TestRotationPool(unittest.TestCase):
                 continue
             for model in models:
                 with self.subTest(model):
-                    self.assertTrue(model.endswith(":free"),
-                                    f"{pool_key} contains a non-:free model {model}")
+                    self.assertTrue(model.endswith(":free"), f"{pool_key} contains a non-:free model {model}")
 
     def test_vision_pool_entries_are_well_formed(self):
         """The vision pool is expanded into candidates on its own (routing.py),
@@ -412,17 +414,17 @@ class TestRotationPool(unittest.TestCase):
         shape = re.compile(r"^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+:free$")
         for model in vision:
             with self.subTest(model):
-                self.assertRegex(model, shape,
-                                 f"vision model {model} is not an owner/model:free id")
+                self.assertRegex(model, shape, f"vision model {model} is not an owner/model:free id")
 
     def test_planner_expands_the_vision_pool(self):
         """Guard the wiring, not just the data: the pool must actually be read."""
         src = read(ROOT / "lib/dai/routing.py")
         self.assertIn("openrouter_free_vision", src)
         from lib.dai.routing import _vision_models
+
         models = _vision_models(self.pool_raw, {})
         self.assertTrue(models, "_vision_models returned nothing for the shipped pool")
-        for entry in (self.pool.get("openrouter_free_vision") or []):
+        for entry in self.pool.get("openrouter_free_vision") or []:
             self.assertIn(entry, models)
 
     def test_catalog_entries_have_required_fields(self):
@@ -460,16 +462,16 @@ class TestSkills(unittest.TestCase):
                 for field in ("name:", "description:"):
                     self.assertIn(field, body, f"frontmatter lacks {field}")
                 name = re.search(r"^name:\s*(.+)$", body, re.M).group(1).strip().strip("'\"")
-                self.assertEqual(name, skill.name,
-                                 "frontmatter name must match the directory name")
+                self.assertEqual(name, skill.name, "frontmatter name must match the directory name")
 
     def test_scripts_referenced_by_a_skill_exist(self):
         for skill in self.skills():
             text = read(skill / "SKILL.md")
             for rel in set(re.findall(r"scripts/([A-Za-z0-9_.-]+\.py)", text)):
                 with self.subTest(f"{skill.name}/{rel}"):
-                    self.assertTrue((skill / "scripts" / rel).is_file(),
-                                    f"SKILL.md references scripts/{rel}, which is missing")
+                    self.assertTrue(
+                        (skill / "scripts" / rel).is_file(), f"SKILL.md references scripts/{rel}, which is missing"
+                    )
 
     def test_referenced_docs_exist(self):
         for skill in self.skills():
@@ -497,21 +499,19 @@ class TestSkills(unittest.TestCase):
     def test_policy_worker_url_matches_the_worker_default_port(self):
         policy = json.loads(read(ROOT / "policy/sovereign.json"))
         url = policy["agent_s"]["worker_url"]
-        self.assertTrue(url.endswith(":8765"),
-                        f"policy worker_url {url} disagrees with the worker's default port")
+        self.assertTrue(url.endswith(":8765"), f"policy worker_url {url} disagrees with the worker's default port")
 
     def test_policy_router_url_matches_the_router_default_port(self):
         policy = json.loads(read(ROOT / "policy/sovereign.json"))
         url = policy["inference"]["router_url"]
-        self.assertTrue(url.endswith(":11435/v1"),
-                        f"policy router_url {url} disagrees with the router's default port")
+        self.assertTrue(url.endswith(":11435/v1"), f"policy router_url {url} disagrees with the router's default port")
 
 
 class TestStdlibOnly(unittest.TestCase):
     """No third-party dependencies: this repo must run on a bare Debian python3."""
 
-    STDLIB_OK = set(sys.stdlib_module_names)
-    LOCAL_OK = {"lib", "tests", "services", "skills", "support"}
+    STDLIB_OK: ClassVar[set] = set(sys.stdlib_module_names)
+    LOCAL_OK: ClassVar[set] = {"lib", "tests", "services", "skills", "support"}
 
     def test_no_third_party_imports(self):
         offenders = []
@@ -540,11 +540,10 @@ class TestStdlibOnly(unittest.TestCase):
             text = read(path)
             for match in re.finditer(r"pip install\s+(?!-)", text):
                 line_start = text.rfind("\n", 0, match.start()) + 1
-                line = text[line_start:text.find("\n", match.start())]
+                line = text[line_start : text.find("\n", match.start())]
                 with self.subTest(f"{path.name}: {line.strip()[:60]}"):
                     self.assertTrue(
-                        "venv" in text[max(0, match.start() - 300):match.start() + 100].lower()
-                        or "--user" in line,
+                        "venv" in text[max(0, match.start() - 300) : match.start() + 100].lower() or "--user" in line,
                         "a bare `pip install` should be a venv or --user install",
                     )
 
@@ -572,10 +571,7 @@ class TestFileHygiene(unittest.TestCase):
         for path in tracked_files():
             if path.suffix in BINARY_SUFFIXES or path.name == "Makefile":
                 continue
-            offenders = [
-                i + 1 for i, line in enumerate(read(path).splitlines())
-                if line != line.rstrip()
-            ]
+            offenders = [i + 1 for i, line in enumerate(read(path).splitlines()) if line != line.rstrip()]
             with self.subTest(str(path.relative_to(ROOT))):
                 self.assertEqual(offenders, [], f"trailing whitespace on lines {offenders[:5]}")
 
@@ -585,8 +581,7 @@ class TestFileHygiene(unittest.TestCase):
                 ast.parse(read(path))
 
     def test_no_debug_leftovers(self):
-        patterns = (r"\bbreakpoint\(\)", r"\bpdb\.set_trace\(\)", r"\bprint\(.*DEBUG",
-                    r"\bTODO: remove\b", r"\bXXX\b")
+        patterns = (r"\bbreakpoint\(\)", r"\bpdb\.set_trace\(\)", r"\bprint\(.*DEBUG", r"\bTODO: remove\b", r"\bXXX\b")
         for path in python_sources():
             text = read(path)
             with self.subTest(str(path.relative_to(ROOT))):
@@ -631,12 +626,11 @@ class TestFileHygiene(unittest.TestCase):
         path = ROOT / "READY.md"
         if not path.exists():
             self.skipTest("READY.md is not present")
-        checked = [line.strip() for line in read(path).splitlines()
-                   if line.strip().startswith("- [x]")]
+        checked = [line.strip() for line in read(path).splitlines() if line.strip().startswith("- [x]")]
         self.assertEqual(
-            checked, [],
-            "READY.md ships pre-checked boxes; a checklist for the reader starts "
-            "unchecked: " + "; ".join(checked[:4]),
+            checked,
+            [],
+            "READY.md ships pre-checked boxes; a checklist for the reader starts unchecked: " + "; ".join(checked[:4]),
         )
 
     def test_documented_test_count_matches_the_suite(self):
@@ -669,7 +663,8 @@ class TestFileHygiene(unittest.TestCase):
                     if int(match.group(1)) != real:
                         stale.append(f"{path.relative_to(ROOT)}:{lineno} says {match.group(0)}, suite has {real}")
         self.assertEqual(
-            stale, [],
+            stale,
+            [],
             "Docs cite a test count that does not match the suite. Update the "
             "number, or rephrase a subset as '24 smoke checks' rather than "
             "'24 tests': " + "; ".join(stale),
@@ -701,19 +696,16 @@ class TestFileHygiene(unittest.TestCase):
                             or "FAKE" in match.group(0).upper()
                             or "abcdef" in match.group(0)
                         )
-                        self.assertTrue(allowed,
-                                        f"{rel} contains a key-shaped string")
+                        self.assertTrue(allowed, f"{rel} contains a key-shaped string")
 
     def test_runtime_artifacts_are_gitignored(self):
         text = read(ROOT / ".gitignore")
-        for entry in (".env", "logs/", "state/", "policy/approvals.json",
-                      "__pycache__/", "vendor/"):
+        for entry in (".env", "logs/", "state/", "policy/approvals.json", "__pycache__/", "vendor/"):
             self.assertIn(entry, text, f".gitignore is missing {entry}")
 
     def test_env_example_is_explicitly_not_ignored(self):
         text = read(ROOT / ".gitignore")
-        self.assertIn("!.env.example", text,
-                      ".gitignore must un-ignore .env.example or it cannot ship")
+        self.assertIn("!.env.example", text, ".gitignore must un-ignore .env.example or it cannot ship")
 
     def test_executable_bits(self):
         for path in (ROOT / "bin").iterdir():
@@ -721,8 +713,7 @@ class TestFileHygiene(unittest.TestCase):
                 continue
             with self.subTest(path.name):
                 self.assertTrue(os.access(path, os.X_OK), f"bin/{path.name} is not executable")
-        self.assertFalse(os.access(ROOT / "bin/lib.sh", os.X_OK),
-                         "bin/lib.sh is sourced; it should not be executable")
+        self.assertFalse(os.access(ROOT / "bin/lib.sh", os.X_OK), "bin/lib.sh is sourced; it should not be executable")
 
 
 class TestDocumentationLinks(unittest.TestCase):
@@ -753,8 +744,9 @@ class TestDocumentationLinks(unittest.TestCase):
         for doc in self.doc_files():
             for name in set(refs.findall(read(doc))):
                 with self.subTest(f"{doc.name} -> bin/{name}"):
-                    self.assertTrue((ROOT / "bin" / name).is_file(),
-                                    f"{doc.name} references bin/{name}, which does not exist")
+                    self.assertTrue(
+                        (ROOT / "bin" / name).is_file(), f"{doc.name} references bin/{name}, which does not exist"
+                    )
 
     def test_referenced_repo_paths_exist(self):
         """Only file-shaped references are checked: prose like "native Vellum
@@ -769,8 +761,7 @@ class TestDocumentationLinks(unittest.TestCase):
                 if any(ch in rel for ch in "*<>"):
                     continue
                 with self.subTest(f"{doc.name} -> {rel}"):
-                    self.assertTrue((ROOT / rel).exists(),
-                                    f"{doc.name} references {rel}, which does not exist")
+                    self.assertTrue((ROOT / rel).exists(), f"{doc.name} references {rel}, which does not exist")
 
 
 class TestServiceSurface(unittest.TestCase):
@@ -779,24 +770,32 @@ class TestServiceSurface(unittest.TestCase):
     def routes(self, service: str) -> set[str]:
         """/health and /ready are served by the shared JsonHandler in lib/dai,
         so the base module is part of every service's surface."""
-        sources = [read(ROOT / f"services/{service}/server.py"),
-                   read(ROOT / "lib/dai/httpserver.py")]
+        sources = [read(ROOT / f"services/{service}/server.py"), read(ROOT / "lib/dai/httpserver.py")]
         out: set[str] = set()
         for src in sources:
             out |= set(re.findall(r'path == "(/[^"]*)"', src))
             out |= set(re.findall(r'path\.startswith\("(/[^"]*)"\)', src))
             # path in ("/", "/health") — the tuple form both services use.
-            for group in re.findall(r'path (?:in|not in) \(([^)]*)\)', src):
+            for group in re.findall(r"path (?:in|not in) \(([^)]*)\)", src):
                 out |= set(re.findall(r'"(/[^"]*)"', group))
         return out
 
     def test_router_exposes_the_documented_routes(self):
         routes = self.routes("model-router")
-        for expected in ("/health", "/ready", "/version", "/v1/models",
-                         "/v1/chat/completions", "/v1/completions",
-                         "/v1/status/config", "/v1/status/cooldowns",
-                         "/v1/status/keys", "/v1/status/plan",
-                         "/v1/status/reset", "/v1/status/stats"):
+        for expected in (
+            "/health",
+            "/ready",
+            "/version",
+            "/v1/models",
+            "/v1/chat/completions",
+            "/v1/completions",
+            "/v1/status/config",
+            "/v1/status/cooldowns",
+            "/v1/status/keys",
+            "/v1/status/plan",
+            "/v1/status/reset",
+            "/v1/status/stats",
+        ):
             self.assertIn(expected, routes, f"model-router lost route {expected}")
 
     def test_worker_exposes_the_documented_routes(self):
@@ -822,6 +821,7 @@ class TestServiceSurface(unittest.TestCase):
 
     def test_lib_package_exports_a_version(self):
         import lib.dai as dai
+
         self.assertRegex(dai.__version__, r"^[0-9]+\.[0-9]+\.[0-9]+$")
 
     def test_every_lib_module_imports_cleanly(self):
@@ -968,9 +968,7 @@ def documented_error_codes() -> set[str]:
             lowered = [re.sub(r"[`*]", "", c).lower() for c in body]
             if code_column is None and any(c in ("code", "error") for c in lowered):
                 # Header row: remember which column carries the code.
-                code_column = next(
-                    i for i, c in enumerate(lowered) if c in ("code", "error")
-                )
+                code_column = next(i for i, c in enumerate(lowered) if c in ("code", "error"))
                 continue
             if code_column is not None and len(body) > code_column:
                 codes |= set(re.findall(r"`([a-z][a-z0-9_]{2,})`", body[code_column]))
@@ -1010,20 +1008,24 @@ class TestErrorCodeDocumentation(unittest.TestCase):
     def test_extraction_finds_the_codes_we_know_exist(self):
         """Guard the extractor itself: a regex that matches nothing would make
         every other assertion here vacuously pass."""
-        for known in ("all_candidates_failed", "invalid_json", "queue_full",
-                      "no_providers_ready", "requested_model_unavailable",
-                      "missing_approval_token", "agent_s_not_installed"):
+        for known in (
+            "all_candidates_failed",
+            "invalid_json",
+            "queue_full",
+            "no_providers_ready",
+            "requested_model_unavailable",
+            "missing_approval_token",
+            "agent_s_not_installed",
+        ):
             self.assertIn(known, self.real, f"extractor missed {known}")
 
     def test_every_real_code_is_documented(self):
         missing = sorted(self.real - self.documented)
-        self.assertEqual(missing, [],
-                         f"codes exist in the services but not in docs/API.md: {missing}")
+        self.assertEqual(missing, [], f"codes exist in the services but not in docs/API.md: {missing}")
 
     def test_no_documented_code_is_invented(self):
         invented = sorted(self.documented - self.real)
-        self.assertEqual(invented, [],
-                         f"docs/API.md documents codes no service can emit: {invented}")
+        self.assertEqual(invented, [], f"docs/API.md documents codes no service can emit: {invented}")
 
     def test_approval_codes_are_documented_as_shared(self):
         for code in approval_codes():
@@ -1035,8 +1037,7 @@ class TestErrorCodeDocumentation(unittest.TestCase):
             src = read(ROOT / f"services/{service}/server.py")
             with self.subTest(service):
                 self.assertIn('"docs/API.md"', src)
-        self.assertTrue((ROOT / "docs/API.md").is_file(),
-                        "services advertise docs/API.md, so it must exist")
+        self.assertTrue((ROOT / "docs/API.md").is_file(), "services advertise docs/API.md, so it must exist")
 
 
 class TestBinScriptsReferenceRealThings(unittest.TestCase):
@@ -1073,8 +1074,7 @@ class TestBinScriptsReferenceRealThings(unittest.TestCase):
                 if rel.rstrip("/").split("/")[0] in optional:
                     continue
                 with self.subTest(f"{path.name} -> {rel}"):
-                    self.assertTrue((ROOT / rel).exists(),
-                                    f"{path.name} references $ROOT/{rel}, which does not exist")
+                    self.assertTrue((ROOT / rel).exists(), f"{path.name} references $ROOT/{rel}, which does not exist")
 
     def test_optional_paths_are_actually_treated_as_optional(self):
         """doctor.sh must not FAIL on vendor/ being absent — that broke fresh clones."""
@@ -1082,10 +1082,9 @@ class TestBinScriptsReferenceRealThings(unittest.TestCase):
         for rel in ("vendor/vellum-assistant", "vendor/Agent-S"):
             self.assertIn(rel, src, f"doctor.sh no longer checks {rel}")
         # Find the block that mentions the vendor path and confirm it warns.
-        window = src[src.index("vendor/vellum-assistant"):]
+        window = src[src.index("vendor/vellum-assistant") :]
         head = window[:600]
-        self.assertIn("dai_warn", head,
-                      "a missing vendor/ checkout must be a warning, not a failure")
+        self.assertIn("dai_warn", head, "a missing vendor/ checkout must be a warning, not a failure")
 
     def test_bin_dai_dispatches_to_real_scripts(self):
         src = read(ROOT / "bin/dai")

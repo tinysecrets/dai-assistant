@@ -58,9 +58,7 @@ class TestIssueValidation(ApprovalTestCase):
 
     def test_action_mismatch(self) -> None:
         token, _ = self.store.issue("agent_s_gui_task", "x")
-        self.assertEqual(
-            self.store.validate("openrouter_paid", token, "x")[0], "approval_action_mismatch"
-        )
+        self.assertEqual(self.store.validate("openrouter_paid", token, "x")[0], "approval_action_mismatch")
 
     def test_scope_mismatch(self) -> None:
         token, _ = self.store.issue("agent_s_gui_task", "open chromium")

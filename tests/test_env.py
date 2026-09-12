@@ -6,6 +6,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 from lib.dai.env import Config, env_bool, env_float, env_int, env_str, load_dotenv, parse_dotenv
 
@@ -21,7 +22,7 @@ class TestParseDotenv(unittest.TestCase):
                 "export EXPORTED=value",
                 'DOUBLE="quoted value"',
                 "SINGLE='single quoted'",
-                "QUOTED_HASH=\"keep # this\"",
+                'QUOTED_HASH="keep # this"',
                 "UNQUOTED_HASH=value # strip this",
                 "EMPTY=",
                 "NUMBER=11435",
@@ -74,8 +75,16 @@ class TestLoadDotenv(unittest.TestCase):
 
 
 class TestTypedAccessors(unittest.TestCase):
-    env = {"S": "text", "I": "42", "BAD_I": "not-a-number", "F": "1.5", "BAD_F": "x",
-           "T": "true", "F_FALSE": "off", "EMPTY": ""}
+    env: ClassVar[dict] = {
+        "S": "text",
+        "I": "42",
+        "BAD_I": "not-a-number",
+        "F": "1.5",
+        "BAD_F": "x",
+        "T": "true",
+        "F_FALSE": "off",
+        "EMPTY": "",
+    }
 
     def test_env_str(self) -> None:
         self.assertEqual(env_str("S", "d", env=self.env), "text")

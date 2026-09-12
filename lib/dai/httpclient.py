@@ -14,7 +14,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Optional, Tuple
 from urllib import error, parse, request
 
-from .redact import Redactor, redact as _default_redact
+from .redact import Redactor
+from .redact import redact as _default_redact
 
 USER_AGENT = "dai-spine/1.0 (+https://localhost/debian-ai)"
 
@@ -62,7 +63,7 @@ def _error_body(exc: error.HTTPError, redactor: Optional[Redactor]) -> Dict[str,
     redact = redactor.redact if redactor else _default_redact
     try:
         raw = exc.read().decode("utf-8", errors="replace")
-    except Exception:  # noqa: BLE001 - a broken error stream must not mask the status
+    except Exception:
         raw = ""
     if not raw:
         return {"error": {"message": redact(str(exc.reason) or exc.msg), "type": "upstream_http_error"}}
@@ -90,11 +91,15 @@ def open_raw(
     """
     req = _build_request(method, url, body, headers)
     try:
-        resp = request.urlopen(req, timeout=timeout)  # noqa: S310 - https/http only
+        resp = request.urlopen(req, timeout=timeout)
     except error.HTTPError as exc:
         return exc.code, _error_body(exc, redactor), None
     except socket.timeout as exc:
-        return STATUS_TIMEOUT, {"error": {"message": f"upstream timeout after {timeout}s: {exc}", "type": "timeout"}}, None
+        return (
+            STATUS_TIMEOUT,
+            {"error": {"message": f"upstream timeout after {timeout}s: {exc}", "type": "timeout"}},
+            None,
+        )
     except error.URLError as exc:
         reason = getattr(exc, "reason", exc)
         if isinstance(reason, socket.timeout):
@@ -104,7 +109,7 @@ def open_raw(
             {"error": {"message": (redactor.redact if redactor else _default_redact)(str(reason)), "type": "network"}},
             None,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return (
             STATUS_NETWORK_ERROR,
             {"error": {"message": (redactor.redact if redactor else _default_redact)(str(exc)), "type": "unexpected"}},
@@ -120,7 +125,14 @@ def open_raw(
     except (json.JSONDecodeError, UnicodeDecodeError):
         return (
             resp.status,
-            {"error": {"message": (redactor.redact if redactor else _default_redact)(raw[:2000].decode("utf-8", "replace")), "type": "non_json"}},
+            {
+                "error": {
+                    "message": (redactor.redact if redactor else _default_redact)(
+                        raw[:2000].decode("utf-8", "replace")
+                    ),
+                    "type": "non_json",
+                }
+            },
             None,
         )
 
@@ -154,7 +166,7 @@ def open_stream(
     req = _build_request(method, url, body, headers)
     req.add_header("Accept", "text/event-stream")
     try:
-        resp = request.urlopen(req, timeout=timeout)  # noqa: S310
+        resp = request.urlopen(req, timeout=timeout)
         return resp.status, dict(resp.headers.items()), resp
     except error.HTTPError as exc:
         return exc.code, _error_body(exc, redactor), None
@@ -167,7 +179,7 @@ def open_stream(
             {"error": {"message": (redactor.redact if redactor else _default_redact)(str(reason)), "type": "network"}},
             None,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         return (
             STATUS_NETWORK_ERROR,
             {"error": {"message": (redactor.redact if redactor else _default_redact)(str(exc)), "type": "unexpected"}},

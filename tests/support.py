@@ -121,7 +121,7 @@ class StubUpstream:
                 self.end_headers()
                 self.wfile.write(body)
 
-            def do_GET(self) -> None:  # noqa: N802
+            def do_GET(self) -> None:
                 if self.path.endswith("/health"):
                     self._send(200, {"ok": True, "service": "stub-upstream", "ready_for_chat": True})
                     return
@@ -130,7 +130,7 @@ class StubUpstream:
                     return
                 self._send(404, {"error": {"message": "not found"}})
 
-            def do_POST(self) -> None:  # noqa: N802
+            def do_POST(self) -> None:
                 body = self._read()
                 model = str(body.get("model") or "")
                 stub.calls.append(
@@ -167,7 +167,11 @@ class StubUpstream:
                         "object": "chat.completion",
                         "model": model,
                         "choices": [
-                            {"index": 0, "message": {"role": "assistant", "content": "Hello world"}, "finish_reason": "stop"}
+                            {
+                                "index": 0,
+                                "message": {"role": "assistant", "content": "Hello world"},
+                                "finish_reason": "stop",
+                            }
                         ],
                         "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
                     },
@@ -179,13 +183,25 @@ class StubUpstream:
                 self.send_header("Transfer-Encoding", "chunked")
                 self.end_headers()
                 frames = [
-                    {"id": "c1", "object": "chat.completion.chunk", "model": model,
-                     "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}]},
-                    {"id": "c1", "object": "chat.completion.chunk", "model": model,
-                     "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}]},
-                    {"id": "c1", "object": "chat.completion.chunk", "model": model,
-                     "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-                     "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7}},
+                    {
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "model": model,
+                        "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+                    },
+                    {
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "model": model,
+                        "choices": [{"index": 0, "delta": {"content": content}, "finish_reason": None}],
+                    },
+                    {
+                        "id": "c1",
+                        "object": "chat.completion.chunk",
+                        "model": model,
+                        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                        "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+                    },
                 ]
                 for frame in frames:
                     self._chunk(f"data: {json.dumps(frame)}\n\n".encode())
@@ -239,7 +255,7 @@ def http_request(
         request_headers.setdefault("Content-Type", "application/json")
     req = urllib.request.Request(url, data=data, method=method, headers=request_headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
             return resp.status, _maybe_json(raw), dict(resp.headers.items()), raw
     except urllib.error.HTTPError as exc:
@@ -270,8 +286,14 @@ def post(url: str, body: Any = None, **kwargs: Any) -> Tuple[int, Any, Dict[str,
 class TempSpine:
     """A temp directory holding every file the services would otherwise read."""
 
-    def __init__(self, *, pool: Optional[Dict[str, Any]] = None, policy: Optional[Dict[str, Any]] = None,
-                 catalog: Optional[Dict[str, Any]] = None, env: Optional[Dict[str, str]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        pool: Optional[Dict[str, Any]] = None,
+        policy: Optional[Dict[str, Any]] = None,
+        catalog: Optional[Dict[str, Any]] = None,
+        env: Optional[Dict[str, str]] = None,
+    ) -> None:
         self.dir = Path(tempfile.mkdtemp(prefix="dai-test-"))
         (self.dir / "config").mkdir()
         (self.dir / "policy").mkdir()
@@ -432,7 +454,9 @@ class ServiceFixture:
         self.httpd.server_close()
 
 
-def start_router(spine: TempSpine, upstream: StubUpstream, env: Optional[Dict[str, str]] = None) -> Tuple[ServiceFixture, Any]:
+def start_router(
+    spine: TempSpine, upstream: StubUpstream, env: Optional[Dict[str, str]] = None
+) -> Tuple[ServiceFixture, Any]:
     module = router_module()
     merged = spine.router_env(upstream.base_url)
     merged.update(env or {})

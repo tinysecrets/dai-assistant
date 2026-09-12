@@ -36,7 +36,14 @@ KIND_NETWORK = "network"
 
 RATE_LIMIT_PHRASES = ("rate limit", "rate_limit", "ratelimit", "too many requests", "try again later")
 QUOTA_PHRASES = ("quota", "credit", "insufficient", "billing", "exceeded your current", "payment required", "allowance")
-AUTH_PHRASES = ("invalid api key", "invalid_api_key", "unauthorized", "unauthenticated", "invalid authentication", "api key not")
+AUTH_PHRASES = (
+    "invalid api key",
+    "invalid_api_key",
+    "unauthorized",
+    "unauthenticated",
+    "invalid authentication",
+    "api key not",
+)
 UNAVAILABLE_PHRASES = (
     "no providers",
     "not available",
@@ -582,4 +589,8 @@ def provider_status(env: Mapping[str, str]) -> Dict[str, bool]:
 
 
 def keys_needed(env: Mapping[str, str]) -> List[str]:
-    return [PROVIDERS[name].key_env for name in PROVIDER_ORDER if PROVIDERS[name].requires_key and not PROVIDERS[name].configured(env)]
+    return [
+        PROVIDERS[name].key_env
+        for name in PROVIDER_ORDER
+        if PROVIDERS[name].requires_key and not PROVIDERS[name].configured(env)
+    ]

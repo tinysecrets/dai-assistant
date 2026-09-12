@@ -179,12 +179,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="token from bin/issue-approval.sh; prefer $DAI_APPROVAL_TOKEN (not visible in ps)",
     )
     parser.add_argument("--max-steps", type=int, default=None, help="step budget (clamped by policy)")
-    parser.add_argument(
-        "--timeout", type=int, default=600, help="seconds to wait for a terminal status (default 600)"
-    )
-    parser.add_argument(
-        "--poll-interval", type=float, default=0.5, help="seconds between status polls (default 0.5)"
-    )
+    parser.add_argument("--timeout", type=int, default=600, help="seconds to wait for a terminal status (default 600)")
+    parser.add_argument("--poll-interval", type=float, default=0.5, help="seconds between status polls (default 0.5)")
     parser.add_argument("--worker", default=None, help=f"worker base URL (default {DEFAULT_WORKER})")
     parser.add_argument(
         "--cancel-on-timeout",
@@ -226,7 +222,7 @@ def main(argv: Optional[list] = None) -> int:
         print(
             "error: --live needs an approval token.\n"
             '  TOKEN=$(./bin/issue-approval.sh agent_s_gui_task "<exact instruction>")\n'
-            "  export DAI_APPROVAL_TOKEN=\"$TOKEN\"   # preferred over --approval-token",
+            '  export DAI_APPROVAL_TOKEN="$TOKEN"   # preferred over --approval-token',
             file=sys.stderr,
         )
         return EXIT_USAGE

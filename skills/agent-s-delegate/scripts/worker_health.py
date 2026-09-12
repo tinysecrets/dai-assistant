@@ -63,7 +63,8 @@ def make_redactor():
         if str(ROOT) not in sys.path:
             sys.path.insert(0, str(ROOT))
         from lib.dai.redact import Redactor
-    except Exception:  # noqa: BLE001 - the report must still be produced
+    except Exception:
+
         class _Identity:
             @staticmethod
             def redact(text):
@@ -163,8 +164,7 @@ def explain(health: Dict[str, Any]) -> list:
         )
     if not health.get("display_ready"):
         notes.append(
-            f"display {health.get('display')} is not answering; "
-            "./bin/start-spine.sh runs Xvfb when it is installed"
+            f"display {health.get('display')} is not answering; ./bin/start-spine.sh runs Xvfb when it is installed"
         )
     if health.get("bind_owner_live_desktop"):
         notes.append("bind_owner_live_desktop is true — forbidden by design; repolicy first")
@@ -210,8 +210,11 @@ def main(argv: Optional[list] = None) -> int:
             "or check it: ./bin/doctor.sh",
         ]
         payload = json.dumps(report, indent=2, default=str)
-        print(redactor.redact(payload) if not args.quiet else redactor.redact(json.dumps(
-            {"ok": False, "worker_url": base, "worker_error": err}, default=str)))
+        print(
+            redactor.redact(payload)
+            if not args.quiet
+            else redactor.redact(json.dumps({"ok": False, "worker_url": base, "worker_error": err}, default=str))
+        )
         # A note about the policy is a config problem; a missing worker is not.
         return EXIT_USAGE if (note and err) else EXIT_UNHEALTHY
 

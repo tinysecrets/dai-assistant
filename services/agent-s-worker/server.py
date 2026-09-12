@@ -17,6 +17,7 @@ Endpoints are documented in ``docs/API.md``.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import queue
@@ -37,7 +38,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from lib.dai import (  # noqa: E402
+from lib.dai import (
     Config,
     HttpError,
     JsonHandler,
@@ -51,9 +52,9 @@ from lib.dai import (  # noqa: E402
     parse_dotenv,
     serve_forever,
 )
-from lib.dai.approvals import ApprovalStore  # noqa: E402
-from lib.dai.httpclient import request_json  # noqa: E402
-from lib.dai.jsonio import AtomicJsonStore, CachedJsonFile, atomic_write_json, load_json  # noqa: E402
+from lib.dai.approvals import ApprovalStore
+from lib.dai.httpclient import request_json
+from lib.dai.jsonio import CachedJsonFile, atomic_write_json, load_json
 
 SERVICE = ServiceInfo("agent-s-worker", "1.1", "docs/API.md")
 VERSION = SERVICE.version
@@ -175,9 +176,11 @@ class WorkerRuntime:
             "max_steps_hard_cap": cap,
             # expanduser so /v1/settings and --check show the path that
             # agent_s_binary() actually searches, not a literal "~".
-            "venv": str(Path(str(self.setting(
-                "venv_path", "DAI_AGENT_S_VENV", str(Path.home() / ".local" / "agent-s-venv")
-            ))).expanduser()),
+            "venv": str(
+                Path(
+                    str(self.setting("venv_path", "DAI_AGENT_S_VENV", str(Path.home() / ".local" / "agent-s-venv")))
+                ).expanduser()
+            ),
             "extra_args": self.env().get("AGENT_S_EXTRA_ARGS", "").strip(),
             "allow_xvfb": str(self.env().get("AGENT_S_ALLOW_XVFB", "1")).strip().lower() in ("1", "true", "yes", "on"),
             "router_url": router,
@@ -350,16 +353,13 @@ class WorkerRuntime:
                 }
                 self.save_task(task)
         for _ in self._workers:
-            try:
+            # A sentinel per worker; if the queue is full there is nothing to drain.
+            with contextlib.suppress(queue.Full):
                 self._queue.put_nowait("")
-            except queue.Full:
-                pass
         proc = self._xvfb
         if proc is not None and proc.poll() is None:
-            try:
+            with contextlib.suppress(OSError, ProcessLookupError):
                 os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except (OSError, ProcessLookupError):
-                pass
 
 
 def build_runtime(env: Optional[Mapping[str, str]] = None, *, root: Path = ROOT) -> WorkerRuntime:
@@ -421,22 +421,36 @@ def build_command(runtime: WorkerRuntime, task: Dict[str, Any], settings: Mappin
     router_token = (runtime.env().get("DAI_ROUTER_TOKEN") or "").strip()
     api_key = (runtime.env().get("AGENT_S_API_KEY") or router_token or "dai-local").strip()
     ground_key = (runtime.env().get("AGENT_S_GROUND_API_KEY") or api_key).strip()
-    max_steps = max(1, min(int(task.get("max_steps") or settings["max_steps_default"]), int(settings["max_steps_hard_cap"])))
+    max_steps = max(
+        1, min(int(task.get("max_steps") or settings["max_steps_default"]), int(settings["max_steps_hard_cap"]))
+    )
 
     cmd = [
         binary,
-        "--provider", str(settings["provider"]),
-        "--model", str(settings["model"]),
-        "--model_url", str(settings["model_url"]),
-        "--model_api_key", api_key,
-        "--ground_provider", str(settings["ground_provider"]),
-        "--ground_url", str(settings["ground_url"]),
-        "--ground_api_key", ground_key,
-        "--ground_model", str(settings["ground_model"]),
-        "--grounding_width", str(int(settings["grounding_width"])),
-        "--grounding_height", str(int(settings["grounding_height"])),
-        "--max_trajectory_length", str(max_steps),
-        "--task", str(task["instruction"]),
+        "--provider",
+        str(settings["provider"]),
+        "--model",
+        str(settings["model"]),
+        "--model_url",
+        str(settings["model_url"]),
+        "--model_api_key",
+        api_key,
+        "--ground_provider",
+        str(settings["ground_provider"]),
+        "--ground_url",
+        str(settings["ground_url"]),
+        "--ground_api_key",
+        ground_key,
+        "--ground_model",
+        str(settings["ground_model"]),
+        "--grounding_width",
+        str(int(settings["grounding_width"])),
+        "--grounding_height",
+        str(int(settings["grounding_height"])),
+        "--max_trajectory_length",
+        str(max_steps),
+        "--task",
+        str(task["instruction"]),
     ]
     extra = str(settings.get("extra_args") or "")
     if extra:
@@ -467,7 +481,10 @@ def router_ready(runtime: WorkerRuntime, settings: Mapping[str, Any]) -> Tuple[b
     code, payload = request_json("GET", f"{base}/health", timeout=5.0, redactor=runtime.redactor)
     if code == 200 and isinstance(payload, dict):
         if payload.get("ready_for_chat") is False:
-            return False, f"model-router is up but not ready_for_chat: {payload.get('notes') or payload.get('keys_needed')}"
+            return (
+                False,
+                f"model-router is up but not ready_for_chat: {payload.get('notes') or payload.get('keys_needed')}",
+            )
         return True, "model-router ready"
     return False, f"model-router not reachable at {base}/health (status {code})"
 
@@ -667,7 +684,7 @@ def dry_run_result(runtime: WorkerRuntime, task: Dict[str, Any]) -> Dict[str, An
         "checks": checks,
         "live_blockers": blockers,
         "hint": "Re-run with --live and an approval token once live_blockers is empty: "
-        "bin/issue-approval.sh agent_s_gui_task \"<exact instruction>\"",
+        'bin/issue-approval.sh agent_s_gui_task "<exact instruction>"',
     }
 
 
@@ -678,7 +695,6 @@ def execute_task(runtime: WorkerRuntime, task_id: str) -> None:
     if task.get("status") == CANCELLED:
         return
 
-    settings = runtime.settings()
     task["status"] = RUNNING
     task["started_at"] = time.time()
     runtime.save_task(task)
@@ -689,7 +705,7 @@ def execute_task(runtime: WorkerRuntime, task_id: str) -> None:
             result = dry_run_result(runtime, task)
         else:
             result = run_agent_s(runtime, task)
-    except Exception as exc:  # noqa: BLE001 - a task must never kill the worker
+    except Exception as exc:
         result = {
             "status": FAILED,
             "error": "worker_exception",
@@ -750,7 +766,9 @@ class WorkerHandler(JsonHandler):
         elif method == "POST":
             self.dispatch_post(path, query)
         else:
-            raise HttpError(405, "method_not_allowed", f"{method} is not supported for {path}", headers={"Allow": "GET, HEAD, POST"})
+            raise HttpError(
+                405, "method_not_allowed", f"{method} is not supported for {path}", headers={"Allow": "GET, HEAD, POST"}
+            )
 
     # --- GET --------------------------------------------------------------
     def dispatch_get(self, path: str, query: Mapping[str, str]) -> None:
@@ -877,7 +895,6 @@ class WorkerHandler(JsonHandler):
 
     # --- POST -------------------------------------------------------------
     def dispatch_post(self, path: str, query: Mapping[str, str]) -> None:
-        rt = self.rt
         if path == "/v1/tasks":
             self.create_task()
             return
@@ -908,7 +925,9 @@ class WorkerHandler(JsonHandler):
                 "policy/sovereign.json has agent_s.enabled=false; the worker is not accepting tasks.",
             )
         if settings["bind_owner_live_desktop"]:
-            raise HttpError(403, "live_desktop_forbidden_until_repolicy", "Binding the owner's live desktop is forbidden.")
+            raise HttpError(
+                403, "live_desktop_forbidden_until_repolicy", "Binding the owner's live desktop is forbidden."
+            )
 
         if rt.queue_depth() >= rt.max_queue:
             raise HttpError(
@@ -941,7 +960,9 @@ class WorkerHandler(JsonHandler):
             if settings["require_approval_token"]:
                 err, detail = rt.approvals.consume("agent_s_gui_task", str(token) if token else None, instruction)
                 if err:
-                    raise HttpError(403, err, detail or "Live GUI tasks need a valid approval token.", extra={"task_id": task["id"]})
+                    raise HttpError(
+                        403, err, detail or "Live GUI tasks need a valid approval token.", extra={"task_id": task["id"]}
+                    )
             task["approval"] = {"token_used": True, "action": "agent_s_gui_task"}
 
         rt.save_task(task)
@@ -965,7 +986,9 @@ class WorkerHandler(JsonHandler):
         if not task:
             raise HttpError(404, "not_found", f"No task {task_id}")
         if task.get("status") in TERMINAL:
-            self.send_json(200, {"id": task_id, "status": task.get("status"), "cancelled": False, "detail": "already finished"})
+            self.send_json(
+                200, {"id": task_id, "status": task.get("status"), "cancelled": False, "detail": "already finished"}
+            )
             return
         info = rt.running_info(task_id)
         if info is None:
@@ -1040,9 +1063,7 @@ def check_configuration(runtime: WorkerRuntime) -> Dict[str, Any]:
             "refused with a reason; dry-run still works"
         )
     if not runtime.display_ready(str(settings["display"])):
-        warnings.append(
-            f"display {settings['display']} is not answering (start-spine.sh runs Xvfb when installed)"
-        )
+        warnings.append(f"display {settings['display']} is not answering (start-spine.sh runs Xvfb when installed)")
 
     return {
         "ok": not problems,

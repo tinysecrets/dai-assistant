@@ -110,7 +110,9 @@ for model in doc.get("data", []):
   chat)
     require_router
     prompt="${*:-Say hi}"
-    export DAI_ROUTER_URL="$(router_url)"
+    # Assigned then exported: `export X="$(cmd)"` masks the command's status.
+    DAI_ROUTER_URL="$(router_url)"
+    export DAI_ROUTER_URL
     python3 - "$prompt" <<'PY'
 import json, os, sys, urllib.request
 
@@ -160,7 +162,9 @@ PY
       python3 "$ROOT/services/$svc/server.py" --version 2>/dev/null || echo "(unavailable)"
     done
     printf '%-18s ' "lib/dai"
-    python3 -c 'import sys; sys.path.insert(0, "'"'"$ROOT"'"'"); import lib.dai; print(lib.dai.__version__)'
+    # PYTHONPATH rather than shell-quoting $ROOT into the Python source: the
+    # nested quoting needed to do that is exactly what SC2027 warns about.
+    PYTHONPATH="$ROOT" python3 -c 'import lib.dai; print(lib.dai.__version__)'
     printf '%-18s ' "python"
     python3 -V 2>&1
     ;;

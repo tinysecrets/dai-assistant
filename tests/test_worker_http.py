@@ -8,25 +8,21 @@ without touching a real display.
 from __future__ import annotations
 
 import json
-import os
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from tests.support import (
     FAKE_AGENT_S,
     FAKE_AGENT_S_FAIL,
     FAKE_AGENT_S_HANG,
     FAKE_AGENT_S_LEAK,
-    StubUpstream,
-    PathPrepend,
-    ServiceFixture,
-    TempSpine,
     XSET_OK,
-    get,
-    post,
+    PathPrepend,
+    StubUpstream,
+    TempSpine,
     start_worker,
     wait_for,
     write_executable,
@@ -39,7 +35,7 @@ class WorkerCase(unittest.TestCase):
     """Worker with no agent_s installed: dry-run and policy paths."""
 
     policy: Optional[Dict[str, Any]] = None
-    env: Dict[str, str] = {}
+    env: ClassVar[Dict[str, str]] = {}
 
     def setUp(self) -> None:
         self.spine = TempSpine(policy=self.policy)
@@ -79,9 +75,19 @@ class TestHealth(WorkerCase):
         status, body, _h, _r = self.service.get("/health")
         self.assertEqual(status, 200)
         for key in (
-            "ok", "service", "version", "enabled", "dry_run_default", "display",
-            "bind_owner_live_desktop", "require_approval_token", "agent_s_installed",
-            "live_capable", "queue_depth", "running", "ready",
+            "ok",
+            "service",
+            "version",
+            "enabled",
+            "dry_run_default",
+            "display",
+            "bind_owner_live_desktop",
+            "require_approval_token",
+            "agent_s_installed",
+            "live_capable",
+            "queue_depth",
+            "running",
+            "ready",
         ):
             self.assertIn(key, body)
         self.assertEqual(body["service"], "agent-s-worker")
@@ -336,7 +342,7 @@ class TestPolicySafety(WorkerCase):
         self.addCleanup(service.stop)
         self.addCleanup(runtime.stop)
         self.assertEqual(service.get("/health")[0], 200)
-        status, body, _h, _r = service.post("/v1/tasks", {"instruction": INSTRUCTION})
+        status, _body, _h, _r = service.post("/v1/tasks", {"instruction": INSTRUCTION})
         self.assertIn(status, (202, 403))
         self.assertNotEqual(status, 500)
 
@@ -509,6 +515,7 @@ class TestLiveExecution(LiveWorkerCase):
         self.assertEqual(task["status"], "blocked")
         self.assertEqual(task["result"]["error"], "model_router_not_ready")
 
+
 class TestLiveFailure(LiveWorkerCase):
     agent_s_script = FAKE_AGENT_S_FAIL
 
@@ -547,7 +554,9 @@ class TestLiveCancel(LiveWorkerCase):
     def test_running_task_can_be_cancelled(self) -> None:
         _s, body, _h, _r = self.live()
         task_id = body["id"]
-        self.assertTrue(wait_for(lambda: self.service.get(f"/v1/tasks/{task_id}")[1].get("status") == "running", timeout=15))
+        self.assertTrue(
+            wait_for(lambda: self.service.get(f"/v1/tasks/{task_id}")[1].get("status") == "running", timeout=15)
+        )
         status, cancelled, _h, _r = self.service.post(f"/v1/tasks/{task_id}/cancel", {})
         self.assertEqual(status, 202)
         self.assertTrue(cancelled["cancelling"])
@@ -654,7 +663,7 @@ class TestArtifacts(WorkerCase):
     def test_unknown_subresource(self) -> None:
         task_id = self.submit({"dry_run": True})[1]["id"]
         self.wait_terminal(task_id)
-        status, body, _h, _r = self.service.get(f"/v1/tasks/{task_id}/secrets")
+        status, _body, _h, _r = self.service.get(f"/v1/tasks/{task_id}/secrets")
         self.assertEqual(status, 404)
 
 
@@ -668,7 +677,7 @@ class TestWorkerAuth(WorkerCase):
         self.assertEqual(service.get("/health")[0], 200)
         self.assertEqual(service.post("/v1/tasks", {"instruction": INSTRUCTION})[0], 401)
         self.assertEqual(service.get("/v1/tasks")[0], 401)
-        status, body, _h, _r = service.post(
+        status, _body, _h, _r = service.post(
             "/v1/tasks", {"instruction": INSTRUCTION}, headers={"Authorization": "Bearer worker-gate"}
         )
         self.assertEqual(status, 202)

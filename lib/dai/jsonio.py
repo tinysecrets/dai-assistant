@@ -9,6 +9,7 @@ cannot truncate the previous good copy.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import tempfile
@@ -56,10 +57,9 @@ def atomic_write_json(
         os.chmod(tmp, mode)
         os.replace(tmp, p)
     except BaseException:
-        try:
+        # Best effort: never let cleanup of the temp file mask the real error.
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
-        except OSError:
-            pass
         raise
 
 

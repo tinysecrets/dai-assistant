@@ -79,6 +79,7 @@ def _sub_bearer(match: "re.Match[str]") -> str:
         return match.group(0)
     return f"{match.group(1)} {REDACTED}"
 
+
 _MIN_REGISTERED_LEN = 8
 
 

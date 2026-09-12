@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 import unittest
 from typing import Any, Dict, List, Optional
 
@@ -25,7 +24,6 @@ from lib.dai.routing import (
     provider_status,
     resolve_explicit,
 )
-
 from tests.support import default_catalog, default_pool
 
 KEY_ENV = {"OPENROUTER_API_KEY": "sk-or-v1-test", "GROQ_API_KEY": "gsk_test"}
@@ -160,7 +158,9 @@ class TestCandidateBuilding(unittest.TestCase):
                 self.assertEqual(result.requested, {"provider": "openrouter", "model": "beta/two:free"})
 
     def test_explicit_model_without_a_key_falls_back_and_says_so(self) -> None:
-        result = plan(env={}, preferred="groq/groq-fast", pool={**default_pool(), "ollama_local_models": ["hermes3:8b"]})
+        result = plan(
+            env={}, preferred="groq/groq-fast", pool={**default_pool(), "ollama_local_models": ["hermes3:8b"]}
+        )
         self.assertEqual(models(result), ["ollama_local/hermes3:8b"])
         self.assertEqual(result.fallback_from, "groq/groq-fast")
         self.assertTrue(any("groq" in n for n in result.notes))
@@ -248,26 +248,24 @@ class TestVision(unittest.TestCase):
             "plain": {},
             "vision hint": {"hint": "look at this screenshot"},
             "rotated": {"rr": 5},
-            "every provider keyed": {"env": {**KEY_ENV, "OLLAMA_API_KEY": "oll-key",
-                                            "CEREBRAS_API_KEY": "csk-key"}},
+            "every provider keyed": {"env": {**KEY_ENV, "OLLAMA_API_KEY": "oll-key", "CEREBRAS_API_KEY": "csk-key"}},
             "no other providers enabled": {"enabled": ["openrouter"]},
         }
         for label, kwargs in variants.items():
             with self.subTest(label):
                 result = plan(preferred="dai/vision-auto", pool=pool, **kwargs)
-                self.assertTrue(result.candidates,
-                                "a populated vision pool must produce candidates")
+                self.assertTrue(result.candidates, "a populated vision pool must produce candidates")
                 for cand in result.candidates:
-                    self.assertIn(cand.model, expected_vision,
-                                  f"{cand.provider}/{cand.model} is not vision-capable")
-                    self.assertEqual(cand.provider, "openrouter",
-                                     "the vision rotation must not reach another provider")
+                    self.assertIn(cand.model, expected_vision, f"{cand.provider}/{cand.model} is not vision-capable")
+                    self.assertEqual(cand.provider, "openrouter", "the vision rotation must not reach another provider")
                     self.assertEqual(cand.origin, "vision")
 
     def test_vision_hint_boosts_vision_models_in_the_text_pool(self) -> None:
         pool = {**default_pool(), "openrouter_free": ["text/only:free", "alpha/one:free"]}
         plain = [c.model for c in plan(pool=pool).candidates if c.provider == "openrouter"]
-        boosted = [c.model for c in plan(pool=pool, hint="look at this screenshot").candidates if c.provider == "openrouter"]
+        boosted = [
+            c.model for c in plan(pool=pool, hint="look at this screenshot").candidates if c.provider == "openrouter"
+        ]
         self.assertEqual(plain[0], "text/only:free")
         self.assertEqual(boosted[0], "alpha/one:free")
 

@@ -57,7 +57,6 @@ select = [
     "I",    # isort
     "B",    # bugbear (mutable defaults, except-too-broad, ...)
     "C4",   # comprehension cleanups
-    "UP",   # pyupgrade
     "SIM",  # simplifications
     "RUF",  # ruff-specific
 ]
@@ -65,7 +64,25 @@ ignore = [
     "E501",   # line length is handled by the formatter; long f-strings are fine
     "SIM108", # ternaries are not always clearer than if/else
     "B008",   # function call in a default argument: used for dataclass factories
+    "RUF005", # `a + b` -> `[*a, *b]` is not an obvious win for short lists
 ]
+
+# The pyupgrade family is deliberately off.
+#
+# This project supports Python 3.9 (see requires-python and the CI matrix), and
+# every module carries `from __future__ import annotations` so annotations are
+# never evaluated at runtime. Under that constraint:
+#
+#   * UP045 (`Optional[X]` -> `X | None`) rewrites to PEP 604 syntax, which is a
+#     3.10 *runtime* feature. It is safe inside annotations, but any use that is
+#     evaluated — a TypeAlias, a cast, a typing.get_type_hints() call — becomes a
+#     TypeError on 3.9. 118 sites, for zero behavioural gain, against a floor we
+#     still support.
+#   * UP006/UP035 (`List[X]` -> `list[X]`, dropping the typing import) are safe on
+#     3.9 via PEP 585, but they are ~300 purely cosmetic edits.
+#
+# If requires-python moves to 3.10 or later, re-enable "UP" and run
+# `ruff check --fix`; the code will convert cleanly.
 
 [tool.ruff.lint.per-file-ignores]
 # Tests import fixtures and support modules for their side effects.

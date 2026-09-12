@@ -8,13 +8,11 @@ from __future__ import annotations
 
 import json
 import unittest
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Optional
 
 from tests.support import (
     StubUpstream,
     TempSpine,
-    ServiceFixture,
-    get,
     post,
     start_router,
 )
@@ -28,8 +26,8 @@ class RouterCase(unittest.TestCase):
 
     pool: Optional[Dict[str, Any]] = None
     policy: Optional[Dict[str, Any]] = None
-    router_env: Dict[str, str] = {}
-    rules: list = []
+    router_env: ClassVar[Dict[str, str]] = {}
+    rules: ClassVar[list] = []
 
     def setUp(self) -> None:
         self.spine = TempSpine(pool=self.pool, policy=self.policy)
@@ -59,8 +57,16 @@ class TestHealthAndDiscovery(RouterCase):
         status, body, _headers, _raw = self.service.get("/health")
         self.assertEqual(status, 200)
         for key in (
-            "ok", "service", "version", "mode", "ready_for_chat", "providers_configured",
-            "keys_needed", "openrouter_paid_enabled", "pool", "candidates_available",
+            "ok",
+            "service",
+            "version",
+            "mode",
+            "ready_for_chat",
+            "providers_configured",
+            "keys_needed",
+            "openrouter_paid_enabled",
+            "pool",
+            "candidates_available",
         ):
             self.assertIn(key, body)
         self.assertTrue(body["ready_for_chat"])
@@ -71,8 +77,13 @@ class TestHealthAndDiscovery(RouterCase):
         service, _runtime = start_router(self.spine, self.upstream, env={"DAI_ROUTER_TOKEN": "gate-me"})
         self.addCleanup(service.stop)
         self.assertEqual(service.get("/health")[0], 200)
-        self.assertEqual(service.post("/v1/chat/completions", {"model": "dai/auto", "messages": [{"role": "user", "content": "hi"}]})[0], 401)
-        status, body, _h, _r = service.post(
+        self.assertEqual(
+            service.post(
+                "/v1/chat/completions", {"model": "dai/auto", "messages": [{"role": "user", "content": "hi"}]}
+            )[0],
+            401,
+        )
+        status, _body, _h, _r = service.post(
             "/v1/chat/completions",
             {"model": "dai/auto", "messages": [{"role": "user", "content": "hi"}]},
             headers={"Authorization": "Bearer gate-me"},
@@ -210,14 +221,25 @@ class TestChatRouting(RouterCase):
         self.assertIn("messages", keys)
 
     def test_dai_hint_drives_vision_boosting(self) -> None:
-        pool = {"openrouter_free": ["text/only:free", "alpha/one:free"], "openrouter_free_vision": ["alpha/one:free"],
-                "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}
+        pool = {
+            "openrouter_free": ["text/only:free", "alpha/one:free"],
+            "openrouter_free_vision": ["alpha/one:free"],
+            "groq_models": [],
+            "ollama_cloud_models": [],
+            "ollama_local_models": [],
+        }
         spine = TempSpine(pool=pool, catalog={"models": []})
         self.addCleanup(spine.cleanup)
         service, _rt = start_router(spine, self.upstream)
         self.addCleanup(service.stop)
-        service.post("/v1/chat/completions", {"model": "dai/auto", "dai_hint": "describe this screenshot",
-                                              "messages": [{"role": "user", "content": "hi"}]})
+        service.post(
+            "/v1/chat/completions",
+            {
+                "model": "dai/auto",
+                "dai_hint": "describe this screenshot",
+                "messages": [{"role": "user", "content": "hi"}],
+            },
+        )
         self.assertEqual(self.upstream.calls[-1]["model"], "alpha/one:free")
 
     def test_vision_content_blocks_imply_a_vision_task(self) -> None:
@@ -233,7 +255,9 @@ class TestChatRouting(RouterCase):
         self.assertNotIn("fallback_from", body["dai_routed"])
 
     def test_policy_default_model_is_used_when_omitted(self) -> None:
-        spine = TempSpine(policy={"version": 3, "mode": "m", "inference": {"default_model": "openrouter/beta/two:free"}})
+        spine = TempSpine(
+            policy={"version": 3, "mode": "m", "inference": {"default_model": "openrouter/beta/two:free"}}
+        )
         self.addCleanup(spine.cleanup)
         service, _rt = start_router(spine, self.upstream)
         self.addCleanup(service.stop)
@@ -245,7 +269,7 @@ class TestChatRouting(RouterCase):
         status, _body, _h, _r = self.service.post("/v1/completions", {"model": "dai/auto", "prompt": "once upon"})
         self.assertEqual(status, 200)
         self.assertTrue(self.upstream.calls_for("/v1/completions"))
-        self.assertFalse([c for c in self.upstream.calls_for("/chat/completions")])
+        self.assertFalse(list(self.upstream.calls_for("/chat/completions")))
 
     def test_completions_requires_a_prompt(self) -> None:
         status, body, _h, _r = self.service.post("/v1/completions", {"model": "dai/auto"})
@@ -315,9 +339,12 @@ class TestStreaming(RouterCase):
         self.assertEqual(annotation["attempts"], 2)
 
     def test_stream_degrades_to_json_when_upstream_ignores_stream(self) -> None:
-        self.upstream.rule("alpha", status=200, force_json=True,
-                           body={"id": "plain", "object": "chat.completion",
-                                 "choices": [{"message": {"content": "not streamed"}}]})
+        self.upstream.rule(
+            "alpha",
+            status=200,
+            force_json=True,
+            body={"id": "plain", "object": "chat.completion", "choices": [{"message": {"content": "not streamed"}}]},
+        )
         status, body, headers, _raw = self.stream({"model": "openrouter/alpha/one:free"})
         self.assertEqual(status, 200)
         self.assertIn("application/json", headers.get("Content-Type", ""))
@@ -334,7 +361,9 @@ class TestStreaming(RouterCase):
 
 class TestFailureRotation(RouterCase):
     def test_rate_limit_rotates_and_sets_a_cooldown(self) -> None:
-        self.upstream.rule("alpha", status=429, body={"error": {"message": "Rate limit reached", "code": "rate_limited"}})
+        self.upstream.rule(
+            "alpha", status=429, body={"error": {"message": "Rate limit reached", "code": "rate_limited"}}
+        )
         status, body, headers, _raw = self.chat({"model": "openrouter/alpha/one:free"})
         self.assertEqual(status, 200)
         self.assertEqual(body["dai_routed"]["model"], "beta/two:free")
@@ -470,9 +499,7 @@ class TestPaidModelsAndApprovals(RouterCase):
 
     def test_wrong_action_token_is_refused(self) -> None:
         token = self.issue_token("agent_s_gui_task", "*")
-        status, body, _h, _r = self.chat(
-            {"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token}
-        )
+        status, body, _h, _r = self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token})
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "approval_action_mismatch")
 
@@ -493,7 +520,7 @@ class TestPaidModelsAndApprovals(RouterCase):
         self.addCleanup(spine.cleanup)
         service, _rt = start_router(spine, self.upstream)
         self.addCleanup(service.stop)
-        status, body, _h, _r = service.post(
+        status, _body, _h, _r = service.post(
             "/v1/chat/completions",
             {"model": "openrouter/anthropic/claude-sonnet-4.5", "messages": [{"role": "user", "content": "hi"}]},
         )
@@ -501,8 +528,13 @@ class TestPaidModelsAndApprovals(RouterCase):
         self.assertTrue(service.get("/health")[1]["openrouter_paid_enabled"])
 
     def test_paid_models_in_the_pool_are_skipped_not_billed(self) -> None:
-        pool = {"openrouter_free": ["paid/not-free-at-all", "alpha/one:free"], "openrouter_free_vision": [],
-                "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}
+        pool = {
+            "openrouter_free": ["paid/not-free-at-all", "alpha/one:free"],
+            "openrouter_free_vision": [],
+            "groq_models": [],
+            "ollama_cloud_models": [],
+            "ollama_local_models": [],
+        }
         spine = TempSpine(pool=pool, catalog={"models": []})
         self.addCleanup(spine.cleanup)
         service, _rt = start_router(spine, self.upstream)
@@ -564,7 +596,7 @@ class TestStatusEndpoints(RouterCase):
 
 
 class TestSecretHygiene(RouterCase):
-    rules = [("alpha", {"status": 429, "body": {"error": {"message": "rate limit"}}})]
+    rules: ClassVar[list] = [("alpha", {"status": 429, "body": {"error": {"message": "rate limit"}}})]
 
     def test_key_is_forwarded_to_the_provider(self) -> None:
         self.chat({"model": "openrouter/beta/two:free"})
@@ -572,8 +604,13 @@ class TestSecretHygiene(RouterCase):
 
     def test_upstream_echo_of_the_key_is_redacted_before_it_reaches_the_client(self) -> None:
         """A provider that reflects request data must not become a leak path."""
-        pool = {"openrouter_free": ["reflect/one:free", "reflect/two:free"], "openrouter_free_vision": [],
-                "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}
+        pool = {
+            "openrouter_free": ["reflect/one:free", "reflect/two:free"],
+            "openrouter_free_vision": [],
+            "groq_models": [],
+            "ollama_cloud_models": [],
+            "ollama_local_models": [],
+        }
         spine = TempSpine(pool=pool, catalog={"models": []})
         self.addCleanup(spine.cleanup)
         service, _rt = start_router(spine, self.upstream)
@@ -592,7 +629,7 @@ class TestSecretHygiene(RouterCase):
         spine = TempSpine()
         self.addCleanup(spine.cleanup)
         spine.write_env({"GROQ_API_KEY": GROQ_KEY})
-        service, runtime = start_router(spine, self.upstream, env={"GROQ_API_KEY": GROQ_KEY})
+        service, _runtime = start_router(spine, self.upstream, env={"GROQ_API_KEY": GROQ_KEY})
         self.addCleanup(service.stop)
         _s, _b, _h, raw = service.post(
             "/v1/chat/completions",
@@ -616,8 +653,17 @@ class TestConfigReload(RouterCase):
         import time as _time
 
         pool_path = self.spine.pool_path
-        pool_path.write_text(json.dumps({"openrouter_free": ["gamma/three:free"], "openrouter_free_vision": [],
-                                         "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}))
+        pool_path.write_text(
+            json.dumps(
+                {
+                    "openrouter_free": ["gamma/three:free"],
+                    "openrouter_free_vision": [],
+                    "groq_models": [],
+                    "ollama_cloud_models": [],
+                    "ollama_local_models": [],
+                }
+            )
+        )
         st = pool_path.stat()
         os.utime(pool_path, (st.st_atime + 10, st.st_mtime + 10))
         _time.sleep(0.01)
@@ -630,7 +676,7 @@ class TestConfigReload(RouterCase):
         self.spine.pool_path.write_text("{broken json")
         st = self.spine.pool_path.stat()
         os.utime(self.spine.pool_path, (st.st_atime + 10, st.st_mtime + 10))
-        status, body, _h, _r = self.chat()
+        status, _body, _h, _r = self.chat()
         self.assertEqual(status, 200)
         _s, health, _h, _r = self.service.get("/health")
         self.assertTrue(health["config_errors"])

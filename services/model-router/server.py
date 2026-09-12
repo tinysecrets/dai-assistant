@@ -16,6 +16,7 @@ configuration without serving.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -30,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from lib.dai import (  # noqa: E402
+from lib.dai import (
     Config,
     HttpError,
     JsonHandler,
@@ -45,14 +46,14 @@ from lib.dai import (  # noqa: E402
     parse_dotenv,
     serve_forever,
 )
-from lib.dai.approvals import ApprovalStore  # noqa: E402
-from lib.dai.httpclient import iter_sse_lines, open_stream, request_json  # noqa: E402
-from lib.dai.jsonio import AtomicJsonStore, CachedJsonFile  # noqa: E402
-from lib.dai.routing import (  # noqa: E402
+from lib.dai.approvals import ApprovalStore
+from lib.dai.httpclient import iter_sse_lines, open_stream, request_json
+from lib.dai.jsonio import AtomicJsonStore, CachedJsonFile
+from lib.dai.routing import (
+    PROVIDERS,
     Candidate,
     Failure,
     Plan,
-    PROVIDERS,
     classify_failure,
     is_success,
     keys_needed,
@@ -60,7 +61,7 @@ from lib.dai.routing import (  # noqa: E402
     provider_status,
     rotate_index,
 )
-from lib.dai.stats import StatsCollector  # noqa: E402
+from lib.dai.stats import StatsCollector
 
 SERVICE = ServiceInfo("model-router", "1.1", "docs/API.md")
 VERSION = SERVICE.version
@@ -174,9 +175,7 @@ class RouterRuntime:
         raw = data.get("cooldowns") if isinstance(data, dict) else None
         now = time.time()
         with self._lock:
-            self._cooldowns = {
-                str(k): float(v) for k, v in (raw or {}).items() if _is_number(v) and float(v) > now
-            }
+            self._cooldowns = {str(k): float(v) for k, v in (raw or {}).items() if _is_number(v) and float(v) > now}
 
     def cooldowns(self) -> Dict[str, float]:
         now = time.time()
@@ -773,14 +772,16 @@ class RouterHandler(JsonHandler):
             # Upstream ignored stream=true: degrade to one JSON response.
             try:
                 raw = response.read()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 raw = b""
             finally:
                 response.close()
             try:
                 data: Any = json.loads(raw.decode("utf-8", errors="replace")) if raw else {}
             except json.JSONDecodeError:
-                data = {"error": {"message": rt.redactor.redact(raw[:2000].decode("utf-8", "replace")), "type": "non_json"}}
+                data = {
+                    "error": {"message": rt.redactor.redact(raw[:2000].decode("utf-8", "replace")), "type": "non_json"}
+                }
             if isinstance(data, dict):
                 data.setdefault("id", f"chatcmpl-{uuid.uuid4().hex[:12]}")
                 data["dai_routed"] = self._annotation(cand, plan, attempts, stream=False)
@@ -791,14 +792,12 @@ class RouterHandler(JsonHandler):
         self.start_stream(headers=self._headers(cand, plan, attempts))
         self.write_stream(f": dai_routed {json.dumps(self._annotation(cand, plan, attempts, stream=True))}\n\n")
         usage: Dict[str, Any] = {}
-        saw_done = False
         interrupted = False
         try:
             for line in iter_sse_lines(response):
                 if line.startswith(b"data:"):
                     chunk = line[5:].strip()
                     if chunk == b"[DONE]":
-                        saw_done = True
                         break  # re-emitted below, after our usage trailer
                     if b'"usage"' in chunk:
                         try:
@@ -810,7 +809,7 @@ class RouterHandler(JsonHandler):
                 if not self.write_stream(line):
                     interrupted = True
                     break
-        except Exception as exc:  # noqa: BLE001 - upstream died mid-stream
+        except Exception as exc:
             interrupted = True
             self.write_stream(
                 "event: error\ndata: "
@@ -818,10 +817,8 @@ class RouterHandler(JsonHandler):
                 + "\n\n"
             )
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 response.close()
-            except Exception:  # noqa: BLE001
-                pass
         # Trailer: usage first (clients stop reading at [DONE]), then terminate.
         if usage and not interrupted:
             self.write_stream(f": dai_usage {json.dumps(usage)}\n\n")

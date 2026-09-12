@@ -18,15 +18,16 @@ from .jsonio import AtomicJsonStore, CachedJsonFile, atomic_write_json, load_jso
 from .redact import REDACTED, Redactor, redact
 
 __all__ = [
+    "REDACTED",
     "AtomicJsonStore",
     "CachedJsonFile",
     "Config",
     "HttpError",
     "HttpResponse",
     "JsonHandler",
-    "REDACTED",
     "Redactor",
     "ServiceInfo",
+    "ServiceStartupError",
     "atomic_write_json",
     "create_server",
     "env_bool",
@@ -41,7 +42,6 @@ __all__ = [
     "request_json",
     "save_json",
     "serve_forever",
-    "ServiceStartupError",
 ]
 
 __version__ = "1.0.0"

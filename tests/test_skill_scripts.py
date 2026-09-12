@@ -23,7 +23,7 @@ import subprocess
 import sys
 import unittest
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, ClassVar, Dict, List, Optional
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -130,8 +130,7 @@ class TestScriptHygiene(unittest.TestCase):
                     with self.subTest(f"{script.name}: {node.module}.{alias.name}"):
                         self.assertTrue(
                             hasattr(module, alias.name),
-                            f"{script.name} imports {alias.name} from {node.module}, "
-                            "which does not export it",
+                            f"{script.name} imports {alias.name} from {node.module}, which does not export it",
                         )
 
     def test_every_lib_object_attribute_exists(self):
@@ -173,8 +172,7 @@ class TestScriptHygiene(unittest.TestCase):
                 with self.subTest(f"{script.name}: {node.value.id}.{node.attr}"):
                     self.assertTrue(
                         hasattr(cls, node.attr),
-                        f"{script.name} calls {node.value.id}.{node.attr}() but "
-                        f"{cls.__name__} has no such attribute",
+                        f"{script.name} calls {node.value.id}.{node.attr}() but {cls.__name__} has no such attribute",
                     )
 
     def test_scripts_use_only_stdlib_and_lib_dai(self):
@@ -218,8 +216,13 @@ class TestWorkerHealth(LiveWorkerCase):
         proc = run_script(HEALTH, ["--worker", self.base], env=self.env)
         doc = json.loads(proc.stdout)
         summary = doc["summary"]
-        for field in ("dry_run_default", "require_approval_token",
-                      "bind_owner_live_desktop", "live_capable", "enabled"):
+        for field in (
+            "dry_run_default",
+            "require_approval_token",
+            "bind_owner_live_desktop",
+            "live_capable",
+            "enabled",
+        ):
             self.assertIn(field, summary)
         self.assertFalse(summary["bind_owner_live_desktop"])
         self.assertTrue(summary["require_approval_token"])
@@ -354,8 +357,7 @@ class TestDelegateTask(LiveWorkerCase):
         """No agent_s binary here, so the task fails — but it was ACCEPTED, which
         is what distinguishes exit 2 from exit 1."""
         token = self.issue()
-        proc = self.delegate("--instruction", INSTRUCTION, "--live",
-                             "--approval-token", token)
+        proc = self.delegate("--instruction", INSTRUCTION, "--live", "--approval-token", token)
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 2, proc.stdout)
         doc = json.loads(proc.stdout)
@@ -364,15 +366,13 @@ class TestDelegateTask(LiveWorkerCase):
 
     def test_token_from_the_environment_is_accepted(self):
         token = self.issue()
-        proc = self.delegate("--instruction", INSTRUCTION, "--live",
-                             env={"DAI_APPROVAL_TOKEN": token})
+        proc = self.delegate("--instruction", INSTRUCTION, "--live", env={"DAI_APPROVAL_TOKEN": token})
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 2, "token should be accepted, task fails on agent_s")
         self.assertNotIn(token, proc.stdout)
 
     def test_unknown_token_is_an_api_refusal(self):
-        proc = self.delegate("--instruction", INSTRUCTION, "--live",
-                             "--approval-token", "NOT-A-REAL-TOKEN")
+        proc = self.delegate("--instruction", INSTRUCTION, "--live", "--approval-token", "NOT-A-REAL-TOKEN")
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 1)
         self.assertEqual(json.loads(proc.stdout)["error"], "unknown_approval_token")
@@ -413,8 +413,7 @@ class TestDelegateTask(LiveWorkerCase):
         self.assertEqual(doc["max_steps"], cap, "the policy hard cap must win")
 
     def test_worker_unreachable_is_an_api_error(self):
-        proc = run_script(DELEGATE, ["--worker", "http://127.0.0.1:1",
-                                     "--instruction", INSTRUCTION], env=self.env)
+        proc = run_script(DELEGATE, ["--worker", "http://127.0.0.1:1", "--instruction", INSTRUCTION], env=self.env)
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 1)
         doc = json.loads(proc.stdout)
@@ -423,8 +422,7 @@ class TestDelegateTask(LiveWorkerCase):
 
     def test_timeout_returns_its_own_code(self):
         """A task that is still pending when the wait expires is exit 3, not 2."""
-        proc = self.delegate("--instruction", INSTRUCTION, "--timeout", "1",
-                             "--poll-interval", "0.2")
+        proc = self.delegate("--instruction", INSTRUCTION, "--timeout", "1", "--poll-interval", "0.2")
         no_traceback(self, proc)
         # The dry run normally finishes instantly, so either outcome is valid;
         # what matters is that a wait timeout, if it happens, is code 3.
@@ -458,12 +456,10 @@ class TestDelegateTask(LiveWorkerCase):
 class TestDelegateAgainstDisabledWorker(LiveWorkerCase):
     """A worker switched off in policy must refuse, and the script must report it."""
 
-    policy = {"agent_s": {"enabled": False, "dry_run_default": True,
-                          "require_approval_token": True}}
+    policy: ClassVar[dict] = {"agent_s": {"enabled": False, "dry_run_default": True, "require_approval_token": True}}
 
     def test_disabled_worker_is_an_api_refusal(self):
-        proc = run_script(DELEGATE, ["--worker", self.base, "--instruction", INSTRUCTION],
-                          env=self.env)
+        proc = run_script(DELEGATE, ["--worker", self.base, "--instruction", INSTRUCTION], env=self.env)
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 1)
         doc = json.loads(proc.stdout)

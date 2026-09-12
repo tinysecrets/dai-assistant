@@ -294,9 +294,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     store = ApprovalStore(args.file)
 
     if args.command == "issue":
-        token, rec = store.issue(
-            args.action, args.scope, ttl_seconds=args.ttl, max_uses=args.max_uses, note=args.note
-        )
+        token, rec = store.issue(args.action, args.scope, ttl_seconds=args.ttl, max_uses=args.max_uses, note=args.note)
         # The token is the one secret this CLI prints — that is its purpose.
         print(token)
         print(
