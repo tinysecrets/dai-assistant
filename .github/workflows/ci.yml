@@ -35,13 +35,33 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # tests/test_repo_consistency.py shells out to git (`ls-files`, `grep`) to
+      # enumerate the tree.  On a runner where the workspace owner differs from
+      # the job user, git refuses with "dubious ownership" and those calls fail,
+      # which surfaces as test errors rather than as a git problem.  Saying this
+      # explicitly costs nothing and removes that whole class of confusion.
+      - name: Trust the workspace for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Record the environment
+        run: |
+          {
+            echo "python:  $(python -V 2>&1)"
+            echo "cwd:     $PWD"
+            echo "git:     $(git --version 2>&1)"
+            echo "head:    $(git rev-parse --short HEAD 2>&1)"
+            echo "tracked: $(git ls-files --cached --others --exclude-standard 2>&1 | wc -l) files"
+            echo "curl:    $(curl --version 2>&1 | head -1)"
+            echo "bash:    $BASH_VERSION"
+          } | tee /tmp/ci-env.txt
+
       - name: Byte-compile
-        run: python -m compileall -q lib services skills tests
+        run: python -m compileall -q lib services skills tests 2>&1 | tee /tmp/ci-compile.txt
 
       - name: Validate service configuration
         run: |
-          python services/model-router/server.py --check
-          python services/agent-s-worker/server.py --check
+          python services/model-router/server.py --check 2>&1 | tee /tmp/ci-check.txt
+          python services/agent-s-worker/server.py --check 2>&1 | tee -a /tmp/ci-check.txt
 
       - name: Print resolved configuration (secret-free)
         run: |
@@ -53,13 +73,51 @@ jobs:
           for f in bin/*.sh bin/dai; do bash -n "$f"; done
 
       - name: Test suite
-        run: python -m unittest discover -s tests -t . -v
+        # `shell: bash` selects `bash -eo pipefail`, so `tee` cannot mask a
+        # failing exit status the way the default shell would.
+        shell: bash
+        run: python -m unittest discover -s tests -t . 2>&1 | tee /tmp/ci-suite.txt
 
       - name: Smoke (suite + static checks; no services running)
-        run: ./bin/smoke.sh --tests-only
+        shell: bash
+        run: ./bin/smoke.sh --tests-only 2>&1 | tee /tmp/ci-smoke.txt
 
       - name: Doctor must not fail on a clean checkout
-        run: ./bin/doctor.sh
+        shell: bash
+        run: ./bin/doctor.sh 2>&1 | tee /tmp/ci-doctor.txt
+
+      # Failing Actions logs are not reachable from every environment, so on
+      # failure the job re-emits the tail of each captured log as a check
+      # annotation.  Annotations are readable through the API and show up in the
+      # Checks UI, which turns "the job failed" into "here is the assertion that
+      # failed" without needing the raw log download.
+      - name: Surface the failure as annotations
+        if: failure()
+        shell: bash
+        run: |
+          emit() {
+            local title="$1" file="$2"
+            [ -s "$file" ] || return 0
+            # Annotation messages are single-line and use %0A for a newline, so
+            # percent signs in the payload must be escaped first.  (Not
+            # `paste -sd '%0A'`: -d takes a list of single characters to cycle
+            # through, which emits '%', '0', 'A' as separators instead.)
+            local body
+            body=$(grep -E "^(FAIL|ERROR):|^(AssertionError|TypeError|KeyError|FileNotFoundError|CalledProcessError|subprocess\.)|Error:|error:|Traceback" "$file" \
+                   | head -40 \
+                   | awk '{gsub(/%/, "%25"); gsub(/\r/, "%0D"); printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')
+            if [ -z "$body" ]; then
+              body=$(tail -25 "$file" \
+                     | awk '{gsub(/%/, "%25"); gsub(/\r/, "%0D"); printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')
+            fi
+            echo "::error title=${title}::${body}"
+          }
+          emit "environment (python ${{ matrix.python-version }})" /tmp/ci-env.txt
+          emit "byte-compile" /tmp/ci-compile.txt
+          emit "service --check" /tmp/ci-check.txt
+          emit "test suite" /tmp/ci-suite.txt
+          emit "smoke" /tmp/ci-smoke.txt
+          emit "doctor" /tmp/ci-doctor.txt
 
   shellcheck:
     name: shellcheck

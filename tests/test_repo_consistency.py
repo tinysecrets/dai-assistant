@@ -47,13 +47,25 @@ def tracked_files() -> list[Path]:
     until someone committed it.  A drift check that cannot see new files drifts
     itself.
     """
-    out = subprocess.run(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout.split()
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+    except subprocess.CalledProcessError as exc:
+        # Fail loudly and say why, rather than surfacing a bare CalledProcessError.
+        # On a CI runner the usual cause is git's "dubious ownership" guard.
+        # Deliberately not a skipTest: silently skipping every drift check would
+        # remove the protection this whole module exists to provide.
+        raise RuntimeError(
+            "git could not enumerate the repository, so the consistency checks "
+            f"cannot run: {exc.stderr.strip() or exc}\n"
+            "On a CI runner this is usually git's dubious-ownership guard — add "
+            '`git config --global --add safe.directory "$GITHUB_WORKSPACE"`.'
+        ) from exc
     files = set()
     for rel in out:
         path = ROOT / rel
