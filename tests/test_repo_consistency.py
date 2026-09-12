@@ -78,6 +78,27 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def is_git_ignored(rel: str) -> bool:
+    """True when .gitignore excludes this path, whether or not it exists.
+
+    `git check-ignore` matches against the patterns, not the working tree, so it
+    answers correctly on a fresh clone where the file has not been created yet.
+    A directory-only pattern (one written with a trailing slash) will not match a
+    bare name that does not exist yet, because git cannot tell it is a directory;
+    probing a path *under* it settles that, so callers can pass either form.
+    """
+    for candidate in (rel, rel.rstrip("/") + "/"):
+        proc = subprocess.run(
+            ["git", "check-ignore", "-q", "--", candidate],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            return True
+    return False
+
+
 def python_sources() -> list[Path]:
     out = []
     for d in PYTHON_DIRS:
@@ -762,7 +783,17 @@ class TestDocumentationLinks(unittest.TestCase):
 
     def test_referenced_repo_paths_exist(self):
         """Only file-shaped references are checked: prose like "native Vellum
-        skills/tools" contains a slash but is not a path."""
+        skills/tools" contains a slash but is not a path.
+
+        A reference that neither exists nor is git-ignored is stale documentation
+        and fails.  Git-ignored references are exempt, because they are created
+        at runtime and are correctly absent from a fresh clone: this test passed
+        on a workstation that had run bin/issue-approval.sh and failed in CI on
+        seven docs at once, all for policy/approvals.json.  The exemption is
+        asked of git rather than hardcoded, so it cannot drift, and
+        test_runtime_artifacts_are_gitignored keeps it honest from the other
+        side.
+        """
         refs = re.compile(
             r"(?<![\w./-])((?:config|policy|services|docs|skills|lib|tests|bin)/"
             r"[A-Za-z0-9_./-]+\.[A-Za-z0-9]+)"
@@ -772,8 +803,37 @@ class TestDocumentationLinks(unittest.TestCase):
                 rel = rel.rstrip(".,;:)")
                 if any(ch in rel for ch in "*<>"):
                     continue
+                if (ROOT / rel).exists():
+                    continue
                 with self.subTest(f"{doc.name} -> {rel}"):
-                    self.assertTrue((ROOT / rel).exists(), f"{doc.name} references {rel}, which does not exist")
+                    self.assertTrue(
+                        is_git_ignored(rel),
+                        f"{doc.name} references {rel}, which neither exists nor is "
+                        "git-ignored as a runtime artifact — the reference is stale",
+                    )
+
+    def test_runtime_artifacts_are_gitignored(self):
+        """The paths the exemption above relies on must really be ignored.
+
+        Without this, a reference to policy/approvals.json would pass merely
+        because the file happens to be missing — and if .gitignore ever lost that
+        entry, a file of live approval tokens could be committed.  Checked with
+        `git check-ignore` against the pattern rather than the working tree, so
+        it holds on a fresh clone where none of these exist yet.
+        """
+        for rel in (
+            ".env",
+            "policy/approvals.json",
+            "state/agent-s-tasks/task.json",
+            "logs/model-router.log",
+            "vendor/vellum-assistant/package.json",
+            "skills-ready/agent-s-delegate/SKILL.md",
+        ):
+            with self.subTest(rel):
+                self.assertTrue(
+                    is_git_ignored(rel),
+                    f"{rel} is a secret-bearing or generated runtime artifact and must stay git-ignored",
+                )
 
 
 class TestServiceSurface(unittest.TestCase):
