@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "_comment": [
+    "Template only — the live file is policy/approvals.json (git-ignored, mode 0600).",
+    "Do not hand-edit the live file; use bin/issue-approval.sh so tokens get a TTL,",
+    "a scope and a use counter.  Shown here to document the record shape.",
+    "Validation fails closed: an empty scope is rejected, so a token that may be",
+    "used for anything has to say \"*\" out loud."
+  ],
+  "tokens": {
+    "EXAMPLE-TOKEN-REPLACE-ME": {
+      "action": "agent_s_gui_task",
+      "scope": "Open Chromium and go to example.com",
+      "created_at": 1788102436.0,
+      "ttl_seconds": 3600,
+      "expires_at": 1788106036.0,
+      "max_uses": 1,
+      "used": 0,
+      "spent": false,
+      "note": "one exact instruction, one use, one hour"
+    }
+  },
+  "_actions": {
+    "agent_s_gui_task": "a live (non-dry-run) GUI task; scope is the exact instruction",
+    "openrouter_paid": "a paid OpenRouter model; scope is the model id, or \"*\""
+  }
+}

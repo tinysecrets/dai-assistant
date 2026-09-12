@@ -1,9 +1,34 @@
+# Secrets and local runtime state — never commit
 .env
+.env.*
+!.env.example
+policy/approvals.json
 logs/
 state/
-policy/approvals.json
-vendor/
+*.pid
+
+# Generated / staged artifacts
 skills-ready/
+*.log
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 .venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Vendored checkouts (linked by hand; see bin/hatch-vellum.sh)
+vendor/
+
+# Editors / OS
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/
