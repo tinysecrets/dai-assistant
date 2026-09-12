@@ -1,0 +1,9 @@
+.env
+logs/
+state/
+policy/approvals.json
+vendor/
+skills-ready/
+__pycache__/
+*.pyc
+.venv/

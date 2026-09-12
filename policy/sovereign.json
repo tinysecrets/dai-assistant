@@ -1,0 +1,77 @@
+{
+  "version": 2,
+  "mode": "cloud_first_free_rotation",
+  "ask_before": [
+    "paid_inference",
+    "openrouter_paid",
+    "package_install",
+    "sudo",
+    "export_secrets",
+    "send_external_message",
+    "git_push_or_publish",
+    "edit_system_config",
+    "expand_permissions",
+    "live_owner_desktop_control",
+    "delete_or_overwrite_data"
+  ],
+  "inference": {
+    "default_model": "dai/auto",
+    "strategy": "rotate_top_free_across_providers",
+    "router_url": "http://127.0.0.1:11435/v1",
+    "openrouter": {
+      "enabled": true,
+      "paid_enabled": false,
+      "free_only_default": true,
+      "note": "Rotate :free models. Paid requires approval token + paid_enabled true."
+    },
+    "groq": { "enabled": true },
+    "ollama_cloud": { "enabled": true },
+    "ollama_local": { "enabled": true, "role": "last_resort" },
+    "cerebras": { "enabled": true },
+    "secret_redaction": true,
+    "private_data_must_stay_local": false,
+    "never_send_to_cloud": [
+      ".env",
+      "api_keys",
+      "ssh_private_keys",
+      "password_dumps",
+      "browser_cookies"
+    ]
+  },
+  "agent_s": {
+    "enabled": true,
+    "dry_run_default": false,
+    "bind_owner_live_desktop": false,
+    "display": ":99",
+    "worker_url": "http://127.0.0.1:8765",
+    "require_approval_token": true,
+    "max_steps_default": 15,
+    "timeout_seconds": 600,
+    "grounding_model": "dai/vision-auto",
+    "grounding_width": 1280,
+    "grounding_height": 800
+  },
+  "vellum": {
+    "role": "primary_personal_assistant",
+    "source": "vendor/vellum-assistant",
+    "cli": "~/.bun/bin/vellum",
+    "point_inference_at": "http://127.0.0.1:11435/v1",
+    "skill_to_install": "skills/agent-s-delegate"
+  },
+  "channels": {
+    "phone_pairing": "use_vellum_native_when_available",
+    "do_not_use": ["BetterAndroRAT", "unauthorized_device_control"]
+  },
+  "projects_left_untouched": [
+    "NOVA-SOVEREIGN-AI",
+    "liya-ai-workstation",
+    "real_Genie",
+    "gobi-sovereign",
+    "gobi-replica",
+    ".hermes",
+    ".openclaw",
+    "deft",
+    "agent-vibes",
+    ".config/genie"
+  ]
+}

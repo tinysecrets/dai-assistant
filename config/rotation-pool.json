@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "strategy": "rotate_on_rate_limit",
+  "quality_bar": "top_free_tool_capable",
+  "openrouter_free": [
+    "z-ai/glm-5.2:free",
+    "thinkingmachines/inkling:free",
+    "thinkingmachines/inkling-small:free",
+    "minimax/minimax-m3:free",
+    "poolside/laguna-s-2.1:free",
+    "upstage/solar-pro4:free",
+    "meituan/longcat-2.0:free",
+    "stepfun/step-3.7-flash:free",
+    "minimax/minimax-m2.7:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "google/gemma-4-31b-it:free",
+    "google/gemma-4-26b-a4b-it:free"
+  ],
+  "openrouter_free_vision": [
+    "thinkingmachines/inkling:free",
+    "inclusionai/ling-3.0-flash-vl:free",
+    "google/gemma-4-31b-it:free",
+    "thinkingmachines/inkling-small:free",
+    "nex-agi/nex-n2.5-pro:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+  ],
+  "groq_models": [
+    "llama-3.3-70b-versatile",
+    "llama-3.1-8b-instant",
+    "qwen/qwen3-32b",
+    "moonshotai/kimi-k2-instruct"
+  ],
+  "ollama_cloud_models": [
+    "kimi-k3",
+    "gpt-oss:120b",
+    "deepseek-v3.1:671b"
+  ],
+  "ollama_local_models": [
+    "hermes3:8b",
+    "llama3.2:3b"
+  ],
+  "notes": "Groq/Ollama Cloud model IDs may need tweak after you verify your account catalog."
+}
