@@ -106,12 +106,32 @@ class TestScriptHygiene(unittest.TestCase):
                 self.assertIn("exit codes", proc.stdout.lower())
 
     def test_no_args_is_a_usage_error_not_a_crash(self):
+        proc = run_script(DELEGATE, [])
+        no_traceback(self, proc)
+        # delegate requires --instruction, so this is a usage error: code 4 and
+        # a parseable document, not argparse's stock exit 2 with empty stdout.
+        self.assertEqual(proc.returncode, 4, proc.stderr)
+        self.assertEqual(json.loads(proc.stdout)["error"], "usage_error")
+
+        proc = run_script(HEALTH, [])
+        no_traceback(self, proc)
+        # health runs and reports; 2 is not one of its documented codes.
+        self.assertIn(proc.returncode, (0, 1, 4), proc.stderr)
+
+    def test_bad_arguments_use_the_documented_usage_code(self):
+        """Regression: argparse reports bad usage by exiting **2** and writing
+        nothing to stdout.  For delegate_task.py, 2 means "the task ran but did
+        not succeed", so an argument typo was indistinguishable from a failed
+        task for any caller reading only the exit status — and stdout, which
+        SKILL.md tells the agent to interpret as JSON, was empty.  Both scripts
+        now answer a usage problem with 4 and a document.
+        """
         for script in (DELEGATE, HEALTH):
-            proc = run_script(script, [])
+            proc = run_script(script, ["--not-a-real-flag"])
             with self.subTest(script.name):
                 no_traceback(self, proc)
-                # delegate requires --instruction; health runs and reports.
-                self.assertIn(proc.returncode, (0, 1, 2, 4))
+                self.assertEqual(proc.returncode, 4, proc.stderr)
+                self.assertEqual(json.loads(proc.stdout)["error"], "usage_error")
 
     def test_every_lib_import_resolves(self):
         """The guard against an invented API: every name imported from lib.dai
@@ -369,6 +389,39 @@ class TestDelegateTask(LiveWorkerCase):
         no_traceback(self, proc)
         self.assertEqual(proc.returncode, 2, proc.stdout)
         doc = json.loads(proc.stdout)
+        self.assertEqual(doc["status"], "failed")
+        self.assertEqual(doc["result"]["error"], "agent_s_not_installed")
+
+    def test_a_dash_prefixed_token_is_not_a_silent_task_failure(self):
+        """Regression for the CI failure that arrived about one run in sixty.
+
+        ``token_urlsafe`` draws from the base64url alphabet, so roughly one
+        token in 64 began with ``-``.  Passed as ``--approval-token <tok>``,
+        argparse read it as an option flag and exited **2 with an empty stdout**
+        — the code this script documents as "the task ran but did not succeed".
+        A valid approval therefore reported itself as a failed task, and the
+        JSON a caller was told to parse was not there at all.  The generator no
+        longer emits such tokens; if one still arrives, the script says so
+        honestly (4, with a document), and the ``=`` form accepts it outright.
+        """
+        normal, rec = self.runtime.approvals.issue("agent_s_gui_task", INSTRUCTION)
+        token = "-" + normal
+
+        def mutate(doc: Any) -> Any:
+            doc["tokens"][token] = dict(rec)
+            return doc
+
+        self.runtime.approvals.store.update(mutate)
+
+        spaced = self.delegate("--instruction", INSTRUCTION, "--live", "--approval-token", token)
+        no_traceback(self, spaced)
+        self.assertEqual(spaced.returncode, 4, spaced.stdout + spaced.stderr)
+        self.assertEqual(json.loads(spaced.stdout)["error"], "usage_error")
+
+        equals = self.delegate("--instruction", INSTRUCTION, "--live", f"--approval-token={token}")
+        no_traceback(self, equals)
+        self.assertEqual(equals.returncode, 2, equals.stdout)
+        doc = json.loads(equals.stdout)
         self.assertEqual(doc["status"], "failed")
         self.assertEqual(doc["result"]["error"], "agent_s_not_installed")
 

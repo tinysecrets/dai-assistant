@@ -95,6 +95,32 @@ class TestIssueValidation(ApprovalTestCase):
         )
 
 
+class TestTokenShape(ApprovalTestCase):
+    """A token has to survive being handed to a script on a command line."""
+
+    def test_no_issued_token_can_start_with_a_dash(self) -> None:
+        """Regression: ``token_urlsafe`` draws from the base64url alphabet, so
+        about 1 token in 64 began with ``-``.  Such a token cannot be passed as
+        a separate argv element — argparse reads it as an option flag and
+        refuses the invocation — so a perfectly valid approval surfaced as a
+        usage error.  It failed in CI roughly one run in sixty.
+        """
+        from lib.dai.approvals import _new_token
+
+        for _ in range(500):
+            self.assertFalse(_new_token().startswith("-"))
+
+        token, _rec = self.store.issue("agent_s_gui_task", WILDCARD)
+        self.assertFalse(token.startswith("-"), token)
+
+    def test_re_rolling_does_not_cost_entropy_or_uniqueness(self) -> None:
+        """Discarding dash-prefixed candidates must not weaken the token."""
+        tokens = {self.store.issue("agent_s_gui_task", WILDCARD)[0] for _ in range(60)}
+        self.assertEqual(len(tokens), 60, "tokens must not collide")
+        for token in tokens:
+            self.assertGreaterEqual(len(token), 22, token)
+
+
 class TestExpiry(ApprovalTestCase):
     def test_expired_token_rejected(self) -> None:
         token, _ = self.store.issue("agent_s_gui_task", "x", ttl_seconds=1)

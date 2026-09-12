@@ -32,12 +32,33 @@ from .jsonio import AtomicJsonStore
 
 DEFAULT_TTL_SECONDS = 3600
 WILDCARD = "*"
+TOKEN_BYTES = 18
 
 KNOWN_ACTIONS: Tuple[str, ...] = ("agent_s_gui_task", "openrouter_paid")
 
 
 def _now() -> float:
     return time.time()
+
+
+def _new_token() -> str:
+    """A fresh token that is safe to pass as a single command-line argument.
+
+    ``secrets.token_urlsafe`` draws from the base64url alphabet, which includes
+    ``-``.  A token beginning with ``-`` cannot be handed to a script as a
+    separate argv element: ``argparse`` reads it as an option flag and refuses
+    the invocation, so a perfectly valid approval surfaces as a usage error.
+    ``--approval-token=<tok>`` would survive that, but callers should not have
+    to know it, so re-roll instead.  Discarding 1 candidate in 64 costs about
+    0.02 bits of entropy on a 144-bit token.
+    """
+    for _ in range(8):
+        token = secrets.token_urlsafe(TOKEN_BYTES)
+        if not token.startswith("-"):
+            return token
+    # Unreachable with a working CSPRNG (64**-8 per attempt).  Fall back to a
+    # hex alphabet rather than spinning forever on a broken entropy source.
+    return secrets.token_hex(TOKEN_BYTES)
 
 
 def _token_expiry(rec: Dict[str, Any]) -> Optional[float]:
@@ -137,7 +158,7 @@ class ApprovalStore:
             raise ValueError(f"unknown action {action!r}; expected one of {', '.join(KNOWN_ACTIONS)}")
         if not scope:
             raise ValueError("scope is required; use '*' to authorise any value explicitly")
-        token = secrets.token_urlsafe(18)
+        token = _new_token()
         now = _now()
         ttl = self.default_ttl if ttl_seconds is None else int(ttl_seconds)
         rec: Dict[str, Any] = {

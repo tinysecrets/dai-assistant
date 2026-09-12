@@ -104,7 +104,20 @@ jobs:
           emit() {
             title="$1"; file="$2"
             [ -s "$file" ] || return 0
-            picked=$(grep -E "^(FAIL|ERROR):|^(AssertionError|TypeError|KeyError|ValueError|RuntimeError|FileNotFoundError|CalledProcessError|OSError|subprocess\.)|Error:|error:|Traceback|^FAILED|^Ran [0-9]+ test|skipped" "$file" | head -50)
+            # A unittest failure block is the header, the traceback *and its
+            # frames*, then the summary.  Grepping for error-looking lines
+            # loses the frames, which is exactly the part that says where the
+            # failure happened — an earlier version reported
+            # "Traceback (most recent call last):" followed immediately by the
+            # exception, with nothing in between.  Extract whole blocks; the
+            # separator is 70 dashes, matched literally because POSIX interval
+            # expressions are not portable across awk implementations.
+            picked=$(awk '
+              /^(ERROR|FAIL): / { cap = 1; dashes = 0 }
+              cap { print; if ($0 ~ /^--------------------/ && ++dashes >= 2) cap = 0 }
+              /^(Ran [0-9]+ test|FAILED|OK$)/ { print }
+            ' "$file" | head -100)
+            [ -n "$picked" ] || picked=$(grep -E "^(FAIL|ERROR):|^(AssertionError|TypeError|KeyError|ValueError|RuntimeError|FileNotFoundError|CalledProcessError|OSError|subprocess\.)|Error:|error:|Traceback|^FAILED|^Ran [0-9]+ test|skipped" "$file" | head -50)
             [ -n "$picked" ] || picked=$(tail -40 "$file")
             # Annotation messages are single-line and use %0A for a newline, so
             # percent signs in the payload must be escaped first.  (Not
@@ -134,6 +147,10 @@ jobs:
 
       - name: Run shellcheck
         # bin/lib.sh is sourced, so it is checked through its consumers with -x.
+        # The tree is clean at -S style (the strictest level); the gate sits at
+        # warning on purpose, so that a shellcheck release adding a new style
+        # check cannot fail an unrelated pull request.  Run `shellcheck -x
+        # -S style bin/*.sh bin/dai` locally before sending one.
         run: shellcheck -x -S warning bin/*.sh bin/dai
 
   ruff:

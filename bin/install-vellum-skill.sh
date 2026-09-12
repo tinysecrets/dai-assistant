@@ -118,7 +118,7 @@ if [[ -z "$dest_base" ]]; then
     cp -a "$SKILLS_DIR/$name" "$staging/$name"
   done
   dai_warn "no Vellum assistant workspace found yet (hatch first)"
-  dai_ok "staged ${#skills[@]} skill(s) under ${staging#$ROOT/}"
+  dai_ok "staged ${#skills[@]} skill(s) under ${staging#"$ROOT"/}"
   dai_say ""
   dai_say "After ./bin/hatch-vellum.sh, copy them in:"
   dai_say "  cp -a $staging/* <assistant-workspace>/skills/"
