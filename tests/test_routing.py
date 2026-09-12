@@ -220,6 +220,50 @@ class TestVision(unittest.TestCase):
     def test_text_only_models_are_excluded_from_vision(self) -> None:
         self.assertNotIn("openrouter/text/only:free", models(plan(preferred="dai/vision-auto")))
 
+    def test_no_text_model_is_ever_substituted_into_a_vision_request(self) -> None:
+        """The guarantee docs/CONFIG.md makes, asserted positively.
+
+        Checking that one known text model is absent would still pass if the
+        planner fell through to the rotating pools and picked up a *different*
+        text model.  So assert the whole candidate set is a subset of the
+        vision-capable ids, with the text pools and every other provider fully
+        populated — a fall-through then shows up immediately.
+
+        The expected set is written out from the fixture data rather than
+        computed with the planner's own helper, so a regression in that helper
+        is caught too.  With default_pool + default_catalog the vision-capable
+        free ids are exactly these two: paid/vision-model is not ":free", and
+        text/only:free has no image modality.
+        """
+        pool = {
+            **default_pool(),
+            "openrouter_free": ["text/only:free", "alpha/one:free", "beta/two:free"],
+            "openrouter_free_vision": ["alpha/one:free"],
+            "groq_models": ["groq-fast", "groq-also-fast"],
+            "ollama_cloud_models": ["cloud-model"],
+            "ollama_local_models": ["hermes3:8b"],
+        }
+        expected_vision = {"alpha/one:free", "vision/extra:free"}
+        variants = {
+            "plain": {},
+            "vision hint": {"hint": "look at this screenshot"},
+            "rotated": {"rr": 5},
+            "every provider keyed": {"env": {**KEY_ENV, "OLLAMA_API_KEY": "oll-key",
+                                            "CEREBRAS_API_KEY": "csk-key"}},
+            "no other providers enabled": {"enabled": ["openrouter"]},
+        }
+        for label, kwargs in variants.items():
+            with self.subTest(label):
+                result = plan(preferred="dai/vision-auto", pool=pool, **kwargs)
+                self.assertTrue(result.candidates,
+                                "a populated vision pool must produce candidates")
+                for cand in result.candidates:
+                    self.assertIn(cand.model, expected_vision,
+                                  f"{cand.provider}/{cand.model} is not vision-capable")
+                    self.assertEqual(cand.provider, "openrouter",
+                                     "the vision rotation must not reach another provider")
+                    self.assertEqual(cand.origin, "vision")
+
     def test_vision_hint_boosts_vision_models_in_the_text_pool(self) -> None:
         pool = {**default_pool(), "openrouter_free": ["text/only:free", "alpha/one:free"]}
         plain = [c.model for c in plan(pool=pool).candidates if c.provider == "openrouter"]

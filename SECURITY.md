@@ -82,6 +82,27 @@ Artifacts and task records can contain screenshots of whatever was on the agent
 display. They are stored mode `0600` under `state/`, are never committed, and
 are pruned past `DAI_AGENT_S_MAX_TASKS`.
 
+### Redaction protects output, not input
+
+The redactor scrubs secrets on the way *out* — logs, error bodies, task records,
+`would_run` command lines. It cannot unsend what you put *in* a request body.
+Anything in a prompt may reach a third-party provider and be retained there.
+
+Never put these into a model request or a GUI task instruction:
+
+* API keys, or the contents of `.env`
+* SSH private keys, or any private key material
+* Password dumps or credential stores
+* Browser cookies or session tokens
+* Approval tokens — they are single-use, and leaking one is leaking a live
+  authorisation
+
+This applies doubly to GUI tasks, because the agent can read the screen. An
+instruction like "log in to my bank" makes credentials appear on the display,
+and screenshots of that display are stored under `state/`. Keep credentials out
+of the agent's reach instead of relying on the redactor to catch them after the
+fact.
+
 ## Verifying the posture
 
 ```bash

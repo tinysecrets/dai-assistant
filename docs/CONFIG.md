@@ -265,6 +265,15 @@ Rules the test suite enforces (`tests/test_repo_consistency.py`):
 `openrouter_free`. The planner expands it into candidates on its own, and also
 uses it to reorder the text pool when a request looks vision-shaped.
 
+A request for `dai/vision-auto` is answered **only** by vision-capable models.
+Text-only models are never substituted into it, and if the pool is empty or
+OpenRouter has no key the plan comes back empty with the note
+`no vision-capable candidates available (needs OPENROUTER_API_KEY)` rather than
+quietly degrading to a text model. That matters for GUI grounding: a text model
+asked "where is the search box" will answer confidently and wrongly, and the
+agent will click somewhere plausible. A refusal is recoverable; a confident
+wrong coordinate is not.
+
 Edit it freely; the file is re-read on a short cache interval, so a running
 router picks up changes without a restart.
 
@@ -317,6 +326,30 @@ something is wrong, which is what CI uses.
 | Same model fails every request | It is cooled | `curl -s localhost:11435/v1/status/cooldowns` |
 | Everything at one provider fails | Provider-wide cooldown after an auth error | Fix the key, then `POST /v1/status/reset` |
 | Port already in use | A foreign process holds it | `ss -ltnp \| grep 11435`; `start-spine.sh` refuses to fight it |
+
+---
+
+## What must never go into a model request
+
+The router redacts secrets on the way *out* of logs, errors and task records,
+but it cannot unsend what you put in a prompt. Anything in a request body may
+reach a third-party provider and be retained there.
+
+Never include:
+
+* API keys or the contents of `.env`
+* SSH private keys, or any private key material
+* Password dumps or credential stores
+* Browser cookies or session tokens
+* Approval tokens (they are single-use; leaking one is leaking a live
+  authorisation)
+
+This applies doubly to GUI tasks, where the agent can read the screen: a task
+instruction like "log in to my bank" turns the display into a place where
+credentials appear, and screenshots of it are stored under `state/`. Keep
+credentials out of the agent's reach rather than relying on redaction.
+
+See `SECURITY.md` for how redaction works and what it cannot do.
 
 ---
 

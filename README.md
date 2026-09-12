@@ -148,7 +148,7 @@ Or `make help` for the same operations as make targets.
 | `config/free-models.json` | Reference catalog of free models |
 | `policy/sovereign.json` | Intent and safety: what needs approval, what is forbidden |
 | `policy/approvals.json` | Live tokens — created on first use, `0600`, git-ignored |
-| `tests/` | 432 tests: unit, HTTP integration, scripts, drift detection |
+| `tests/` | 433 tests: unit, HTTP integration, scripts, drift detection |
 | `docs/` | API, configuration, operations, architecture |
 | `.env` | Your keys — `0600`, git-ignored |
 | `logs/`, `state/` | Runtime artifacts, git-ignored, fully regenerable |
@@ -210,7 +210,7 @@ curl -s localhost:8765/v1/settings
 ```bash
 make help        # every target
 make lint        # compile + bash -n + service --check
-make test        # 432 tests
+make test        # 433 tests
 make all         # lint + test + smoke — the gate CI runs
 ```
 
