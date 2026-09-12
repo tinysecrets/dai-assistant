@@ -95,22 +95,25 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          # This step is a reporter and must never fail on its own, or it hides
+          # the very failure it exists to report.  An earlier version did exactly
+          # that: `shell: bash` implies `-eo pipefail`, and grep exits 1 when it
+          # matches nothing, so a log with no recognisable error line killed the
+          # step.  Hence `set +e`, per-call guards, and a final `exit 0`.
+          set +e
           emit() {
-            local title="$1" file="$2"
+            title="$1"; file="$2"
             [ -s "$file" ] || return 0
+            picked=$(grep -E "^(FAIL|ERROR):|^(AssertionError|TypeError|KeyError|ValueError|RuntimeError|FileNotFoundError|CalledProcessError|OSError|subprocess\.)|Error:|error:|Traceback|^FAILED|^Ran [0-9]+ test|skipped" "$file" | head -50)
+            [ -n "$picked" ] || picked=$(tail -40 "$file")
             # Annotation messages are single-line and use %0A for a newline, so
             # percent signs in the payload must be escaped first.  (Not
             # `paste -sd '%0A'`: -d takes a list of single characters to cycle
             # through, which emits '%', '0', 'A' as separators instead.)
-            local body
-            body=$(grep -E "^(FAIL|ERROR):|^(AssertionError|TypeError|KeyError|FileNotFoundError|CalledProcessError|subprocess\.)|Error:|error:|Traceback" "$file" \
-                   | head -40 \
-                   | awk '{gsub(/%/, "%25"); gsub(/\r/, "%0D"); printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')
-            if [ -z "$body" ]; then
-              body=$(tail -25 "$file" \
-                     | awk '{gsub(/%/, "%25"); gsub(/\r/, "%0D"); printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')
-            fi
+            body=$(printf '%s\n' "$picked" | awk '{gsub(/%/, "%25"); gsub(/\r/, "%0D"); printf "%s%s", (NR > 1 ? "%0A" : ""), $0}')
+            [ -n "$body" ] || return 0
             echo "::error title=${title}::${body}"
+            return 0
           }
           emit "environment (python ${{ matrix.python-version }})" /tmp/ci-env.txt
           emit "byte-compile" /tmp/ci-compile.txt
@@ -118,6 +121,7 @@ jobs:
           emit "test suite" /tmp/ci-suite.txt
           emit "smoke" /tmp/ci-smoke.txt
           emit "doctor" /tmp/ci-doctor.txt
+          exit 0
 
   shellcheck:
     name: shellcheck
