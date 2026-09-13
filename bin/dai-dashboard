@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# dai-dashboard — thin launcher for the stdlib-only heads-up dashboard.
+#
+#   ./bin/dai-dashboard            # serve on :8799 (or DAI_DASHBOARD_PORT)
+#   ./bin/dai-dashboard --port 80  # override
+#
+# The server logic lives in lib/dai/dashboard.py so it is part of the scanned
+# Python tree (stdlib gate + env-doc contract).  This file stays bash because
+# every file directly under bin/ must declare a bash shebang (enforced by the
+# repo consistency tests).
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export ROOT
+source "$ROOT/bin/lib.sh"
+
+dai_env_ensure
+
+exec python3 "$ROOT/lib/dai/dashboard.py" "$@"

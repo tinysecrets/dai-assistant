@@ -15,15 +15,17 @@ After=network.target
 Wants=network.target
 
 [Service]
-Type=simple
+# oneshot + RemainAfterExit: start-spine.sh launches the three services as
+# backgrounded children and exits 0, so the unit stays "active" rather than
+# being seen as a dead main process that Restart=always would re-spawn forever.
+Type=oneshot
+RemainAfterExit=yes
 Environment=HOME=%h
 WorkingDirectory=%h/dai-assistant
 ExecStart=%h/dai-assistant/bin/start-spine.sh
-Restart=always
+Restart=on-failure
 RestartSec=5
-# Stop cleanly: SIGTERM -> start-spine.sh's own stop-spine.sh path runs.
 TimeoutStopSec=30
-# Don't let the spine's own nohup'd children outlive the service.
 KillMode=control-group
 
 [Install]

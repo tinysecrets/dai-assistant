@@ -18,6 +18,8 @@
 #   dai plan [id]   show what the router would try, without calling anything
 #   dai config      print resolved (secret-free) configuration
 #   dai version     print component versions
+#   dai dashboard   serve the HTML dashboard on :8799 (or $DAI_DASHBOARD_PORT)
+#   dai hq          launch the tmux split-screen command center
 #
 # Every subcommand is a thin wrapper: the underlying scripts stay usable
 # directly, and nothing here duplicates their logic.
@@ -171,6 +173,14 @@ PY
 
   help|-h|--help)
     usage
+    ;;
+
+  dashboard)
+    exec "$ROOT/bin/dai-dashboard" "$@"
+    ;;
+
+  hq|headquarters)
+    exec "$ROOT/bin/dai-headquarters.sh" "$@"
     ;;
 
   *)

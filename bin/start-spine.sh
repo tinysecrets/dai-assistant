@@ -4,6 +4,7 @@
 #
 #   ./bin/start-spine.sh              start (restarts if already running)
 #   ./bin/start-spine.sh --no-xvfb    skip the agent display
+#   ./bin/start-spine.sh --no-dashboard  skip the HTML dashboard (:8799)
 #   ./bin/start-spine.sh --status     report and exit without starting
 #
 # Idempotent: an existing spine is stopped first, so re-running is safe.
@@ -15,10 +16,12 @@ export ROOT
 source "$ROOT/bin/lib.sh"
 
 WANT_XVFB=1
+WANT_DASHBOARD=1
 STATUS_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --no-xvfb) WANT_XVFB=0 ;;
+    --no-dashboard) WANT_DASHBOARD=0 ;;
     --status) STATUS_ONLY=1 ;;
     -h|--help)
       dai_usage
@@ -185,5 +188,18 @@ if [[ "$READY" == "true" ]]; then
 else
   dai_warn "not ready_for_chat yet: add a key to .env (see KEYS.md) or start local Ollama"
 fi
+
+# --- dashboard (optional stdlib monitor) -------------------------------------
+
+if ((WANT_DASHBOARD)) && [[ -x "$ROOT/bin/dai-dashboard" ]]; then
+  DASH_PORT="$(dai_env_get DAI_DASHBOARD_PORT 8799)"
+  if dai_port_in_use "$DASH_PORT"; then
+    dai_ok "dashboard already up on :$DASH_PORT"
+  else
+    dai_start_service "dai-dashboard" "$ROOT/lib/dai/dashboard.py" python3
+    dai_ok "dashboard on http://127.0.0.1:$DASH_PORT/ (tmux: dai hq)"
+  fi
+fi
+
 dai_dim "logs: $DAI_LOG_DIR/ · stop with ./bin/stop-spine.sh"
 dai_say "spine started"
