@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import http.client
 import json
 import os
 import sys
@@ -26,6 +27,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional, Tuple
+from urllib import parse
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -76,11 +78,12 @@ DAI_TOKEN_HEADERS = ("x-dai-approval-token",)
 
 UNSUPPORTED_PATHS: Dict[str, str] = {
     "/v1/embeddings": "Vellum embeds locally (ONNX) by default; the router does not proxy embeddings.",
-    "/v1/audio/transcriptions": "Audio transcription is not part of the spine.",
-    "/v1/audio/speech": "Text-to-speech is not part of the spine.",
     "/v1/images/generations": "Image generation is not part of the spine.",
     "/v1/moderations": "Moderation is handled upstream by the provider.",
 }
+
+# Audio is relayed to the local voice bridge (free/offline STT + TTS).
+AUDIO_PATHS = ("/v1/audio/transcriptions", "/v1/audio/speech")
 
 
 def _is_number(value: Any) -> bool:
@@ -126,6 +129,7 @@ class RouterRuntime:
     request_timeout: float = 120.0
     stream_timeout: float = 600.0
     strict_models: bool = False
+    voice_bridge_url: str = "http://127.0.0.1:8766"
     started_at: float = field(default_factory=time.time)
     _cooldowns: Dict[str, float] = field(default_factory=dict)
     _rr: int = 0
@@ -250,6 +254,13 @@ class RouterRuntime:
         code, _ = request_json("GET", f"{base}/api/tags", timeout=2.0, redactor=self.redactor)
         return code == 200
 
+    def voice_bridge_up(self) -> bool:
+        parts = parse.urlsplit(self.voice_bridge_url)
+        if not parts.netloc:
+            return False
+        code, _ = request_json("GET", f"{parts.scheme}://{parts.netloc}/health", timeout=1.5, redactor=self.redactor)
+        return code == 200
+
     def health(self, *, probe_local: bool = True) -> Dict[str, Any]:
         status = self.providers_configured()
         configured = [k for k, v in status.items() if v and k != "ollama_local"]
@@ -265,6 +276,8 @@ class RouterRuntime:
             "providers_enabled": self.enabled_providers(),
             "keys_needed": keys_needed(self.env()),
             "local_ollama": local_up,
+            "voice_bridge_url": self.voice_bridge_url,
+            "voice_bridge_up": self.voice_bridge_up() if probe_local else None,
             "openrouter_paid_enabled": self.paid_openrouter_enabled(),
             "default_model": self.default_model(),
             "candidates_available": len(plan.candidates),
@@ -305,6 +318,7 @@ def build_runtime(env: Optional[Mapping[str, str]] = None, *, root: Path = ROOT)
         request_timeout=env_float("DAI_REQUEST_TIMEOUT", 120.0, env=source),
         stream_timeout=env_float("DAI_STREAM_TIMEOUT", 600.0, env=source),
         strict_models=env_bool("DAI_STRICT_MODELS", False, env=source),
+        voice_bridge_url=str(get("DAI_VOICE_BRIDGE_URL", "http://127.0.0.1:8766")),
     )
     runtime.load_cooldowns()
     for cached in (runtime.pool_file, runtime.catalog_file, runtime.policy_file):
@@ -383,7 +397,9 @@ class RouterHandler(JsonHandler):
 
     # --- dispatch ---------------------------------------------------------
     def dispatch(self, method: str, path: str, query: Dict[str, str]) -> None:
-        if method in ("GET", "HEAD"):
+        if path in AUDIO_PATHS:
+            self.forward_audio(path)
+        elif method in ("GET", "HEAD"):
             self.dispatch_get(path, query)
         elif method == "POST":
             self.dispatch_post(path)
@@ -529,6 +545,48 @@ class RouterHandler(JsonHandler):
             ] + models
         return {"object": "list", "data": models}
 
+    # --- voice relay ------------------------------------------------------
+    def forward_audio(self, path: str) -> None:
+        """Byte-level pass-through to the local voice bridge (STT/TTS)."""
+        self.check_auth()
+        raw = self.rt.voice_bridge_url
+        parts = parse.urlsplit(raw)
+        if not parts.netloc:
+            raise HttpError(501, "voice_bridge_not_configured", "Set DAI_VOICE_BRIDGE_URL in .env.")
+        host = parts.hostname or "127.0.0.1"
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+        conn_cls = http.client.HTTPSConnection if parts.scheme == "https" else http.client.HTTPConnection
+        body = self.read_body()
+        conn = conn_cls(host, port, timeout=self.rt.request_timeout)
+        try:
+            conn.request(
+                self.command,
+                path,
+                body=body,
+                headers={
+                    "Content-Type": self.headers.get("Content-Type") or "application/octet-stream",
+                    "Accept": "*/*",
+                    "User-Agent": self.server_version,
+                },
+            )
+            response = conn.getresponse()
+            data = response.read()
+            content_type = response.getheader("Content-Type") or "application/octet-stream"
+            self._response_status = response.status
+            self._start(
+                response.status,
+                {"Content-Type": content_type, "Content-Length": str(len(data))},
+            )
+            self.end_headers()
+            if self.command != "HEAD":
+                self.wfile.write(data)
+        except (ConnectionRefusedError, ConnectionResetError, OSError, http.client.HTTPException) as exc:
+            raise HttpError(
+                502, "voice_bridge_unreachable", "The local voice bridge did not answer; is it started?"
+            ) from exc
+        finally:
+            conn.close()
+
     # --- completions ------------------------------------------------------
     def handle_completion(self, path: str) -> None:
         rt = self.rt
@@ -567,6 +625,20 @@ class RouterHandler(JsonHandler):
             )
 
         if not plan.candidates:
+            self.log_message(
+                "route-unavailable: %s",
+                rt.redactor.redact(
+                    json.dumps(
+                        {
+                            "requested_model": requested_model,
+                            "strict_models": rt.strict_models,
+                            "enabled_providers": rt.enabled_providers(),
+                            "cooldowns_active": len(rt.cooldowns()),
+                            "notes": plan.notes,
+                        }
+                    )
+                ),
+            )
             status = rt.providers_configured()
             any_key = any(v for k, v in status.items() if k != "ollama_local")
             raise HttpError(

@@ -311,7 +311,8 @@ accepted, issue a new token — do not look for a refund.
 | `429 queue_full` | Backlog at `DAI_AGENT_S_MAX_QUEUE` | Wait; tasks are serialised by design (one GUI agent per display) |
 | Same model fails every time | Cooled | `curl -s localhost:11435/v1/status/cooldowns` |
 | Whole provider failing | Auth/quota → provider cooldown | Fix the key, then `curl -X POST localhost:11435/v1/status/reset` |
-| `501 not_implemented` | You asked for embeddings/audio/images | Deliberate; the `detail` says why |
+| `501 not_implemented` | You asked for embeddings/images | Deliberate; the `detail` says why |
+| `voice_bridge_unreachable` | `/v1/audio/*` but the voice-bridge is not up | The bridge is optional; `bin/dai status` and `bin/dai logs voice-bridge` say why. Install/start it and retry |
 | Policy file corrupt | Bad edit | The worker falls back to safe defaults and reports `config_errors`; it does not crash |
 | `.env` has a value the service ignores | A real env var overrides it, or it names a safety key | `env \| grep DAI_`; `docs/CONFIG.md` |
 

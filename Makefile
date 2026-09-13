@@ -8,7 +8,7 @@
 PYTHON ?= python3
 SHELL  := /bin/bash
 
-SERVICES := services/model-router/server.py services/agent-s-worker/server.py
+SERVICES := services/model-router/server.py services/agent-s-worker/server.py services/voice-bridge/server.py
 
 .DEFAULT_GOAL := help
 

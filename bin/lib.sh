@@ -250,11 +250,12 @@ dai_read_pid() {
 }
 
 dai_start_service() {
-  local name="$1" script="$2"
+  local name="$1" script="$2" interp="$3"
+  [[ -n "$interp" ]] || interp=python3
   local log="$DAI_LOG_DIR/$name.log"
   mkdir -p "$DAI_STATE_DIR" "$DAI_LOG_DIR"
   : >"$log"
-  nohup python3 "$script" >>"$log" 2>&1 &
+  nohup "$interp" "$script" >>"$log" 2>&1 &
   local pid=$!
   printf '%s\n' "$pid" >"$DAI_STATE_DIR/$name.pid"
   dai_dim "started $name (pid $pid) → $log"

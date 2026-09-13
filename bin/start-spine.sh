@@ -34,8 +34,16 @@ ROUTER_HOST="$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)"
 ROUTER_PORT="$(dai_env_get DAI_ROUTER_PORT 11435)"
 WORKER_HOST="$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1)"
 WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8765)"
+VOICE_HOST="$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1)"
+VOICE_PORT="$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
 ROUTER_URL="http://$ROUTER_HOST:$ROUTER_PORT"
 WORKER_URL="http://$WORKER_HOST:$WORKER_PORT"
+VOICE_URL="http://$VOICE_HOST:$VOICE_PORT"
+if [[ -x "$HOME/.local/voice-venv/bin/python" ]]; then
+  VOICE_PY="$HOME/.local/voice-venv/bin/python"
+else
+  VOICE_PY=python3
+fi
 AGENT_DISPLAY="$(python3 -c '
 import json, sys
 try:
@@ -45,7 +53,7 @@ except Exception:
 ' "$DAI_POLICY_FILE" 2>/dev/null || echo ':99')"
 
 if ((STATUS_ONLY)); then
-  for pair in "model-router:$ROUTER_URL" "agent-s-worker:$WORKER_URL"; do
+  for pair in "model-router:$ROUTER_URL" "agent-s-worker:$WORKER_URL" "voice-bridge:$VOICE_URL"; do
     name="${pair%%:*}"
     url="${pair#*:}"
     if dai_http_up "$url" 2; then
@@ -65,7 +73,7 @@ dai_env_ensure
 "$ROOT/bin/stop-spine.sh" --quiet >/dev/null 2>&1 || true
 
 # Refuse to fight a foreign process holding our ports.
-for pair in "model-router:$ROUTER_PORT" "agent-s-worker:$WORKER_PORT"; do
+for pair in "model-router:$ROUTER_PORT" "agent-s-worker:$WORKER_PORT" "voice-bridge:$VOICE_PORT"; do
   name="${pair%%:*}"
   port="${pair#*:}"
   if dai_port_in_use "$port"; then
@@ -111,6 +119,7 @@ fi
 
 dai_start_service "model-router" "$ROOT/services/model-router/server.py"
 dai_start_service "agent-s-worker" "$ROOT/services/agent-s-worker/server.py"
+dai_start_service "voice-bridge" "$ROOT/services/voice-bridge/server.py" "$VOICE_PY"
 
 failed=0
 if dai_wait_up "$ROUTER_URL" 15 "model-router"; then
@@ -129,6 +138,14 @@ else
   failed=1
 fi
 
+if dai_wait_up "$VOICE_URL" 15 "voice-bridge"; then
+  dai_ok "voice-bridge healthy at $VOICE_URL"
+else
+  dai_fail "voice-bridge failed to start — last 30 lines of $DAI_LOG_DIR/voice-bridge.log:"
+  tail -30 "$DAI_LOG_DIR/voice-bridge.log" >&2 2>/dev/null || true
+  failed=1
+fi
+
 if ((failed)); then
   dai_say "" >&2
   dai_say "spine did not come up cleanly; run ./bin/doctor.sh for details" >&2
@@ -143,6 +160,9 @@ dai_http "$ROUTER_URL/health" 5 | python3 -m json.tool 2>/dev/null || dai_warn "
 dai_say ""
 dai_head "agent-s-worker"
 dai_http "$WORKER_URL/health" 5 | python3 -m json.tool 2>/dev/null || dai_warn "could not read worker health"
+dai_say ""
+dai_head "voice-bridge"
+dai_http "$VOICE_URL/health" 5 | python3 -m json.tool 2>/dev/null || dai_warn "could not read voice-bridge health"
 
 READY="$(dai_http "$ROUTER_URL/health" 5 | dai_json_get ready_for_chat || true)"
 dai_say ""

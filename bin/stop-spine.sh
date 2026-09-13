@@ -36,7 +36,7 @@ fi
 
 stopped=0
 
-for name in model-router agent-s-worker; do
+for name in model-router agent-s-worker voice-bridge; do
   if pid="$(dai_read_pid "$name")"; then
     dai_stop_pid "$pid" "$name"
     rm -f "$DAI_STATE_DIR/$name.pid"
@@ -49,11 +49,11 @@ for name in model-router agent-s-worker; do
 done
 
 # Fallback for services started without a pid file (e.g. by hand).  Scoped to
-# this repo's absolute path so it cannot match an unrelated process.
-for name in model-router agent-s-worker; do
-  script="$ROOT/services/$name/server.py"
-  if pgrep -f "^python3 $script\$" >/dev/null 2>&1; then
-    pkill -f "^python3 $script\$" 2>/dev/null || true
+# this repo's absolute path so it cannot match an unrelated process.  The
+# interpreter varies (voice-bridge may run from its venv), so match the script.
+for name in model-router agent-s-worker voice-bridge; do
+  if pgrep -f "$ROOT/services/$name/server.py\$" >/dev/null 2>&1; then
+    pkill -f "$ROOT/services/$name/server.py\$" 2>/dev/null || true
     dai_warn "stopped an orphaned $name (no pid file)"
     stopped=1
   fi

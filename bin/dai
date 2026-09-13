@@ -58,7 +58,7 @@ case "$cmd" in
 
   logs)
     lines="${1:-40}"
-    for name in model-router agent-s-worker xvfb; do
+    for name in model-router agent-s-worker xvfb voice-bridge; do
       log="$DAI_LOG_DIR/$name.log"
       [[ -f "$log" ]] || continue
       dai_head "== $name (last $lines lines of ${log#"$ROOT"/}) =="
@@ -157,7 +157,7 @@ PY
     ;;
 
   version|-v|--version)
-    for svc in model-router agent-s-worker; do
+    for svc in model-router agent-s-worker voice-bridge; do
       printf '%-18s ' "$svc"
       python3 "$ROOT/services/$svc/server.py" --version 2>/dev/null || echo "(unavailable)"
     done

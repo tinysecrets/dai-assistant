@@ -285,6 +285,24 @@ Legacy (non-chat) completions. Same routing, but requires `prompt`:
 
 Missing `prompt` → `400 {"error": "prompt_required"}`.
 
+### `POST /v1/audio/transcriptions`
+
+Free, offline speech-to-text. The router **relays this byte-for-byte to the
+local voice bridge** (`services/voice-bridge`, `DAI_VOICE_BRIDGE_URL`) rather
+than calling a provider. Same OpenAI shape: multipart/form-data with `file`,
+`model`, and optional `language`; returns the transcribed text.
+
+No keys are required — faster-whisper runs on CPU. If the voice bridge is not
+running, the router answers `502 {"error": "voice_bridge_unreachable"}`.
+
+### `POST /v1/audio/speech`
+
+Free, offline text-to-speech, also relayed to the voice bridge. OpenAI shape:
+JSON `input`, `voice`, and optional `response_format`; returns the audio bytes
+(`audio/wav` or `audio/mpeg`). Piper runs on CPU with no keys.
+
+The same `502 voice_bridge_unreachable` applies when the voice bridge is down.
+
 ### Deliberately unsupported
 
 These return **`501`** with an explanation rather than `404`, because a client
@@ -293,8 +311,6 @@ that asks for them deserves to know why:
 | Path | `detail` |
 | --- | --- |
 | `/v1/embeddings` | Vellum embeds locally (ONNX) by default; the router does not proxy embeddings. |
-| `/v1/audio/transcriptions` | Audio transcription is not part of the spine. |
-| `/v1/audio/speech` | Text-to-speech is not part of the spine. |
 | `/v1/images/generations` | Image generation is not part of the spine. |
 | `/v1/moderations` | Moderation is handled upstream by the provider. |
 
@@ -714,7 +730,7 @@ See `policy/approvals.example.json` for the record shape and
 | 413 | Body over the configured limit |
 | 429 | Queue full |
 | 501 | Endpoint deliberately not implemented |
-| 502 | Upstream provider returned an unusable response |
+| 502 | Upstream provider returned an unusable response, or the voice bridge is unreachable |
 | 503 | Service not ready, or every candidate failed |
 
 `503` from `/ready` is normal on a fresh clone and is not a fault.
@@ -736,7 +752,8 @@ Returned in the top-level error envelope with a non-2xx status.
 
 **model-router:** `messages_required`, `prompt_required`, `invalid_model`,
 `paid_models_disabled`, `no_providers_ready`, `requested_model_unavailable`,
-`all_candidates_failed`, `not_implemented`
+`all_candidates_failed`, `not_implemented`, `voice_bridge_not_configured`,
+`voice_bridge_unreachable`
 
 **agent-s-worker:** `instruction_required`, `instruction_too_long`,
 `invalid_max_steps`, `invalid_task_id`, `agent_s_disabled_in_policy`,

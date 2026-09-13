@@ -206,6 +206,28 @@ Two traps here:
   clicks land in the wrong place. This is why `.env.example` leaves them
   commented out.
 
+## voice-bridge
+
+Free, offline STT + TTS. The model-router relays `/v1/audio/*` to it, so
+clients see the same OpenAI shapes they would from the router. Runs only if
+`~/.local/voice-venv` is installed (with `faster-whisper` and `piper`);
+`start-spine.sh` falls back to the system python3 otherwise, and `/v1/audio/*`
+then answers `502 voice_bridge_unreachable` (or `500` from the bridge itself).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DAI_VOICE_BRIDGE_HOST` | `127.0.0.1` | Bind address |
+| `DAI_VOICE_BRIDGE_PORT` | `8766` | Listen port |
+| `DAI_VOICE_BRIDGE_TOKEN` | *(unset)* | When set, requires `Authorization: Bearer` |
+| `DAI_WHISPER_MODEL` | `tiny` | faster-whisper model to load (tiny/base/small) |
+| `DAI_PIPER_VOICE` | `en_US-lessac-medium` | piper voice id, downloaded on first use |
+| `DAI_VOICE_MODELS_DIR` | `~/.local/voice-models` | Where STT/TTS models are cached |
+| `DAI_VOICE_BRIDGE_URL` | `http://127.0.0.1:8766` | What the router relays audio to. Derived from host/port unless overridden — set all three together |
+
+The bridge also reads `DAI_QUIET_LOGS` and `DAI_MAX_BODY_BYTES`, which default
+as documented for the router: the bridge normally grants 8 MiB via `DAI_MAX_BODY_BYTES`,
+so a long recording can be transcribed without touching the 1 MiB worker value.
+
 ---
 
 ## policy/sovereign.json

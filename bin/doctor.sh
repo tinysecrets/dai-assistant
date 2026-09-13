@@ -40,8 +40,10 @@ dai_need python3 curl
 
 ROUTER_PORT="$(dai_env_get DAI_ROUTER_PORT 11435)"
 WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8765)"
+VOICE_PORT="$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
 ROUTER_URL="http://$(dai_env_get DAI_ROUTER_HOST 127.0.0.1):$ROUTER_PORT"
 WORKER_URL="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$WORKER_PORT"
+VOICE_URL="http://$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1):$VOICE_PORT"
 OLLAMA_URL="http://127.0.0.1:$(dai_env_get DAI_OLLAMA_PORT 11434)"
 
 # --- 1. repository files ----------------------------------------------------
@@ -58,6 +60,7 @@ required_files=(
   "policy/sovereign.json"
   "services/model-router/server.py"
   "services/agent-s-worker/server.py"
+  "services/voice-bridge/server.py"
   "skills/agent-s-delegate/SKILL.md"
   "lib/dai/__init__.py"
 )
@@ -127,7 +130,7 @@ fi
 # Each service separates `problems` (config/safety faults) from `warnings`
 # (optional runtime deps that are absent), so nothing has to be re-classified
 # here by matching substrings.
-for svc in model-router agent-s-worker; do
+for svc in model-router agent-s-worker voice-bridge; do
   out="$(python3 "$ROOT/services/$svc/server.py" --check 2>&1)" || true
   report="$(printf '%s' "$out" | python3 -c '
 import json, sys
@@ -232,6 +235,14 @@ check_service() {
       candidates="$(printf '%s' "$body" | dai_json_get candidates_available)"
       cooldowns="$(printf '%s' "$body" | dai_json_get cooldowns_active)"
       dai_info "candidates available: ${candidates:-?} (cooldowns active: ${cooldowns:-0})"
+    elif [[ "$pidname" == "voice-bridge" ]]; then
+      whisper="$(printf '%s' "$body" | dai_json_get whisper_loaded)"
+      piper="$(printf '%s' "$body" | dai_json_get voice_loaded)"
+      ffmpeg="$(printf '%s' "$body" | dai_json_get ffmpeg)"
+      dai_info "whisper=${whisper:-?} piper=${piper:-?} ffmpeg=${ffmpeg:-?}"
+      if [[ "$whisper" != "true" || "$piper" != "true" ]]; then
+        dai_warn "voice-bridge up but models not loaded — it needs ~/.local/voice-venv (faster-whisper, piper)"
+      fi
     else
       live="$(printf '%s' "$body" | dai_json_get live_capable)"
       dryrun="$(printf '%s' "$body" | dai_json_get dry_run_default)"
@@ -252,8 +263,10 @@ check_service() {
 
 router_up=0
 worker_up=0
+voice_up=0
 check_service "model-router" "$ROUTER_URL" "model-router" && router_up=1 || true
 check_service "agent-s-worker" "$WORKER_URL" "agent-s-worker" && worker_up=1 || true
+check_service "voice-bridge" "$VOICE_URL" "voice-bridge" && voice_up=1 || true
 
 if dai_http "$OLLAMA_URL/api/tags" 2 >/dev/null; then
   models="$(dai_http "$OLLAMA_URL/api/tags" 3 | python3 -c '
@@ -291,6 +304,14 @@ for tool in Xvfb xset tesseract; do
     esac
   fi
 done
+
+voice_py="${DAI_VOICE_VENV:-$HOME/.local/voice-venv}/bin/python"
+if [[ -x "$voice_py" ]]; then
+  dai_ok "voice venv present ($voice_py)"
+else
+  dai_info "voice venv not installed — /v1/audio/* will be unavailable. Install with:"
+  dai_info "  python3 -m venv ~/.local/voice-venv && ~/.local/voice-venv/bin/pip install faster-whisper piper"
+fi
 
 display="$(python3 -c '
 import json, sys
@@ -353,6 +374,7 @@ fi
 if ((JSON)); then
   DAI_JSON_ROUTER="$router_up" \
   DAI_JSON_WORKER="$worker_up" \
+  DAI_JSON_VOICE="$voice_up" \
   DAI_JSON_KEYS="$any_key" \
   python3 - "$DAI_OK_COUNT" "$DAI_WARN_COUNT" "$DAI_FAIL_COUNT" <<'PY'
 import json, os, sys
@@ -371,6 +393,7 @@ def health(name):
 
 router = health("model-router")
 worker = health("agent-s-worker")
+voice = health("voice-bridge")
 report = {
     # Mirrors the exit status: warnings (no keys, nothing running yet) are not
     # failures — a fresh clone is a working spine that cannot chat yet.
@@ -390,6 +413,11 @@ report = {
             "dry_run_default": (worker or {}).get("dry_run_default"),
             "live_capable": (worker or {}).get("live_capable"),
             "queue_depth": (worker or {}).get("queue_depth"),
+        },
+        "voice_bridge": {
+            "up": bool(int(os.environ["DAI_JSON_VOICE"])),
+            "whisper_loaded": (voice or {}).get("whisper_loaded"),
+            "voice_loaded": (voice or {}).get("voice_loaded"),
         },
     },
 }

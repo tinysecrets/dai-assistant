@@ -99,6 +99,11 @@ def is_git_ignored(rel: str) -> bool:
         )
         if proc.returncode == 0:
             return True
+        # A path that reaches through a symlink cannot be tracked by git at all
+        # ("beyond a symbolic link"), so it is structurally impossible to commit.
+        # Treat that as ignored: it defends the same guarantee a match does.
+        if "beyond a symbolic link" in proc.stderr:
+            return True
     return False
 
 
