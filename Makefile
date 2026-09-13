@@ -14,7 +14,8 @@ SERVICES := services/model-router/server.py services/agent-s-worker/server.py se
 
 .PHONY: help check test test-quick lint compile shellcheck doctor smoke \
         up down status logs restart keys models plan config approve tokens \
-        skills hatch clean distclean install-dev all
+        skills hatch clean distclean install-dev all \
+        perf tune install-service uninstall-service
 
 ## help: list every target with its description
 help:
@@ -146,3 +147,62 @@ install-dev:
 
 ## all: the full pre-commit gate
 all: lint test smoke
+
+## perf: report the machine the spine runs on (CPU, memory, voice config)
+perf:
+	@echo "== machine"
+	@printf '  cpus:       '; nproc
+	@printf '  affinity:   '; taskset -pc "$$BASHPID" 2>/dev/null | awk -F': ' '{print $$2}' || echo "(n/a)"
+	@printf '  memory:     '; free -h 2>/dev/null | awk '/^Mem:/{print $$2}'
+	@printf '  taskset:    '; command -v taskset >/dev/null 2>&1 && echo yes || echo no
+	@echo "== voice-bridge tuning (from .env)"
+	@printf '  CPUS:       '; python3 -c 'import os; print(os.environ.get("DAI_VOICE_BRIDGE_CPUS","0-2"))'
+	@printf '  THREADS:    '; python3 -c 'import os; print(os.environ.get("DAI_VOICE_BRIDGE_THREADS","4"))'
+	@printf '  WORKERS:    '; python3 -c 'import os; print(os.environ.get("DAI_VOICE_BRIDGE_WORKERS","4"))'
+	@printf '  venv:       '; test -x "$$HOME/.local/voice-venv/bin/python" && echo "$$HOME/.local/voice-venv/bin/python" || echo "(missing)"
+	@echo "== live services (if up)"
+	@python3 "$$(pwd)/services/voice-bridge/server.py" --check >/dev/null 2>&1 && echo "  voice-bridge --check: clean" || echo "  voice-bridge --check: not serving"
+
+## tune: write recommended CPU pinning for this machine into .env
+tune:
+	@python3 - "$@" <<-'PY'
+	import os, pathlib, re, sys
+	env = pathlib.Path(".env")
+	n = os.cpu_count() or 1
+	cpus = f"0-{max(0, n//2 - 1)}"
+	threads = str(max(1, n//2))
+	workers = str(max(1, n//2))
+	print(f"machine: {n} cores -> voice-bridge pinned to {cpus}, {threads} threads, {workers} workers")
+	if not env.exists():
+	    print("no .env — run: cp .env.example .env && chmod 600 .env", file=sys.stderr)
+	    sys.exit(1)
+	text = env.read_text()
+	def setvar(name, value):
+	    global text
+	    pat = re.compile(rf"^\s*{name}=.*$", re.M)
+	    if pat.search(text):
+	        text = pat.sub(f"{name}={value}", text)
+	    else:
+	        text += f"\n{name}={value}\n"
+	setvar("DAI_VOICE_BRIDGE_CPUS", cpus)
+	setvar("DAI_VOICE_BRIDGE_THREADS", threads)
+	setvar("DAI_VOICE_BRIDGE_WORKERS", workers)
+	env.write_text(text)
+	print(f"updated .env: DAI_VOICE_BRIDGE_CPUS={cpus} DAI_VOICE_BRIDGE_THREADS={threads} DAI_VOICE_BRIDGE_WORKERS={workers}")
+	PY
+
+## install-service: drop the systemd unit into the user's service dir and enable it
+install-service:
+	@mkdir -p "$$HOME/.config/systemd/user"
+	@cp "$(abspath $(CURDIR)/systemd/dai-spine.service)" "$$HOME/.config/systemd/user/dai-spine.service"
+	@systemctl --user daemon-reload
+	@systemctl --user enable --now dai-spine.service
+	@echo "installed: systemctl --user status dai-spine.service"
+
+## uninstall-service: stop and remove the unit
+uninstall-service:
+	@systemctl --user stop dai-spine.service 2>/dev/null || true
+	@systemctl --user disable dai-spine.service 2>/dev/null || true
+	@rm -f "$$HOME/.config/systemd/user/dai-spine.service"
+	@systemctl --user daemon-reload
+	@echo "uninstalled dai-spine.service"

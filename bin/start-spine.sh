@@ -119,7 +119,21 @@ fi
 
 dai_start_service "model-router" "$ROOT/services/model-router/server.py"
 dai_start_service "agent-s-worker" "$ROOT/services/agent-s-worker/server.py"
-dai_start_service "voice-bridge" "$ROOT/services/voice-bridge/server.py" "$VOICE_PY"
+
+# Voice-bridge: CPU pinning + thread hints for faster-whisper/piper
+VOICE_CPUS="$(dai_env_get DAI_VOICE_BRIDGE_CPUS "0-2")"
+VOICE_THREADS="$(dai_env_get DAI_VOICE_BRIDGE_THREADS "4")"
+if command -v taskset >/dev/null 2>&1 && [[ -n "$VOICE_CPUS" ]]; then
+  VOICE_TASKSET=(taskset -c "$VOICE_CPUS")
+else
+  VOICE_TASKSET=()
+fi
+export OMP_NUM_THREADS="$VOICE_THREADS"
+export CT2_NUM_THREADS="$VOICE_THREADS"
+export ONNXRUNTIME_NUM_THREADS="$VOICE_THREADS"
+export MKL_NUM_THREADS="$VOICE_THREADS"
+
+dai_start_service "voice-bridge" "$ROOT/services/voice-bridge/server.py" "$VOICE_PY" "${VOICE_TASKSET[@]}"
 
 failed=0
 if dai_wait_up "$ROUTER_URL" 15 "model-router"; then

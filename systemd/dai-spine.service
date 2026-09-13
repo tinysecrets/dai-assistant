@@ -1,0 +1,30 @@
+# systemd unit: start the dai spine (model-router + agent-s-worker + voice-bridge)
+# at boot and keep it running.
+#
+# Install:  make install-service
+#           # or:  systemctl --user enable --now ~/.config/systemd/user/dai-spine.service
+#
+# The spine is a long-running daemon, so Restart=always is the point: a
+# transient 429/5xx on a provider, a voice-bridge that failed to load its
+# model, or a SIGTERM from a stale stop-spine.sh run all get recovered by
+# systemd instead of leaving the spine dead.
+
+[Unit]
+Description=Debian AI Assistant spine (router + worker + voice-bridge)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+Environment=HOME=%h
+WorkingDirectory=%h/dai-assistant
+ExecStart=%h/dai-assistant/bin/start-spine.sh
+Restart=always
+RestartSec=5
+# Stop cleanly: SIGTERM -> start-spine.sh's own stop-spine.sh path runs.
+TimeoutStopSec=30
+# Don't let the spine's own nohup'd children outlive the service.
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

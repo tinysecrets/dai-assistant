@@ -218,6 +218,9 @@ then answers `502 voice_bridge_unreachable` (or `500` from the bridge itself).
 | --- | --- | --- |
 | `DAI_VOICE_BRIDGE_HOST` | `127.0.0.1` | Bind address |
 | `DAI_VOICE_BRIDGE_PORT` | `8766` | Listen port |
+| `DAI_VOICE_BRIDGE_CPUS` | `0-2` | CPU affinity (`taskset -c`); blank disables pinning |
+| `DAI_VOICE_BRIDGE_THREADS` | `4` | Thread hint for faster-whisper/ONNXRuntime (~1 per core) |
+| `DAI_VOICE_BRIDGE_WORKERS` | `4` | Cap concurrent STT/TTS requests (each is CPU-bound) |
 | `DAI_VOICE_BRIDGE_TOKEN` | *(unset)* | When set, requires `Authorization: Bearer` |
 | `DAI_WHISPER_MODEL` | `tiny` | faster-whisper model to load (tiny/base/small) |
 | `DAI_PIPER_VOICE` | `en_US-lessac-medium` | piper voice id, downloaded on first use |

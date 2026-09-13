@@ -68,6 +68,8 @@ _STARTED = time.time()
 
 STT_LOCK = threading.Lock()
 TTS_LOCK = threading.Lock()
+VOICE_WORKERS = int(os.environ.get("DAI_VOICE_BRIDGE_WORKERS", "4"))
+VOICE_SEM = threading.BoundedSemaphore(VOICE_WORKERS)
 _stt: Dict[str, Optional[object]] = {"model": None, "error": None}
 _tts: Dict[str, Tuple[object, bool]] = {}
 
@@ -217,6 +219,9 @@ def check_configuration() -> Dict[str, object]:
         "ffmpeg": bool(FFMPEG),
         "voice_models_dir": str(VOICE_MODELS_DIR),
         "speech_formats": list(SPEECH_FORMATS),
+        "max_workers": VOICE_WORKERS,
+        "cpu_affinity": os.environ.get("DAI_VOICE_BRIDGE_CPUS", "0-2"),
+        "thread_hint": os.environ.get("DAI_VOICE_BRIDGE_THREADS", "4"),
     }
 
 
@@ -297,6 +302,9 @@ class VoiceHandler(BaseHTTPRequestHandler):
             "voice_models_dir": str(VOICE_MODELS_DIR),
             "ffmpeg": bool(FFMPEG),
             "formats": list(SPEECH_FORMATS),
+            "max_workers": VOICE_WORKERS,
+            "cpu_affinity": os.environ.get("DAI_VOICE_BRIDGE_CPUS", "0-2"),
+            "thread_hint": os.environ.get("DAI_VOICE_BRIDGE_THREADS", "4"),
             "uptime_seconds": round(time.time() - _STARTED, 1),
         }
 
@@ -311,7 +319,7 @@ class VoiceHandler(BaseHTTPRequestHandler):
         filename = str(fields.get("filename") or "audio.bin")
         suffix = Path(filename).suffix or ".wav"
         language = fields.get("language")
-        with STT_LOCK:
+        with VOICE_SEM, STT_LOCK:
             model = _load_stt()
             tmp = tempfile.NamedTemporaryFile(prefix="stt-", suffix=suffix, delete=False)
             tmp_name = tmp.name
@@ -344,8 +352,9 @@ class VoiceHandler(BaseHTTPRequestHandler):
         fmt = str(body.get("response_format") or "wav").lower()
         if fmt not in SPEECH_FORMATS:
             raise VoiceError(400, "unsupported_format", f"response_format '{fmt}'; try one of {sorted(SPEECH_FORMATS)}.")
-        wav_bytes = _tts_wav(text.strip())
-        data, content_type = _to_requested_format(wav_bytes, fmt)
+        with VOICE_SEM:
+            wav_bytes = _tts_wav(text.strip())
+            data, content_type = _to_requested_format(wav_bytes, fmt)
         self._respond(200, data, content_type)
 
     # --- dispatch ---------------------------------------------------------
