@@ -336,6 +336,16 @@ class TestDoctor(unittest.TestCase):
     def test_doctor_quiet_prints_nothing_but_summary(self):
         _code, out, _err = run([str(BIN / "doctor.sh"), "--quiet"], timeout=180)
         self.assertNotIn("== Debian AI doctor ==", out)
+        # --quiet is documented as "only the summary line" — assert it really
+        # prints that line, not zero lines.
+        self.assertRegex(out.strip(), r"^doctor: ok=\d+ warn=\d+ fail=\d+$")
+
+    def test_doctor_quiet_json_still_json_only(self):
+        # Combined flags: --json must keep stdout pure JSON even when --quiet
+        # is also given.
+        _code, out, _err = run([str(BIN / "doctor.sh"), "--quiet", "--json"], timeout=180)
+        doc = json.loads(out)  # raises if anything else touched stdout
+        self.assertIn("checks", doc)
 
     def test_doctor_never_leaks_env_values(self):
         tmp = Path(tempfile.mkdtemp(prefix="dai-doc-"))

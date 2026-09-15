@@ -80,7 +80,7 @@ exist), `docs/CONFIG.md` (every setting and the precedence rules),
 `docs/OPERATIONS.md` (runbook). `policy/approvals.example.json` documents the
 token record shape.
 
-**Tests** — 445 tests, none needing keys, network or a display:
+**Tests** — 446 tests, none needing keys, network or a display:
 
 * unit: `redact`, `env`, `jsonio`, `approvals`, `routing`
 * HTTP integration against a stub provider: `router_http`, `worker_http`
@@ -200,6 +200,11 @@ Correctness:
   sixty.  Tokens are now re-rolled until they are argv-safe, which costs about
   0.02 bits of entropy on a 144-bit token; already-issued tokens stay valid, and
   the `--approval-token=<tok>` form accepts any token.
+* **`bin/doctor.sh --quiet` printed nothing.** The documented "only the
+  summary line" output went through `dai_say`, which quiet/JSON mode mutes
+  (the mechanism that keeps `--json` stdout pure) — so the summary line was
+  swallowed with the rest. It is now emitted via `printf`, skipped in JSON
+  mode so `--json` stdout stays machine-parseable.
 * **Both skill scripts answered an argument error with the wrong exit code.**
   argparse's built-in handler exits 2 — documented as a *task* failure by
   `delegate_task.py` and not defined at all by `worker_health.py` — and writes

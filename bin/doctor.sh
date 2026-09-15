@@ -356,7 +356,13 @@ done
 
 dai_say ""
 if ((QUIET)); then
-  dai_say "doctor: ok=$DAI_OK_COUNT warn=$DAI_WARN_COUNT fail=$DAI_FAIL_COUNT"
+  if ((JSON)); then
+    :  # stdout is reserved for the JSON report below
+  else
+    # dai_say is muted above (that is what keeps --json's stdout pure), so the
+    # documented summary line must go out through printf instead.
+    printf 'doctor: ok=%s warn=%s fail=%s\n' "$DAI_OK_COUNT" "$DAI_WARN_COUNT" "$DAI_FAIL_COUNT"
+  fi
 else
   dai_head "Next steps"
   if [[ ! -f "$DAI_ENV_FILE" ]]; then
