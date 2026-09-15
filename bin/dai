@@ -15,6 +15,9 @@
 #   dai hatch       hatch the Vellum assistant
 #   dai models      list the models the router can serve right now
 #   dai chat "..."  one-shot chat through the rotator
+#   dai say "..."   speak text through the voice-bridge (saves + plays audio)
+#   dai heartbeat   say (and with --speak, speak) a free-form status line;
+#                   --every N loops so it keeps reminding you it's active
 #   dai plan [id]   show what the router would try, without calling anything
 #   dai config      print resolved (secret-free) configuration
 #   dai version     print component versions
@@ -145,6 +148,14 @@ if routed:
         note += f" · fell back from {routed['fallback_from']}"
     print(note + "]")
 PY
+    ;;
+
+  say)
+    exec python3 "$ROOT/lib/dai/speak.py" say "$@"
+    ;;
+
+  heartbeat)
+    exec python3 "$ROOT/lib/dai/speak.py" heartbeat "$@"
     ;;
 
   config)

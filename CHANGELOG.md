@@ -18,6 +18,21 @@ item below was verified against a running service or a test, not assumed.
 
 ### Added
 
+**Voice — the spine can talk.** `dai say` and `dai heartbeat`, backed by
+`lib/dai/speak.py` (stdlib only): speak arbitrary text through the
+voice-bridge, and say — or say *and speak* — a free-form, first-person status
+line built from the services' live `/health` payloads. `--every N` turns the
+heartbeat into a scheduled "I'm active" blip (run it under `nohup` for a
+standing schedule). Audio is saved under `state/speech/`, played when a local
+player exists, and every result is a JSON document (`ok`/`line`/`audio`/
+`played`, or `error`/`detail`) so an assistant can parse what it just said.
+`make say a="..."` and `make heartbeat [speak=1] [every=N]` wrap both.
+
+**`dai-voice` skill** — teaches Vellum how to use the voice: when to speak,
+how to phrase a blip (first person, short, no secrets out loud), and how to
+run a scheduled "I'm active" reminder. Installed by `dai skills` like its
+sisters.
+
 **Shared library** — `lib/dai/`, stdlib only, used by both services:
 
 * `env.py` — `.env` parsing and typed accessors (`env_str`/`int`/`float`/`bool`).
@@ -80,7 +95,7 @@ exist), `docs/CONFIG.md` (every setting and the precedence rules),
 `docs/OPERATIONS.md` (runbook). `policy/approvals.example.json` documents the
 token record shape.
 
-**Tests** — 445 tests, none needing keys, network or a display:
+**Tests** — 478 tests, none needing keys, network or a display:
 
 * unit: `redact`, `env`, `jsonio`, `approvals`, `routing`
 * HTTP integration against a stub provider: `router_http`, `worker_http`
@@ -200,6 +215,21 @@ Correctness:
   sixty.  Tokens are now re-rolled until they are argv-safe, which costs about
   0.02 bits of entropy on a 144-bit token; already-issued tokens stay valid, and
   the `--approval-token=<tok>` form accepts any token.
+* **`bin/doctor.sh --quiet` printed nothing.** The documented "only the
+  summary line" output went through `dai_say`, which quiet/JSON mode mutes
+  (the mechanism that keeps `--json` stdout pure) — so the summary line was
+  swallowed with the rest. It is now emitted via `printf`, skipped in JSON
+  mode so `--json` stdout stays machine-parseable.
+* **`voice-bridge` silently ignored `.env`.** It read `DAI_PIPER_VOICE`,
+  `DAI_WHISPER_MODEL`, `DAI_VOICE_MODELS_DIR`, the bearer token and the
+  port from `os.environ` at import time — but never loaded `.env` (the
+  starter deliberately doesn't source it), so none of the documented
+  voice knobs in `.env.example` actually worked. It now loads `.env` at
+  import time, like the other two services, with real environment variables
+  still winning.
+* **The voice-venv install instructions said `pip install piper`** — that
+  PyPI package is an unrelated CLI pipeline toolkit. The TTS engine is
+  `piper-tts`. `doctor.sh` now says so.
 * **Both skill scripts answered an argument error with the wrong exit code.**
   argparse's built-in handler exits 2 — documented as a *task* failure by
   `delegate_task.py` and not defined at all by `worker_health.py` — and writes

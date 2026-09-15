@@ -22,6 +22,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
@@ -336,6 +337,16 @@ class TestDoctor(unittest.TestCase):
     def test_doctor_quiet_prints_nothing_but_summary(self):
         _code, out, _err = run([str(BIN / "doctor.sh"), "--quiet"], timeout=180)
         self.assertNotIn("== Debian AI doctor ==", out)
+        # --quiet is documented as "only the summary line" — assert it really
+        # prints that line, not zero lines.
+        self.assertRegex(out.strip(), r"^doctor: ok=\d+ warn=\d+ fail=\d+$")
+
+    def test_doctor_quiet_json_still_json_only(self):
+        # Combined flags: --json must keep stdout pure JSON even when --quiet
+        # is also given.
+        _code, out, _err = run([str(BIN / "doctor.sh"), "--quiet", "--json"], timeout=180)
+        doc = json.loads(out)  # raises if anything else touched stdout
+        self.assertIn("checks", doc)
 
     def test_doctor_never_leaks_env_values(self):
         tmp = Path(tempfile.mkdtemp(prefix="dai-doc-"))
@@ -565,7 +576,20 @@ class TestDaiDispatcher(unittest.TestCase):
     def test_help_lists_every_subcommand(self):
         code, out, err = run([str(BIN / "dai"), "help"])
         self.assertEqual(code, 0, err)
-        for cmd in ("doctor", "up", "down", "status", "smoke", "keys", "approve", "models", "chat", "version"):
+        for cmd in (
+            "doctor",
+            "up",
+            "down",
+            "status",
+            "smoke",
+            "keys",
+            "approve",
+            "models",
+            "chat",
+            "say",
+            "heartbeat",
+            "version",
+        ):
             self.assertIn(cmd, out, f"dai help does not mention '{cmd}'")
 
     def test_unknown_command_is_rejected(self):
@@ -594,6 +618,70 @@ class TestDaiDispatcher(unittest.TestCase):
         )
         self.assertEqual(code, 1)
         self.assertIn("not running", (out + err).lower())
+
+
+class TestDaiVoice(unittest.TestCase):
+    """dai say / dai heartbeat: spoken output and 'I'm active' check-ins.
+
+    Every test points the services at port 1, where nothing ever listens, so
+    the outcome is the same on a machine with a running spine as on a fresh
+    clone: connection refused, fast and deterministic.  No audio is produced.
+    """
+
+    DEAD_PORTS: ClassVar[dict] = {
+        "DAI_ROUTER_HOST": "127.0.0.1",
+        "DAI_ROUTER_PORT": "1",
+        "DAI_AGENT_S_HOST": "127.0.0.1",
+        "DAI_AGENT_S_PORT": "1",
+        "DAI_VOICE_BRIDGE_HOST": "127.0.0.1",
+        "DAI_VOICE_BRIDGE_PORT": "1",
+    }
+
+    def test_say_without_text_is_a_usage_error(self):
+        code, out, err = run([str(BIN / "dai"), "say"], env=dict(self.DEAD_PORTS))
+        self.assertEqual(code, 4)
+        doc = json.loads(out)
+        self.assertEqual(doc["error"], "usage_error")
+        self.assertIn("error:", err)
+
+    def test_say_with_bad_format_is_a_usage_error(self):
+        code, out, _err = run([str(BIN / "dai"), "say", "hi", "--format", "flac8"], env=dict(self.DEAD_PORTS))
+        self.assertEqual(code, 4)
+        self.assertEqual(json.loads(out)["error"], "usage_error")
+
+    def test_say_with_bridge_down_is_exit_1_with_json(self):
+        code, out, err = run([str(BIN / "dai"), "say", "hello", "--no-play"], env=dict(self.DEAD_PORTS), timeout=60)
+        self.assertEqual(code, 1)
+        doc = json.loads(out)
+        self.assertFalse(doc["ok"])
+        self.assertEqual(doc["error"], "voice_bridge_down")
+        self.assertIn("error:", err)
+
+    def test_heartbeat_reports_all_down_and_exits_0(self):
+        code, out, _err = run([str(BIN / "dai"), "heartbeat"], env=dict(self.DEAD_PORTS), timeout=60)
+        # A heartbeat that says "everything is down" has done its job: exit 0.
+        self.assertEqual(code, 0)
+        self.assertIn("D-A-I here", out)
+        self.assertIn("all three services are down", out)
+        self.assertIn("dai up", out)
+
+    def test_heartbeat_json_is_machine_readable(self):
+        code, out, _err = run([str(BIN / "dai"), "heartbeat", "--json"], env=dict(self.DEAD_PORTS), timeout=60)
+        self.assertEqual(code, 0)
+        doc = json.loads(out)
+        self.assertTrue(doc["ok"])
+        self.assertFalse(doc["router"])
+        self.assertFalse(doc["worker"])
+        self.assertFalse(doc["voice"])
+        self.assertIn("line", doc)
+
+    def test_heartbeat_speak_reports_bridge_down(self):
+        code, out, err = run(
+            [str(BIN / "dai"), "heartbeat", "--speak", "--no-play"], env=dict(self.DEAD_PORTS), timeout=60
+        )
+        self.assertEqual(code, 1)
+        self.assertIn("D-A-I here", out)
+        self.assertIn("voice_bridge_down", err)
 
 
 class TestStopSpine(unittest.TestCase):

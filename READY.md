@@ -119,7 +119,31 @@ AGENT_S_GROUND_MODEL=<a vision-capable id>
 If a live task ends in `timeout` with no actions, this is almost certainly why.
 Check `logs/agent-s-worker.log` and the task's artifacts for the grounding call.
 
-## Stage 5 — Vellum
+## Stage 5 — speaking
+
+Optional. Needs only the voice venv (Stage 1 keeps working without it).
+
+- [ ] Voice venv installed — `python3 -m venv ~/.local/voice-venv &&`
+      `~/.local/voice-venv/bin/pip install faster-whisper piper-tts`
+- [ ] A piper voice is present in `~/.local/voice-models/` (the default
+      `en_US-lessac-medium` downloads from huggingface.co on first use; on a
+      machine that cannot reach HF, put any voice's `.onnx` + `.onnx.json`
+      there and name it via `DAI_PIPER_VOICE` in `.env`)
+- [ ] `ffmpeg` is available for non-wav formats — `ffmpeg -version`
+      (apt install ffmpeg; a static build from the `imageio-ffmpeg` wheel
+      works too)
+- [ ] The spine was restarted so the voice-bridge loads the venv —
+      `./bin/dai down && ./bin/dai up`
+- [ ] TTS answers — `curl -s localhost:8766/health` shows `voice_loaded: true`
+      after the first synthesis
+- [ ] It speaks — `./bin/dai say "hello" --no-play` returns `"ok": true` with
+      an `audio` path
+- [ ] The "I'm active" blip speaks — `./bin/dai heartbeat --speak --no-play`
+- [ ] (Standing schedule) `nohup ./bin/dai heartbeat --speak --every 900 >>`
+      `logs/heartbeat.log 2>&1 &` runs, and `pkill -f "speak.py heartbeat"`
+      stops it
+
+## Stage 6 — Vellum
 
 Optional, and only once Stage 2 is done.
 

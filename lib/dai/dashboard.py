@@ -200,7 +200,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/" or self.path == "/index.html":
             self._send(200, HTML.encode(), "text/html; charset=utf-8")
         elif self.path == "/health":

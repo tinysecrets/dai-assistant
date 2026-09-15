@@ -209,10 +209,13 @@ Two traps here:
 ## voice-bridge
 
 Free, offline STT + TTS. The model-router relays `/v1/audio/*` to it, so
-clients see the same OpenAI shapes they would from the router. Runs only if
-`~/.local/voice-venv` is installed (with `faster-whisper` and `piper`);
-`start-spine.sh` falls back to the system python3 otherwise, and `/v1/audio/*`
-then answers `502 voice_bridge_unreachable` (or `500` from the bridge itself).
+clients see the same OpenAI shapes they would from the router. The bridge
+process always starts, but synthesis needs `~/.local/voice-venv` (with
+`faster-whisper` and `piper-tts`); without it, `start-spine.sh` falls back to
+the system python3 and `/v1/audio/*` answers `502 voice_bridge_unreachable`
+(or `500 stt_load_failed` / `tts_load_failed` from the bridge itself). All of
+the variables below are read from the environment **and** `.env` (real
+environment variables win).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
