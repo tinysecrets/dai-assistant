@@ -68,7 +68,7 @@
     "timeout_seconds": 600,
     "notes": [
       "dry_run_default=true is the safe shipped state: tasks are validated and the exact command is recorded, but no input device is touched.",
-      "To go live: set dry_run_default=false AND issue a token per instruction (bin/issue-approval.sh agent_s_gui_task \"...\").",
+      "Keep dry_run_default=true: the live gate is --live plus a single-use token for the exact instruction (bin/issue-approval.sh agent_s_gui_task \"...\"). dry_run_default only sets the default for tasks that do not ask otherwise; setting it false makes every task live until one asks for a dry run, and the worker's --check flags that as a problem.",
       "Safety keys in this block (enabled, dry_run_default, bind_owner_live_desktop, require_approval_token, max_steps_hard_cap) are read from here only \u2014 an environment variable cannot weaken them.",
       "Host knobs (display, geometry, provider, model, grounding_*, timeout_seconds, venv_path) may be overridden in .env; see docs/CONFIG.md."
     ]
@@ -87,6 +87,7 @@
     "point_inference_at": "http://127.0.0.1:11435/v1",
     "skills_to_install": [
       "skills/agent-s-delegate",
+      "skills/dai-voice",
       "skills/english-to-code"
     ]
   },

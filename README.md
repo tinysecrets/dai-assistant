@@ -188,6 +188,7 @@ Or `make help` for the same operations as make targets.
 | `docs/API.md` | Every endpoint, payload, and error code — both services advertise it from `/health` |
 | `docs/CONFIG.md` | Every setting, its default, and which layer wins |
 | `docs/OPERATIONS.md` | Runbook: start, diagnose, approve, recover |
+| `docs/CONVERSATION.md` | The exact path to conversing (chat, Vellum, voice) and to a live GUI task |
 | `docs/ARCHITECTURE.md` | Why the spine is shaped this way |
 | `KEYS.md` | Getting provider keys |
 | `SECURITY.md` | Threat model, design rules, known limitations |
