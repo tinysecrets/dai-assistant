@@ -310,7 +310,7 @@ if [[ -x "$voice_py" ]]; then
   dai_ok "voice venv present ($voice_py)"
 else
   dai_info "voice venv not installed — /v1/audio/* will be unavailable. Install with:"
-  dai_info "  python3 -m venv ~/.local/voice-venv && ~/.local/voice-venv/bin/pip install faster-whisper piper"
+  dai_info "  python3 -m venv ~/.local/voice-venv && ~/.local/voice-venv/bin/pip install faster-whisper piper-tts"
 fi
 
 display="$(python3 -c '

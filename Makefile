@@ -14,7 +14,7 @@ SERVICES := services/model-router/server.py services/agent-s-worker/server.py se
 
 .PHONY: help check test test-quick lint compile shellcheck doctor smoke \
         up down status logs restart keys models plan config approve tokens \
-        skills hatch clean distclean install-dev all \
+        say heartbeat skills hatch clean distclean install-dev all \
         perf tune install-service uninstall-service
 
 ## help: list every target with its description
@@ -110,6 +110,15 @@ plan:
 ## config: print resolved configuration for both services, secrets removed
 config:
 	./bin/dai config
+
+## say: speak text through the voice-bridge — make say a="hello, I'm active"
+say:
+	@test -n "$(a)" || { echo "usage: make say a=<text> [fmt=mp3]"; exit 1; }
+	./bin/dai say $(a) $(if $(fmt),--format $(fmt))
+
+## heartbeat: free-form status line — make heartbeat [speak=1] [every=900]
+heartbeat:
+	./bin/dai heartbeat $(if $(speak),--speak) $(if $(every),--every $(every))
 
 ## approve: issue a token — make approve a=agent_s_gui_task s="instruction"
 approve:

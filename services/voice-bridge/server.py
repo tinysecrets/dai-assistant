@@ -50,6 +50,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from lib.dai import ServiceInfo
+from lib.dai.env import load_dotenv
+
+# The starter deliberately never sources .env (see bin/start-spine.sh); each
+# service parses it itself.  voice-bridge reads its knobs at import time, so
+# the file must be loaded here, before the first os.environ.get below — real
+# environment variables still win (override=False).
+load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
 
 SERVICE = ServiceInfo("voice-bridge", "1.0", "docs/API.md")
 VERSION = SERVICE.version

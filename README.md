@@ -100,6 +100,24 @@ instruction. Tokens expire, are spent atomically at admission, and are spent
 even if the task then fails. The agent runs on a dedicated Xvfb display, never
 on the desktop you are sitting at.
 
+### Speaking and check-ins
+
+Once the voice venv is in place (see `READY.md`), the assistant can talk —
+offline, through the voice-bridge:
+
+```bash
+dai say "Kettle's boiled, by the way."   # speak arbitrary text, saves an mp3
+dai heartbeat                            # free-form status line, first person
+dai heartbeat --speak                    # ...and says it out loud
+dai heartbeat --speak --every 900        # a spoken "I'm active" blip, on schedule
+```
+
+`dai say`/`dai heartbeat` are stdlib-only HTTP calls to the voice-bridge; the
+heavy lifting (piper TTS, faster-whisper STT) stays in `~/.local/voice-venv`.
+Every result is JSON on stdout (`ok`, `line`, `audio`, `played` / `error`,
+`detail`), so an assistant can parse them instead of guessing. The `dai-voice`
+skill (below) teaches Vellum to use them well.
+
 ### Vellum
 
 ```bash
@@ -107,8 +125,9 @@ on the desktop you are sitting at.
 ./bin/install-vellum-skill.sh   # validates SKILL.md, then installs
 ```
 
-Two skills ship in `skills/`: `agent-s-delegate` (delegate a bounded GUI task)
-and `english-to-code` (turn a plain-language request into a runnable command).
+Three skills ship in `skills/`: `agent-s-delegate` (delegate a bounded GUI
+task), `english-to-code` (turn a plain-language request into a runnable
+command), and `dai-voice` (speak, and keep reminding the owner you're active).
 
 ---
 
@@ -128,6 +147,8 @@ dai models      what the router can serve right now
 dai plan [id]   what it would try, without calling anything
 dai config      resolved configuration, secrets removed
 dai chat "..."  one-shot chat through the rotator
+dai say "..."   speak text through the voice-bridge (saves + plays audio)
+dai heartbeat   free-form status line; --speak to say it, --every N to loop
 dai approve     issue an approval token
 dai tokens      list / revoke / prune tokens
 dai skills      install skills into the Vellum workspace
@@ -152,7 +173,7 @@ Or `make help` for the same operations as make targets.
 | `config/free-models.json` | Reference catalog of free models |
 | `policy/sovereign.json` | Intent and safety: what needs approval, what is forbidden |
 | `policy/approvals.json` | Live tokens — created on first use, `0600`, git-ignored |
-| `tests/` | 446 tests: unit, HTTP integration, scripts, drift detection |
+| `tests/` | 478 tests: unit, HTTP integration, scripts, drift detection |
 | `docs/` | API, configuration, operations, architecture |
 | `.env` | Your keys — `0600`, git-ignored |
 | `logs/`, `state/` | Runtime artifacts, git-ignored, fully regenerable |
@@ -214,7 +235,7 @@ curl -s localhost:8765/v1/settings
 ```bash
 make help        # every target
 make lint        # compile + bash -n + service --check
-make test        # 446 tests
+make test        # 478 tests
 make all         # lint + test + smoke — the gate CI runs
 ```
 

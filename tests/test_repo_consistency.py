@@ -490,9 +490,9 @@ class TestSkills(unittest.TestCase):
     def skills(self) -> list[Path]:
         return sorted(p.parent for p in (ROOT / "skills").glob("*/SKILL.md"))
 
-    def test_at_least_the_two_shipped_skills_exist(self):
+    def test_the_shipped_skills_exist(self):
         names = {p.name for p in self.skills()}
-        self.assertEqual(names, {"agent-s-delegate", "english-to-code"})
+        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code"})
 
     def test_frontmatter_is_valid_yaml_with_required_fields(self):
         for skill in self.skills():
