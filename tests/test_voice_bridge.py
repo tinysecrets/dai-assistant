@@ -55,11 +55,10 @@ def _wait_healthy(base: str, proc, timeout: float = 10.0) -> None:
             raise RuntimeError(f"voice-bridge exited early (status {proc.returncode})")
         try:
             status, body, _h = http(f"{base}/health")
-            if status == 200:
-                # A stale server on a just-freed port would answer too; ours
-                # is seconds old, not minutes.
-                if json.loads(body).get("uptime_seconds", 999) < 5:
-                    return
+            # A stale server on a just-freed port would answer too; ours is
+            # seconds old, not minutes.
+            if status == 200 and json.loads(body).get("uptime_seconds", 999) < 5:
+                return
         except OSError:
             pass
         time.sleep(0.05)
@@ -75,7 +74,7 @@ def _start_bridge(tmp: Path, env_overrides: dict):
         "DAI_VOICE_MODELS_DIR": str(tmp),
     }
     env.update(env_overrides)
-    log = open(tmp / "bridge.log", "wb")
+    log = open(tmp / "bridge.log", "wb")  # noqa: SIM115 — handle kept for the subprocess lifetime
     # free_port() can hand back a port whose previous owner has not released
     # it yet; if the bind fails the server exits immediately, so retry with a
     # fresh port.
@@ -83,9 +82,7 @@ def _start_bridge(tmp: Path, env_overrides: dict):
     for _attempt in range(5):
         port = free_port()
         env["DAI_VOICE_BRIDGE_PORT"] = str(port)
-        proc = subprocess.Popen(
-            [sys_python(), str(SERVER)], env=env, stdout=log, stderr=subprocess.STDOUT
-        )
+        proc = subprocess.Popen([sys_python(), str(SERVER)], env=env, stdout=log, stderr=subprocess.STDOUT)
         base = f"http://127.0.0.1:{port}"
         try:
             _wait_healthy(base, proc, timeout=5.0)
@@ -186,8 +183,7 @@ class VoiceBridgeCase(unittest.TestCase):
     def test_transcription_requires_file(self):
         boundary = "dai-test-boundary"
         body = (
-            f"--{boundary}\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ntiny\r\n"
-            f"--{boundary}--\r\n"
+            f'--{boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\ntiny\r\n--{boundary}--\r\n'
         ).encode()
         status, resp, _h = http(
             f"{self.base}/v1/audio/transcriptions",
@@ -211,9 +207,7 @@ class VoiceBridgeAuthCase(unittest.TestCase):
         cls.tmp = Path(tempfile.mkdtemp(prefix="dai-vba-"))
         (cls.tmp / f"{FAKE_VOICE}.onnx").write_bytes(b"not a real onnx model")
         (cls.tmp / f"{FAKE_VOICE}.onnx.json").write_text("{}")
-        cls.proc, cls.log, cls.base = _start_bridge(
-            cls.tmp, {"DAI_VOICE_BRIDGE_TOKEN": "vb-test-token"}
-        )
+        cls.proc, cls.log, cls.base = _start_bridge(cls.tmp, {"DAI_VOICE_BRIDGE_TOKEN": "vb-test-token"})
 
     @classmethod
     def tearDownClass(cls):

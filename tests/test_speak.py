@@ -15,6 +15,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -85,9 +86,9 @@ class TestHeartbeatLine(unittest.TestCase):
 class _StubTTS(BaseHTTPRequestHandler):
     """Records the last request; replies 200 with fake bytes, or a canned error."""
 
-    received = {}
-    reply_status = 200
-    reply_error = None
+    received: ClassVar[dict] = {}
+    reply_status: ClassVar[int] = 200
+    reply_error: ClassVar[object] = None
     reply_body = b"fake-mp3-bytes"
 
     def do_POST(self):

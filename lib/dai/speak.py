@@ -250,7 +250,7 @@ def _emit(doc: Dict[str, Any], ok: bool) -> None:
 def cmd_say(args: argparse.Namespace) -> int:
     text = " ".join(args.text).strip()
     if not text:
-        return usage_error("say needs some text — dai say \"hello\"")
+        return usage_error('say needs some text — dai say "hello"')
     doc = speak(text, fmt=args.format, out=Path(args.out) if args.out else None)
     if doc["ok"] and not args.no_play:
         doc["played"] = play(Path(doc["audio"]))
@@ -310,8 +310,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     hb_p = sub.add_parser("heartbeat", help="say (and optionally speak) a free-form status line")
     hb_p.add_argument("--speak", action="store_true", help="speak the line through the voice-bridge")
-    hb_p.add_argument("--every", type=float, default=0.0, metavar="SECONDS",
-                      help="repeat every N seconds (0 = once; default)")
+    hb_p.add_argument(
+        "--every", type=float, default=0.0, metavar="SECONDS", help="repeat every N seconds (0 = once; default)"
+    )
     hb_p.add_argument("--format", default="mp3", choices=SPEECH_FORMATS, help="audio format for --speak")
     hb_p.add_argument("--out", help="where to save each spoken blip")
     hb_p.add_argument("--no-play", action="store_true", help="with --speak: save only, never play")

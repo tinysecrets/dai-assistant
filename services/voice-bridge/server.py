@@ -36,7 +36,6 @@ import sys
 import tempfile
 import threading
 import time
-import traceback
 import wave
 from email import policy
 from email.parser import BytesParser
@@ -158,7 +157,11 @@ def _to_requested_format(wav_bytes: bytes, fmt: str) -> Tuple[bytes, str]:
         capture_output=True,
     )
     if proc.returncode != 0:
-        raise VoiceError(500, "encode_failed", f"ffmpeg could not encode '{fmt}': {proc.stderr.decode('utf-8', errors='replace')[:200]}")
+        raise VoiceError(
+            500,
+            "encode_failed",
+            f"ffmpeg could not encode '{fmt}': {proc.stderr.decode('utf-8', errors='replace')[:200]}",
+        )
     return proc.stdout, content_type
 
 
@@ -171,9 +174,8 @@ def _parse_multipart(content_type: str, body: bytes) -> Dict[str, object]:
     for part in parsed.iter_parts():
         name = part.get_param("name", header="content-disposition")
         payload = part.get_payload(decode=True)
-        if not name:
-            if part.get_filename():
-                name = "filename"
+        if not name and part.get_filename():
+            name = "filename"
         if name not in fields:
             fields[name] = payload if name == "file" else (payload or b"").decode("utf-8", errors="replace").strip()
     return fields
@@ -328,23 +330,22 @@ class VoiceHandler(BaseHTTPRequestHandler):
         language = fields.get("language")
         with VOICE_SEM, STT_LOCK:
             model = _load_stt()
-            tmp = tempfile.NamedTemporaryFile(prefix="stt-", suffix=suffix, delete=False)
-            tmp_name = tmp.name
-            try:
-                tmp.write(audio)
-                tmp.flush()
-                del audio
-                segments, _info = model.transcribe(
-                    tmp_name,
-                    language=language if isinstance(language, str) and language else None,
-                    beam_size=5,
-                    vad_filter=True,
-                )
-                text = "".join(seg.text for seg in segments).strip()
-            finally:
-                with contextlib.suppress(OSError):
-                    tmp.close()
-                    Path(tmp_name).unlink(missing_ok=True)
+            with tempfile.NamedTemporaryFile(prefix="stt-", suffix=suffix, delete=False) as tmp:
+                tmp_name = tmp.name
+                try:
+                    tmp.write(audio)
+                    tmp.flush()
+                    del audio
+                    segments, _info = model.transcribe(
+                        tmp_name,
+                        language=language if isinstance(language, str) and language else None,
+                        beam_size=5,
+                        vad_filter=True,
+                    )
+                    text = "".join(seg.text for seg in segments).strip()
+                finally:
+                    with contextlib.suppress(OSError):
+                        Path(tmp_name).unlink(missing_ok=True)
         self._respond_json(200, {"text": text})
 
     def _speech(self) -> None:
@@ -358,7 +359,9 @@ class VoiceHandler(BaseHTTPRequestHandler):
             raise VoiceError(400, "unknown_voice", f"Unknown voice '{requested}'; use '{PIPER_VOICE}'.")
         fmt = str(body.get("response_format") or "wav").lower()
         if fmt not in SPEECH_FORMATS:
-            raise VoiceError(400, "unsupported_format", f"response_format '{fmt}'; try one of {sorted(SPEECH_FORMATS)}.")
+            raise VoiceError(
+                400, "unsupported_format", f"response_format '{fmt}'; try one of {sorted(SPEECH_FORMATS)}."
+            )
         with VOICE_SEM:
             wav_bytes = _tts_wav(text.strip())
             data, content_type = _to_requested_format(wav_bytes, fmt)

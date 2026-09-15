@@ -22,6 +22,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parents[1]
 BIN = ROOT / "bin"
@@ -576,8 +577,18 @@ class TestDaiDispatcher(unittest.TestCase):
         code, out, err = run([str(BIN / "dai"), "help"])
         self.assertEqual(code, 0, err)
         for cmd in (
-            "doctor", "up", "down", "status", "smoke", "keys", "approve",
-            "models", "chat", "say", "heartbeat", "version",
+            "doctor",
+            "up",
+            "down",
+            "status",
+            "smoke",
+            "keys",
+            "approve",
+            "models",
+            "chat",
+            "say",
+            "heartbeat",
+            "version",
         ):
             self.assertIn(cmd, out, f"dai help does not mention '{cmd}'")
 
@@ -617,7 +628,7 @@ class TestDaiVoice(unittest.TestCase):
     clone: connection refused, fast and deterministic.  No audio is produced.
     """
 
-    DEAD_PORTS = {
+    DEAD_PORTS: ClassVar[dict] = {
         "DAI_ROUTER_HOST": "127.0.0.1",
         "DAI_ROUTER_PORT": "1",
         "DAI_AGENT_S_HOST": "127.0.0.1",
@@ -634,16 +645,12 @@ class TestDaiVoice(unittest.TestCase):
         self.assertIn("error:", err)
 
     def test_say_with_bad_format_is_a_usage_error(self):
-        code, out, _err = run(
-            [str(BIN / "dai"), "say", "hi", "--format", "flac8"], env=dict(self.DEAD_PORTS)
-        )
+        code, out, _err = run([str(BIN / "dai"), "say", "hi", "--format", "flac8"], env=dict(self.DEAD_PORTS))
         self.assertEqual(code, 4)
         self.assertEqual(json.loads(out)["error"], "usage_error")
 
     def test_say_with_bridge_down_is_exit_1_with_json(self):
-        code, out, err = run(
-            [str(BIN / "dai"), "say", "hello", "--no-play"], env=dict(self.DEAD_PORTS), timeout=60
-        )
+        code, out, err = run([str(BIN / "dai"), "say", "hello", "--no-play"], env=dict(self.DEAD_PORTS), timeout=60)
         self.assertEqual(code, 1)
         doc = json.loads(out)
         self.assertFalse(doc["ok"])
@@ -659,9 +666,7 @@ class TestDaiVoice(unittest.TestCase):
         self.assertIn("dai up", out)
 
     def test_heartbeat_json_is_machine_readable(self):
-        code, out, _err = run(
-            [str(BIN / "dai"), "heartbeat", "--json"], env=dict(self.DEAD_PORTS), timeout=60
-        )
+        code, out, _err = run([str(BIN / "dai"), "heartbeat", "--json"], env=dict(self.DEAD_PORTS), timeout=60)
         self.assertEqual(code, 0)
         doc = json.loads(out)
         self.assertTrue(doc["ok"])
