@@ -14,7 +14,8 @@
     "minimax/minimax-m2.7:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "google/gemma-4-31b-it:free",
-    "google/gemma-4-26b-a4b-it:free"
+    "google/gemma-4-26b-a4b-it:free",
+    "nex-agi/nex-n2.5-pro:free"
   ],
   "openrouter_free_vision": [
     "thinkingmachines/inkling:free",
@@ -39,5 +40,5 @@
     "hermes3:8b",
     "llama3.2:3b"
   ],
-  "notes": "Groq/Ollama Cloud model IDs may need tweak after you verify your account catalog."
+  "notes": "OpenRouter free models are discovered dynamically; entries here are preferred residents, not permanent model guarantees. Unknown or non-free pricing must remain blocked."
 }
