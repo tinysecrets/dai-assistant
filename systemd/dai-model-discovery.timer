@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh D-A-I free model catalog periodically
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=dai-model-discovery.service
+
+[Install]
+WantedBy=timers.target

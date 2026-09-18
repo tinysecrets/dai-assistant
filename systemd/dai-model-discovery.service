@@ -1,0 +1,10 @@
+[Unit]
+Description=D-A-I free model discovery refresh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/dai-assistant
+Environment=HOME=%h
+ExecStart=%h/dai-assistant/bin/refresh-free-models

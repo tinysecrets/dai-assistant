@@ -95,30 +95,7 @@ HTML = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>dai headquarters</title>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-background:#0f1117;color:#cdd6e4;font-size:13px;line-height:1.5}
-header{background:#1e1f29;padding:8px 14px;font-weight:600;display:flex;
-justify-content:space-between;align-items:center;border-bottom:1px solid #313244}
-header .dot{width:10px;height:10px;border-radius:50%;display:inline-block;
-margin-right:6px;vertical-align:middle}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #313244}
-.panel{padding:12px;border-right:1px solid #313244}
-.panel:last-child{border-right:none}
-.panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.05em;
-color:#8990b4;margin-bottom:8px}
-table{width:100%;border-collapse:collapse}
-th,td{text-align:left;padding:3px 4px;font-size:12px}
-th{color:#8990b4;font-weight:600;font-size:11px;text-transform:uppercase}
-td{color:#cdd6e4}
-.pill{display:inline-block;padding:1px 6px;border-radius:3px;font-size:11px}
-.up{background:#a6e3a9;color:#0f172a}
-.down{background:#f38bae;color:#fff}
-.warn{background:#f9e2af;color:#1e1f29}
-.small{color:#6c7086;font-size:11px}
-.muted{color:#6c7086}
-</style>
+<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#070b12;color:#e8eef7;font-size:13px;line-height:1.45}header{background:rgba(9,14,22,.94);padding:15px 20px;font-weight:700;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #253248;position:sticky;top:0;z-index:2;backdrop-filter:blur(12px)}header .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:7px;background:#65e6a5;box-shadow:0 0 14px #65e6a5}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;border:0;padding:14px 14px 0}.panel{padding:16px;border:1px solid #253248;border-radius:14px;background:linear-gradient(145deg,#111925,#0b1119);box-shadow:0 14px 35px #0005;min-height:180px}.panel h2{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#aebbd0;margin-bottom:12px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 5px;font-size:12px;border-bottom:1px;border-bottom:1px solid #25324899}th{color:#8190a8;font-size:10px;text-transform:uppercase}td{color:#d8e0ec}.pill{display:inline-block;padding:3px 8px;border-radius:999px;font-size:10px;font-weight:800}.up{background:#143a2a;color:#65e6a5}.down{background:#401c25;color:#ff7c89}.warn{background:#403416;color:#ffd166}.small{color:#8190a8;font-size:11px}.muted{color:#65748c}.panel:before{content:"";display:block;width:32px;height:2px;background:#58d8ff;margin-bottom:10px;border-radius:2px}@media(max-width:800px){.grid{grid-template-columns:1fr}.panel{min-height:auto}}</style>
 </head>
 <body>
 <header><span class="dot" id="dot"></span><span id="title">dai headquarters</span>
@@ -145,7 +122,7 @@ td{color:#cdd6e4}
 </div>
 <script>
 function esc(t){return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function rows(o){var h='';for(var k in o){h+='<tr><th>'+esc(k)+'</th><td>'+esc(o[k])+'</td></tr>';}return h;}
+function rows(o){var h="";for(var k in (o||{})){h+="<tr><th>"+esc(k)+"</th><td>"+esc((o||{})[k])+"</td></tr>";}return h;}
 setInterval(function(){
   fetch('/api/snapshot').then(function(r){return r.json()}).then(function(d){
     var dot=document.getElementById('dot');
@@ -216,6 +193,10 @@ class Handler(BaseHTTPRequestHandler):
 
 def main() -> None:
     load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
+    global HTML
+    ui=ROOT / "lib" / "dai" / "dashboard_ui.html"
+    if ui.exists():
+        HTML=ui.read_text(encoding="utf-8")
     ap = argparse.ArgumentParser(description="dai headquarters dashboard")
     ap.add_argument("--port", type=int, default=env_int("DAI_DASHBOARD_PORT", 8799))
     ap.add_argument("--host", default=env_str("DAI_DASHBOARD_HOST", "0.0.0.0"))

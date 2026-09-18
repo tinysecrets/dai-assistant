@@ -13,7 +13,7 @@ SERVICES := services/model-router/server.py services/agent-s-worker/server.py se
 .DEFAULT_GOAL := help
 
 .PHONY: help check test test-quick lint compile shellcheck doctor smoke \
-        up down status logs restart keys models plan config approve tokens \
+        up down status logs restart keys models models-refresh plan config approve tokens \
         say heartbeat skills hatch clean distclean install-dev all \
         perf tune install-service uninstall-service
 
@@ -102,6 +102,10 @@ keys:
 ## models: list the models the router can serve right now
 models:
 	./bin/dai models
+
+## models-refresh: refresh the verified free-model catalog from the provider catalog
+models-refresh:
+	./bin/refresh-free-models
 
 ## plan: show what the router would try, without calling anything (m=model id)
 plan:

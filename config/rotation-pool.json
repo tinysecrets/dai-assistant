@@ -1,29 +1,31 @@
 {
   "version": 1,
   "strategy": "rotate_on_rate_limit",
-  "quality_bar": "top_free_tool_capable",
+  "quality_bar": "verified_free_tool_capable",
   "openrouter_free": [
-    "z-ai/glm-5.2:free",
-    "thinkingmachines/inkling:free",
     "thinkingmachines/inkling-small:free",
-    "minimax/minimax-m3:free",
-    "poolside/laguna-s-2.1:free",
-    "upstage/solar-pro4:free",
-    "meituan/longcat-2.0:free",
-    "stepfun/step-3.7-flash:free",
-    "minimax/minimax-m2.7:free",
+    "thinkingmachines/inkling:free",
     "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "inclusionai/ling-3.0-flash-vl:free",
+    "nvidia/nemotron-3.5-lightning:free",
+    "inclusionai/ling-3.0-flash-fin:free",
     "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
-    "nex-agi/nex-n2.5-pro:free"
+    "nex-agi/nex-n2.5-pro:free",
+    "dots-studio/dots-3-note-preview:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+    "cohere/north-mini-code:free"
   ],
   "openrouter_free_vision": [
+    "thinkingmachines/inkling-small:free",
     "thinkingmachines/inkling:free",
     "inclusionai/ling-3.0-flash-vl:free",
     "google/gemma-4-31b-it:free",
-    "thinkingmachines/inkling-small:free",
-    "nex-agi/nex-n2.5-pro:free",
-    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    "google/gemma-4-26b-a4b-it:free",
+    "dots-studio/dots-3-note-preview:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "nex-agi/nex-n2.5-pro:free"
   ],
   "groq_models": [
     "llama-3.3-70b-versatile",
@@ -40,5 +42,10 @@
     "hermes3:8b",
     "llama3.2:3b"
   ],
-  "notes": "OpenRouter free models are discovered dynamically; entries here are preferred residents, not permanent model guarantees. Unknown or non-free pricing must remain blocked."
+  "notes": "Groq/Ollama Cloud model IDs may need tweak after you verify your account catalog.",
+  "discovery": {
+    "source": "https://openrouter.ai/api/v1/models",
+    "updated": 1789658443,
+    "verified_free_count": 20
+  }
 }

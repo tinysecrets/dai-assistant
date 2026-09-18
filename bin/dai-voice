@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+# dai-voice — one-shot voice round-trip through the spine.
+#
+#   ./bin/dai-voice            # record 5s, transcribe, chat, speak back
+#   ./bin/dai-voice "text"     # skip the mic: chat from text, speak back
+#   ./bin/dai-voice --listen   # record until silence, then round-trip
+#
+# Microphone: ALSA card 0 (built-in ALC671).  Speaker: ALSA card 0 analog.
+# Audio flows: arecord -> router /v1/audio/transcriptions -> chat ->
+#              router /v1/audio/speech -> aplay
+#
+# If ALSA is busy (PulseAudio/PipeWire holds the devices) this falls back to
+# the raw alsa device directly, which the voice-bridge already uses.
+
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export ROOT
+source "$ROOT/bin/lib.sh"
+
+router_url() {
+  printf 'http://%s:%s' "$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)" "$(dai_env_get DAI_ROUTER_PORT 11435)"
+}
+
+ROUTER_URL="$(router_url)"
+DURATION=5
+TEXT_INPUT=""
+LISTEN=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --listen) LISTEN=1 ;;
+    -h|--help) dai_usage; exit 0 ;;
+    *) TEXT_INPUT="$TEXT_INPUT $arg" ;;
+  esac
+done
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+WAV="$TMP/in.wav"
+OUT="$TMP/out.wav"
+
+# --- 1. Capture ---------------------------------------------------------------
+
+if [[ -n "$TEXT_INPUT" ]]; then
+  dai_info "using text input (skipping the microphone)"
+else
+  dai_info "recording ${DURATION}s from the microphone — speak now"
+  # Prefer the raw ALSA device; PipeWire can hold the card and block arecord.
+  if arecord -q -f cd -D plughw -t wav -d "$DURATION" "$WAV" 2>/dev/null; then
+    :
+  elif arecord -q -f cd -D hw:0,0 -t wav -d "$DURATION" "$WAV" 2>/dev/null; then
+    :
+  else
+    dai_die "could not record from the microphone (arecord failed)"
+  fi
+  # If the recording is silent, the built-in mic is unavailable — fall back to
+  # typed input rather than sending an empty prompt to STT.
+  if ! python3 - "$WAV" <<'PY'
+import struct, sys, wave
+w = wave.open(sys.argv[1])
+frames = w.readframes(w.getnframes())
+vals = [abs(struct.unpack('<h', frames[i:i+2])[0]) for i in range(0, len(frames)-1, 2)]
+sys.exit(0 if max(vals) > 1000 else 1)
+PY
+  then
+    dai_warn "the microphone captured silence — falling back to typed input"
+    printf 'type your message: ' >&2
+    read -r TEXT_INPUT
+    TEXT_INPUT="$TEXT_INPUT"
+  fi
+  dai_ok "captured $(python3 -c "import wave;w=wave.open('$WAV');print(f'{w.getnframes()/w.getframerate():.1f}s')" 2>/dev/null || echo '?s')"
+fi
+
+# --- 2. Transcribe (STT) ------------------------------------------------------
+
+if [[ -n "$TEXT_INPUT" ]]; then
+  PROMPT="${TEXT_INPUT# }"
+else
+  dai_info "transcribing (STT via voice-bridge/faster-whisper)"
+  PROMPT="$(curl -sS --max-time 60 -X POST "$ROUTER_URL/v1/audio/transcriptions" \
+    -F "file=@$WAV" \
+    -F model=whisper-1 \
+    -F response_format=text 2>/dev/null || true)"
+  [[ -n "$PROMPT" ]] || dai_die "STT produced no text"
+  dai_ok "heard: \"$PROMPT\""
+fi
+
+# --- 3. Chat -------------------------------------------------------------------
+
+dai_info "chatting through the router"
+RESPONSE="$(DAI_ROUTER_URL="$ROUTER_URL" python3 - "$PROMPT" <<'PY'
+import json, os, sys, urllib.request
+base = os.environ["DAI_ROUTER_URL"]
+body = {"model": "dai/auto", "messages": [{"role": "user", "content": sys.argv[1]}]}
+req = urllib.request.Request(f"{base}/v1/chat/completions",
+    data=json.dumps(body).encode(),
+    headers={"Content-Type": "application/json"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=120) as r:
+        doc = json.loads(r.read().decode())
+except urllib.error.HTTPError as e:
+    print(json.loads(e.read().decode() or "{}").get("error", {}).get("message", "chat failed"), file=sys.stderr)
+    sys.exit(1)
+print(doc["choices"][0]["message"]["content"])
+PY
+)"
+[[ -n "$RESPONSE" ]] || dai_die "chat produced no response"
+dai_ok "router replied"
+
+# --- 4. Speak (TTS) ------------------------------------------------------------
+
+dai_info "speaking the reply"
+if curl -sS --max-time 90 -X POST "$ROUTER_URL/v1/audio/speech" \
+    -H 'Content-Type: application/json' \
+    -d "$(python3 -c 'import json,sys;print(json.dumps({"input":sys.argv[1],"voice":"en_US-lessac-medium","response_format":"wav"}))' "$RESPONSE")" \
+    --output "$OUT" >/dev/null 2>&1; then
+  :
+else
+  dai_die "TTS failed"
+fi
+
+# --- 5. Play -------------------------------------------------------------------
+
+dai_info "playing the reply"
+if aplay -q "$OUT" 2>/dev/null; then
+  :
+elif paplay -q "$OUT" 2>/dev/null; then
+  :
+else
+  dai_warn "could not play audio — but the reply was generated"
+  dai_say "  $RESPONSE"
+fi
+
+dai_say ""
+dai_head "reply"
+dai_say "$RESPONSE"

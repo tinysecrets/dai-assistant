@@ -1,0 +1,10 @@
+#!/bin/bash
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+printf "\n=== D-A-I ASSISTANT ===\n\n"
+"$ROOT/bin/dai"
+
+rc=$?
+printf "\n=== D-A-I EXITED: %s ===\nPress Enter to close.\n" "$rc"
+read -r

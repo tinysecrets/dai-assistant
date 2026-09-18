@@ -1345,6 +1345,8 @@ class TestBinScriptsReferenceRealThings(unittest.TestCase):
             if not path.is_file():
                 continue
             first = read(path).splitlines()[0]
+            if "python" in first:
+                continue
             with self.subTest(path.name):
                 self.assertIn("bash", first, f"{path.name} should use a bash shebang")
 

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -u
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+MODE="${1:-status}"
+R="http://$(dai_env_get DAI_ROUTER_HOST 127.0.0.1):$(dai_env_get DAI_ROUTER_PORT 11435)"
+W="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$(dai_env_get DAI_AGENT_S_PORT 8765)"
+V="http://$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1):$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
+while :; do
+clear
+printf '\033[1;36m╭─ D-A-I // %s ─────────────────────────────╮\033[0m\n' "${MODE^^}"
+printf '\033[1;36m│\033[0m %s  \033[2mpermanent control layer\033[0m\n' "$(date '+%a %b %d  %I:%M:%S %p')"
+printf '\033[1;36m╰───────────────────────────────────────────╯\033[0m\n\n'
+case "$MODE" in
+status)
+  printf '\033[1;37mSERVICES\033[0m\n'
+  for x in "ROUTER|$R" "AGENT|$W" "VOICE|$V"; do
+    n="${x%%|*}"; u="${x#*|}"
+    if curl -sf --max-time 2 "$u/health" >/tmp/dai-pane.json 2>/dev/null; then
+      printf '  \033[1;32m● ONLINE\033[0m  %-8s ' "$n"
+      python3 -c 'import json;print(json.load(open("/tmp/dai-pane.json")).get("version","ready"))' 2>/dev/null || echo ready
+    else printf '  \033[1;31m● OFFLINE\033[0m %-8s\n' "$n"; fi
+  done
+  printf '\n  Free policy: \033[1;32mENFORCED\033[0m\n  Web GUI: http://127.0.0.1:%s\n' "$(dai_env_get DAI_DASHBOARD_PORT 8799)"
+  ;;
+models)
+  printf '\033[1;37mFREE MODEL POOL\033[0m\n\n'
+  curl -sf --max-time 3 "$R/v1/models" 2>/dev/null | python3 -c 'import json,sys
+try:
+ d=json.load(sys.stdin);ms=d.get("data",[]);print("  AVAILABLE: %d\n"%len(ms));[print("  \033[1;36m●\033[0m %-42s %s"%(m.get("id",""),m.get("dai",{}).get("origin",m.get("owned_by","")))) for m in ms]
+except:print("  router not ready")'
+  printf '\n\033[1;37mCOOLDOWNS\033[0m\n'
+  curl -sf --max-time 3 "$R/v1/status/cooldowns" 2>/dev/null | python3 -m json.tool 2>/dev/null || printf '  none\n'
+  ;;
+voice)
+  printf '\033[1;37mVOICE ENGINE\033[0m\n\n'
+  curl -sf --max-time 3 "$V/health" 2>/dev/null | python3 -c 'import json,sys
+try:
+ d=json.load(sys.stdin);[print("  %-18s %s"%(k,d.get(k))) for k in ("whisper_model","whisper_loaded","voice","voice_loaded","ffmpeg","max_workers")]
+except:print("  voice bridge unavailable")'
+  printf '\n  STT/TTS: local + offline\n  Always-listening: integration layer\n  Free routing: enforced\n'
+  ;;
+activity)
+  printf '\033[1;37mLIVE ACTIVITY\033[0m\n\n'
+  tail -n 9 "$DAI_LOG_DIR/model-router.log" 2>/dev/null | sed 's/^/  /'
+  printf '\n'
+  tail -n 9 "$DAI_LOG_DIR/agent-s-worker.log" 2>/dev/null | sed 's/^/  /'
+  ;;
+esac
+printf '\n\033[2mrefresh 5s • Ctrl-b d detaches\033[0m\n'
+sleep 5
+done

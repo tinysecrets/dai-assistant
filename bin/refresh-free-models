@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Refresh the permanent free-model catalog from OpenRouter.
+
+Rules are intentionally fail-closed:
+  * prompt/completion pricing must both be exactly zero
+  * model id must carry the provider's :free marker
+  * anything missing/ambiguous pricing is excluded from the rotation pool
+  * the catalog is replaced atomically only after a complete valid response
+  * a history file records first/last seen and free/retired transitions
+
+The catalog is data; the discovery mechanism is the permanent component.
+"""
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import time
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+CATALOG = ROOT / "config/free-models.json"
+POOL = ROOT / "config/rotation-pool.json"
+STATE = ROOT / "state/model-history.json"
+URL = os.environ.get("DAI_MODEL_CATALOG_URL", "https://openrouter.ai/api/v1/models")
+
+
+def fetch() -> dict:
+    req = urllib.request.Request(URL, headers={"Accept": "application/json", "User-Agent": "dai-assistant/model-discovery"})
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        doc = json.loads(resp.read().decode("utf-8"))
+    if not isinstance(doc, dict) or not isinstance(doc.get("data"), list):
+        raise RuntimeError("provider returned no model data")
+    return doc
+
+
+def zero(value: object) -> bool:
+    try:
+        return float(str(value)) == 0.0
+    except (TypeError, ValueError):
+        return False
+
+
+def is_free(model: object) -> bool:
+    if not isinstance(model, dict):
+        return False
+    mid = str(model.get("id") or "")
+    pricing = model.get("pricing") or {}
+    # The suffix is an additional guard. Zero pricing alone is not enough.
+    return mid.endswith(":free") and zero(pricing.get("prompt")) and zero(pricing.get("completion"))
+
+
+def score(model: dict) -> tuple[float, str]:
+    arch = model.get("architecture") or {}
+    modalities = set(arch.get("input_modalities") or [])
+    params = set(model.get("supported_parameters") or [])
+    bench = (model.get("benchmarks") or {}).get("artificial_analysis") or {}
+    tool = 12.0 if "tools" in params or "tool_choice" in params else 0.0
+    reasoning = 4.0 if model.get("reasoning") else 0.0
+    multimodal = 3.0 if "image" in modalities else 0.0
+    coding = float(bench.get("coding_index") or 0.0) / 10.0
+    agentic = float(bench.get("agentic_index") or 0.0) / 10.0
+    context = min(float(model.get("context_length") or 0), 1_000_000) / 100_000
+    return tool + reasoning + multimodal + coding + agentic + context, str(model.get("id") or "")
+
+
+def atomic_json(path: Path, value: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(value, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+
+
+def load(path: Path, default: object) -> object:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def main() -> int:
+    doc = fetch()
+    models = [m for m in doc["data"] if is_free(m)]
+    if not models:
+        raise RuntimeError("provider returned zero verified free models; refusing to replace catalog")
+
+    now = int(time.time())
+    old = load(CATALOG, {})
+    old_ids = {str(m.get("id")) for m in (old.get("models") or []) if isinstance(m, dict)} if isinstance(old, dict) else set()
+    ids = {str(m.get("id")) for m in models}
+
+    history = load(STATE, {"models": {}})
+    if not isinstance(history, dict):
+        history = {"models": {}}
+    hist = history.setdefault("models", {})
+    for mid in sorted(ids):
+        entry = hist.setdefault(mid, {"first_seen": now})
+        entry.update({"last_seen": now, "status": "free"})
+    for mid in old_ids - ids:
+        entry = hist.setdefault(mid, {"first_seen": now})
+        entry.update({"last_seen": entry.get("last_seen", now), "status": "retired_or_paid"})
+
+    catalog = {
+        "updated": now,
+        "source": URL,
+        "policy": "strict-free-only; unknown-pricing-blocked",
+        "models": sorted(models, key=score, reverse=True),
+    }
+
+    ranked = sorted(models, key=score, reverse=True)
+    general = [str(m["id"]) for m in ranked if "tools" in set(m.get("supported_parameters") or []) or "tool_choice" in set(m.get("supported_parameters") or [])][:12]
+    if not general:
+        general = [str(m["id"]) for m in ranked[:8]]
+    vision = [
+        str(m["id"])
+        for m in ranked
+        if "image" in set((m.get("architecture") or {}).get("input_modalities") or [])
+        and ("tools" in set(m.get("supported_parameters") or []) or "tool_choice" in set(m.get("supported_parameters") or []))
+    ][:8]
+
+    old_pool = load(POOL, {})
+    pool = dict(old_pool) if isinstance(old_pool, dict) else {}
+    pool.update({
+        "version": int(pool.get("version", 1)),
+        "strategy": "rotate_on_rate_limit",
+        "quality_bar": "verified_free_tool_capable",
+        "openrouter_free": general,
+        "openrouter_free_vision": vision,
+        "discovery": {"source": URL, "updated": now, "verified_free_count": len(models)},
+    })
+
+    atomic_json(CATALOG, catalog)
+    atomic_json(POOL, pool)
+    atomic_json(STATE, {"updated": now, "models": hist})
+    print(f"FREE_MODEL_DISCOVERY_OK count={len(models)} rotation={len(general)} vision={len(vision)}")
+    print(f"catalog={CATALOG}")
+    print(f"pool={POOL}")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print(f"FREE_MODEL_DISCOVERY_BLOCKED: {exc}", flush=True)
+        raise SystemExit(1)

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D-A-I Headquarters</title>
+<style>
+:root{--bg:#070b12;--panel:#101722;--line:#253248;--text:#e8eef7;--muted:#8290a7;--cyan:#58d8ff;--green:#65e6a5;--amber:#ffd166;--red:#ff6b7a;--violet:#ad91ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 15% 0,#152943,#070b12 40%);color:var(--text);font:13px system-ui,sans-serif}
+header{padding:16px 22px;border-bottom:1px solid var(--line);background:#090e16ee;backdrop-filter:blur(12px);display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:2}.logo{font-weight:900;letter-spacing:.16em}.muted{color:var(--muted)}.status{margin-left:auto}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green);margin-right:7px}
+main{max-width:1500px;margin:auto;padding:18px;display:grid;gap:14px}.hero,.grid{display:grid;gap:12px}.hero{grid-template-columns:2fr repeat(4,1fr)}.grid{grid-template-columns:1fr 1.5fr 1fr}.card{background:linear-gradient(145deg,#111925,#0b1119);border:1px solid var(--line);border-radius:15px;padding:16px;box-shadow:0 15px 35px #0005}.hero .card:first-child{padding:20px}
+.ey{color:var(--cyan);font-size:10px;font-weight:800;letter-spacing:.15em}.big{font-size:28px;font-weight:850;margin:5px 0}.label{color:var(--muted);font-size:11px}.value{font-size:20px;font-weight:800;margin-top:5px}.title{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px}.title h2{margin:0;font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:#b8c5d8}.badge,.pill{border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:10px}.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}.violet{color:var(--violet)}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;border-bottom:1px solid #25324899}th{color:var(--muted);font-size:10px;text-transform:uppercase}.model{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #25324899}.model:last-child{border:0}.name{font-weight:650;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.empty{color:var(--muted);padding:12px 0}.mono{font-family:ui-monospace,monospace}
+@media(max-width:1050px){.hero{grid-template-columns:repeat(3,1fr)}.hero .card:first-child{grid-column:span 3}.grid{grid-template-columns:1fr 1fr}}@media(max-width:700px){.hero,.grid{grid-template-columns:1fr}.hero .card:first-child{grid-column:auto}}
+</style></head><body>
+<header><span class="logo">D-A-I</span><span class="muted">HEADQUARTERS</span><span class="status"><i class="dot" id="dot"></i><b id="overall">STARTING</b> <span class="muted" id="clock"></span></span></header>
+<main>
+<section class="hero">
+<div class="card"><div class="ey">PERMANENT CONTROL LAYER</div><div class="big">D-A-I Headquarters</div><div class="muted">One front door for the whole AI ecosystem.</div></div>
+<div class="card"><div class="label">Free models</div><div class="value" id="mc">—</div><div class="label">available now</div></div>
+<div class="card"><div class="label">Router</div><div class="value" id="rs">—</div><div class="label" id="rd">—</div></div>
+<div class="card"><div class="label">Voice</div><div class="value" id="vs">—</div><div class="label" id="vd">—</div></div>
+<div class="card"><div class="label">Agent queue</div><div class="value" id="q">—</div><div class="label">pending tasks</div></div>
+</section>
+<section class="grid">
+<div class="card"><div class="title"><h2>Spine services</h2><span class="badge" id="upd">—</span></div><table><tbody id="svc"></tbody></table></div>
+<div class="card"><div class="title"><h2>Free model pool</h2><span class="badge">AUTO-ROTATED</span></div><div id="models"></div></div>
+<div class="card"><div class="title"><h2>Routing cooldowns</h2><span class="badge" id="cb">0</span></div><div id="cd"></div></div>
+</section>
+<section class="grid">
+<div class="card"><div class="title"><h2>Voice engine</h2><span class="badge">LOCAL / OFFLINE</span></div><table><tbody id="voice"></tbody></table></div>
+<div class="card"><div class="title"><h2>Agent activity</h2><span class="badge" id="tb">0</span></div><table><thead><tr><th>Task</th><th>Status</th><th>Approval</th></tr></thead><tbody id="tasks"></tbody></table></div>
+<div class="card"><div class="title"><h2>Free-only policy</h2><span class="badge ok">LOCKED</span></div><div class="label">PAID MODELS</div><div class="value bad">BLOCKED</div><br><div class="label">FREE MODELS</div><div class="value ok">AUTOMATIC</div><br><div class="label">NEW FREE MODELS</div><div class="value" style="color:var(--cyan)">DISCOVERED</div></div>
+</section>
+<footer class="muted" style="text-align:center;padding:6px 0 20px;font-size:10px">Local command center • secrets never displayed • refreshes every 3 seconds</footer>
+</main>
+<script>
+const E=x=>String(x??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const P=(ok,s)=>`<span class="pill ${ok?'ok':'bad'}">● ${E(s)}</span>`;
+function render(d){
+ const a=[['model-router',d.router],['agent-s-worker',d.worker],['voice-bridge',d.voice]],ok=a.every(x=>x[1]);
+ dot.style.background=ok?'var(--green)':'var(--red)';overall.textContent=ok?'SPINE ONLINE':'ATTENTION NEEDED';clock.textContent=new Date().toLocaleTimeString();upd.textContent='UPDATED '+clock.textContent;
+ svc.innerHTML=a.map(x=>`<tr><td>${E(x[0])}</td><td>${P(!!x[1],x[1]?'ONLINE':'OFFLINE')}</td><td class="mono">${E(x[1]?.version||'—')}</td></tr>`).join('');
+ const m=d.models||[];mc.textContent=m.length;models.innerHTML=m.length?m.map(x=>`<div class="model"><div><div class="name">${E(x.id||x.name)}</div><span class="violet">${E(x.dai?.origin||x.owned_by||'free')}</span></div><span class="pill ok">FREE</span></div>`).join(''):'<div class="empty">No models reported.</div>';
+ const r=d.router||{};rs.textContent=r.ready_for_chat?'READY':'OFFLINE';rd.textContent=`${r.candidates_available??0} candidates • ${r.cooldowns_active??0} cooling`;
+ const v=d.voice||{};vs.textContent=v.whisper_loaded||v.voice_loaded?'READY':'STANDBY';vd.textContent=`STT ${E(v.whisper_model||'—')} • TTS ${E(v.voice||'—')}`;q.textContent=d.worker?.queue_depth??0;
+ voice.innerHTML=[['STT',v.whisper_model],['STT loaded',v.whisper_loaded?'yes':'on demand'],['TTS',v.voice],['TTS loaded',v.voice_loaded?'yes':'on demand'],['Workers',v.max_workers],['Formats',(v.formats||[]).join(', ')||'wav']].map(x=>`<tr><td class="label">${E(x[0])}</td><td>${E(x[1])}</td></tr>`).join('');
+ const t=d.tasks||[];tb.textContent=t.length;tasks.innerHTML=t.length?t.slice(0,10).map(x=>`<tr><td>${E(String(x.id||'').slice(0,10))}<br><span class="muted">${E(x.instruction||'')}</span></td><td>${E(x.status||'queued')}</td><td>${x.approved?'yes':'pending'}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No active tasks.</td></tr>';
+ const c=d.cooldowns||{},k=Object.keys(c);cb.textContent=k.length;cd.innerHTML=k.length?k.map(x=>`<div class="model"><span>${E(x)}</span><span class="warn">${E(c[x])}</span></div>`).join(''):'<div class="empty">All routes clear.</div>';
+}
+async function refresh(){try{render(await (await fetch('/api/snapshot',{cache:'no-store'})).json())}catch(e){overall.textContent='DASHBOARD DISCONNECTED'}}
+refresh();setInterval(refresh,3000);
+</script></body></html>
