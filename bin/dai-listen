@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# dai-listen — push-to-talk for EVERYTHING mode
+#   dai-listen          # record 4s → STT → chat → TTS → speak
+#   dai-listen --loop   # keep listening until Ctrl+C
+# Thin wrapper over dai-voice and dai-ask
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+
+if [[ "${1:-}" == "--loop" ]]; then
+  dai_info "loop mode — Ctrl+C to stop"
+  while true; do
+    "$ROOT/bin/dai-ask" --listen || true
+    sleep 0.5
+  done
+else
+  exec "$ROOT/bin/dai-ask" --listen "$@"
+fi

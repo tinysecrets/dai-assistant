@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+# dai-ask — universal entry for EVERYTHING (except phone control)
+#   dai-ask "make a python http server on 8000"
+#   dai-ask --listen   # push-to-talk: mic → STT → router → Vellum → TTS
+#   dai-ask --code "fix the dashboard snapshot bug"
+#   dai-ask --do "open vs code in this project"
+#
+# No new middleware — uses existing spine: voice-bridge, model-router, Vellum, Agent-S
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+
+router_url() { printf 'http://%s:%s' "$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)" "$(dai_env_get DAI_ROUTER_PORT 11435)"; }
+voice_url() { printf 'http://%s:%s' "$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1)" "$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"; }
+
+MODE="chat"
+LISTEN=0
+INPUT=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --listen|-l) LISTEN=1 ;;
+    --code) MODE="code" ;;
+    --do) MODE="do" ;;
+    --speak) MODE="speak" ;;
+    -h|--help) dai_usage; exit 0 ;;
+    *) INPUT="$INPUT $arg" ;;
+  esac
+done
+INPUT="$(echo "$INPUT" | xargs)"
+
+# --- 1. Get text: either typed or via mic STT ---
+if ((LISTEN)) || [[ -z "$INPUT" && "$MODE" == "chat" ]]; then
+  if ! command -v arecord >/dev/null 2>&1; then
+    dai_warn "arecord not installed — install alsa-utils for mic input, or pass text"
+    if [[ -z "$INPUT" ]]; then dai_die "no input: pass text or use --listen with mic"; fi
+  else
+    TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
+    WAV="$TMP/in.wav"
+    dai_info "recording 4s — speak now"
+    if ! arecord -q -f S16_LE -r 16000 -d 4 "$WAV" 2>/dev/null; then
+      dai_warn "mic busy (PipeWire?) — trying plughw"
+      arecord -q -f S16_LE -r 16000 -D plughw -d 4 "$WAV" 2>/dev/null || dai_die "mic failed"
+    fi
+    STT=$(curl -s --max-time 10 -X POST "$(voice_url)/v1/audio/transcriptions" -F file=@"$WAV" -F model=tiny || true)
+    TEXT=$(echo "$STT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('text',''))" 2>/dev/null || echo "")
+    if [[ -n "$TEXT" ]]; then
+      INPUT="$TEXT"
+      dai_ok "heard: $INPUT"
+    else
+      echo "$STT" | python3 -m json.tool 2>/dev/null || echo "$STT"
+      if echo "$STT" | grep -q "stt_load_failed"; then
+        dai_warn "STT needs voice venv: python3 -m venv ~/.local/voice-venv && pip install faster-whisper piper-tts"
+      fi
+      [[ -n "$INPUT" ]] || INPUT="hello"
+    fi
+  fi
+fi
+
+[[ -n "$INPUT" ]] || dai_die "no input"
+
+# --- 2. Route by mode ---
+case "$MODE" in
+  speak)
+    exec "$ROOT/bin/dai" say "$INPUT"
+    ;;
+  do)
+    # Delegate to Agent-S via preset or direct instruction
+    if [[ -f "$ROOT/state/presets/$INPUT.txt" ]]; then
+      INSTR=$(cat "$ROOT/state/presets/$INPUT.txt")
+    else
+      INSTR="$INPUT"
+    fi
+    TOKEN=$("$ROOT/bin/issue-approval.sh" agent_s_gui_task "$INSTR" 2>/dev/null | tail -n1 || true)
+    if [[ -z "$TOKEN" ]]; then
+      dai_warn "no approval token — running dry-run first"
+      python3 "$ROOT/skills/agent-s-delegate/scripts/delegate_task.py" --instruction "$INSTR"
+    else
+      DAI_APPROVAL_TOKEN="$TOKEN" python3 "$ROOT/skills/agent-s-delegate/scripts/delegate_task.py" --instruction "$INSTR" --live
+    fi
+    ;;
+  code)
+    # English to code: chat with explicit code instruction
+    PROMPT="You are DAI english-to-code. Owner says: $INPUT. Rules: 1) Render as minimal working code block, 2) Run it locally via bash tool first, 3) Verify result, 4) No lecture unless asked. Use model-router http://127.0.0.1:11435/v1 model dai/auto."
+    "$ROOT/bin/dai" chat "$PROMPT"
+    ;;
+  chat|*)
+    # Normal chat through router (Vellum gateway if hatched uses same router URL)
+    if ! dai_http_up "$(router_url)" 2; then dai_die "router not running — dai up"; fi
+    RESPONSE=$("$ROOT/bin/dai" chat "$INPUT" 2>&1 || true)
+    echo "$RESPONSE"
+    # Speak it unless --no-speak
+    if [[ "$*" != *"--no-speak"* ]]; then
+      "$ROOT/bin/dai" say "$RESPONSE" --no-play 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print(f\"spoken: {d.get('bytes',0)} bytes → {d.get('audio','')}\")" 2>/dev/null || true
+      # Also try to play if aplay exists
+      AUDIO=$(ls -t "$ROOT/state/speech/"*.mp3 "$ROOT/state/speech/"*.wav 2>/dev/null | head -n1 || true)
+      if [[ -n "$AUDIO" && -x "$(command -v aplay || command -v mpv || true)" ]]; then
+        aplay "$AUDIO" 2>/dev/null || mpv "$AUDIO" 2>/dev/null || true
+      fi
+    fi
+    ;;
+esac

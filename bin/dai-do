@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# dai-do — run a preset or direct instruction on Agent-S :99 isolated display
+#   dai-do xterm-focus          # from state/presets/xterm-focus.txt
+#   dai-do "Open Chromium and go to example.com"
+#   dai-do --list               # list presets
+#   dai-do --dry-run "instruction"
+#
+# Uses existing spine: issue-approval.sh + delegate_task.py, no new bridge
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+
+PRESET_DIR="$ROOT/state/presets"
+DRY=0
+
+if [[ "${1:-}" == "--list" ]]; then
+  echo "Presets in $PRESET_DIR:"
+  ls -1 "$PRESET_DIR" 2>/dev/null | sed 's/\.txt$//' | while read -r p; do
+    printf "  %-20s %s\n" "$p" "$(head -n1 "$PRESET_DIR/$p.txt" 2>/dev/null)"
+  done
+  exit 0
+fi
+
+if [[ "${1:-}" == "--dry-run" ]]; then DRY=1; shift; fi
+
+INPUT="${*:-}"
+[[ -n "$INPUT" ]] || dai_die "usage: dai-do <preset|instruction> [--dry-run] or dai-do --list"
+
+# Resolve preset file or direct instruction
+if [[ -f "$PRESET_DIR/$INPUT.txt" ]]; then
+  INSTR=$(cat "$PRESET_DIR/$INPUT.txt")
+  dai_info "preset $INPUT: $INSTR"
+else
+  INSTR="$INPUT"
+fi
+
+if ((DRY)); then
+  exec python3 "$ROOT/skills/agent-s-delegate/scripts/delegate_task.py" --instruction "$INSTR"
+fi
+
+# Live path: issue token + run live
+if ! dai_http_up "http://127.0.0.1:8765" 2; then dai_die "agent-s-worker not running — dai up"; fi
+
+# Check live_capable
+HEALTH=$(curl -s http://127.0.0.1:8765/health || echo "{}")
+LIVE=$(echo "$HEALTH" | python3 -c "import json,sys; print(json.load(sys.stdin).get('live_capable',False))" 2>/dev/null || echo "False")
+if [[ "$LIVE" != "True" ]]; then
+  dai_warn "worker not live_capable yet — showing dry-run + blockers"
+  python3 "$ROOT/skills/agent-s-delegate/scripts/delegate_task.py" --instruction "$INSTR"
+  echo "$HEALTH" | python3 -m json.tool | grep -A2 live_blockers || true
+  exit 0
+fi
+
+TOKEN=$("$ROOT/bin/issue-approval.sh" agent_s_gui_task "$INSTR" 2>/dev/null | grep -v "^\[" | tail -n1 | xargs)
+if [[ -z "$TOKEN" ]]; then dai_die "could not issue approval token — check policy/approvals.json"; fi
+dai_ok "approval token issued for: $INSTR"
+
+DAI_APPROVAL_TOKEN="$TOKEN" python3 "$ROOT/skills/agent-s-delegate/scripts/delegate_task.py" --instruction "$INSTR" --live

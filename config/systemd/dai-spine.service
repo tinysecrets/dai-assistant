@@ -1,0 +1,16 @@
+[Unit]
+Description=DAI spine - model-router + agent-s-worker + voice-bridge + dashboard
+After=network.target
+
+[Service]
+Type=forking
+WorkingDirectory=%h/dai-assistant
+ExecStart=%h/dai-assistant/bin/start-spine.sh
+ExecStop=%h/dai-assistant/bin/stop-spine.sh
+Restart=on-failure
+RestartSec=5
+Environment=HOME=%h
+# Logs go to ~/dai-assistant/logs/
+
+[Install]
+WantedBy=default.target
