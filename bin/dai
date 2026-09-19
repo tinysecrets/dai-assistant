@@ -14,7 +14,7 @@
 #   dai skills      install skills into the Vellum workspace
 #   dai hatch       hatch the Vellum assistant
 #   dai models      list the models the router can serve right now
-  dai models-refresh  discover/refresh the verified free-model catalog
+#   dai models-refresh  discover/refresh the verified free-model catalog
 #   dai chat "..."  one-shot chat through the rotator
 #   dai say "..."   speak text through the voice-bridge (saves + plays audio)
 #   dai heartbeat   say (and with --speak, speak) a free-form status line;
@@ -25,6 +25,7 @@
 #   dai voice       one-shot voice round-trip: mic -> STT -> chat -> TTS -> speak
 #   dai dashboard   serve the HTML dashboard on :8799 (or $DAI_DASHBOARD_PORT)
 #   dai hq          launch the tmux split-screen command center
+#   dai unify       reconcile Vellum, skills, projects, devices and core services into the DAI frame
 #
 # Every subcommand is a thin wrapper: the underlying scripts stay usable
 # directly, and nothing here duplicates their logic.
@@ -58,9 +59,19 @@ case "$cmd" in
   keys)    exec "$ROOT/bin/import-keys.sh" "$@" ;;
   skills)  exec "$ROOT/bin/install-vellum-skill.sh" "$@" ;;
   hatch)   exec "$ROOT/bin/hatch-vellum.sh" "$@" ;;
+  unify)   exec "$ROOT/bin/dai-unify" "$@" ;;
 
   status)
-    exec "$ROOT/bin/start-spine.sh" --status
+    # Status is read-only: never call the start/restart path here.
+    printf '\n=== D-A-I STATUS ===\n'
+    for pair in "model-router:$(router_url)" "agent-s-worker:$(worker_url)" "voice-bridge:http://$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1):$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)" "dashboard:http://$(dai_env_get DAI_DASHBOARD_HOST 127.0.0.1):$(dai_env_get DAI_DASHBOARD_PORT 8799)"; do
+      name="${pair%%:*}"; url="${pair#*:}"
+      if dai_http_up "$url" 2; then dai_ok "$name up at $url"; else dai_warn "$name not running at $url"; fi
+    done
+    printf '\n'
+    if [[ -e "$ROOT/vendor/vellum-assistant" ]]; then dai_ok "Vellum frame linked: $ROOT/vendor/vellum-assistant"; else dai_warn "Vellum frame not linked"; fi
+    if [[ -x "$HOME/.bun/bin/vellum" ]]; then dai_ok "Vellum CLI present"; else dai_warn "Vellum CLI unavailable"; fi
+    dai_say ""
     ;;
 
   logs)

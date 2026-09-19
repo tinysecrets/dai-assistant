@@ -190,6 +190,7 @@ Or `make help` for the same operations as make targets.
 | `docs/OPERATIONS.md` | Runbook: start, diagnose, approve, recover |
 | `docs/CONVERSATION.md` | The exact path to conversing (chat, Vellum, voice) and to a live GUI task |
 | `docs/ARCHITECTURE.md` | Why the spine is shaped this way |
+| `docs/INTEGRATIONS.md` | How DAI frames Vellum, projects, models and devices |
 | `KEYS.md` | Getting provider keys |
 | `SECURITY.md` | Threat model, design rules, known limitations |
 | `CONTRIBUTING.md` | Ground rules and how the tests are organised |

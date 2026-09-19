@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+REG="$ROOT/config/integrations.json"
+printf '\n=== D-A-I UNIFY / FRAME RECONCILIATION ===\n'
+[[ -f "$REG" ]] || dai_die "missing integration registry: $REG"
+python3 -m json.tool "$REG" >/dev/null
+dai_ok "integration registry valid"
+mkdir -p "$ROOT/vendor"
+VELLUM_SRC=""
+for p in "$HOME/workspace/repos/inspect/vellum-assistant" "$HOME/vellum-assistant" "$HOME/vellum-wiring-source"; do
+  if [[ -f "$p/package.json" && -f "$p/setup.sh" ]]; then VELLUM_SRC="$p"; break; fi
+done
+if [[ -n "$VELLUM_SRC" ]]; then
+  if [[ -e "$ROOT/vendor/vellum-assistant" || -L "$ROOT/vendor/vellum-assistant" ]]; then
+    current="$(readlink -f "$ROOT/vendor/vellum-assistant" 2>/dev/null || true)"
+    [[ "$current" == "$(readlink -f "$VELLUM_SRC")" ]] || {
+      rm -rf "$ROOT/vendor/vellum-assistant"
+      ln -s "$VELLUM_SRC" "$ROOT/vendor/vellum-assistant"
+    }
+  else
+    ln -s "$VELLUM_SRC" "$ROOT/vendor/vellum-assistant"
+  fi
+  dai_ok "Vellum source linked into the frame: $VELLUM_SRC"
+else
+  dai_warn "Vellum source not found; registry remains ready"
+fi
+# Continue frame reconciliation
+if [[ ! -x "$HOME/.bun/bin/bun" && -x "$ROOT/vendor/vellum-assistant/setup.sh" ]]; then
+  dai_warn "Bun runtime missing; Vellum setup cannot be completed yet"
+else
+  if [[ -x "$HOME/.bun/bin/vellum" ]]; then
+    dai_ok "Vellum CLI present"
+  else
+    dai_warn "Vellum CLI not installed"
+  fi
+fi
+
+if [[ -x "$ROOT/bin/install-vellum-skill.sh" && -e "$ROOT/vendor/vellum-assistant/assistant" ]]; then
+  "$ROOT/bin/install-vellum-skill.sh" --dest "$ROOT/vendor/vellum-assistant/assistant/skills" >/tmp/dai-unify-skills.log 2>&1 || dai_warn "Vellum skills could not be copied"
+  dai_ok "DAI core skills reconciled into Vellum"
+fi
+
+for f in "$ROOT/config/rotation-pool.json" "$ROOT/policy/sovereign.json"; do
+  python3 -m json.tool "$f" >/dev/null || dai_die "invalid JSON: $f"
+done
+dai_ok "routing and sovereign policy validated"
+
+if curl -sf --max-time 3 "http://127.0.0.1:11435/health" >/dev/null; then dai_ok "router is ready"; else dai_warn "router is down — run dai up"; fi
+if curl -sf --max-time 3 "http://127.0.0.1:8765/health" >/dev/null; then dai_ok "Agent-S worker is ready"; else dai_warn "Agent-S worker is down — run dai up"; fi
+if curl -sf --max-time 3 "http://127.0.0.1:8799/health" >/dev/null; then dai_ok "command center is ready"; else dai_warn "dashboard is down — run dai up"; fi
+if curl -sf --max-time 3 "http://127.0.0.1:8766/health" >/dev/null; then dai_ok "voice bridge is reachable"; else dai_warn "voice bridge is down"; fi
+
+printf '\n=== FRAME CONTENTS ===\n'
+python3 - "$REG" <<'PY'
+import json, sys
+d=json.load(open(sys.argv[1], encoding="utf-8"))
+for x in d["capabilities"]: print("  ✓", x["name"], "→", x["source"])
+print("  ✓ registered projects:", len(d["projects"]))
+print("  ✓ registered devices:", len(d["devices"]))
+print("  ✓ excluded by policy:", len(d["excluded"]))
+PY
+printf '\n'
+dai_ok "DAI is reconciled as the central frame"
