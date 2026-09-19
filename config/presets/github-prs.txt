@@ -1,0 +1,1 @@
+Open Chromium and go to github.com/tinysecrets/dai-assistant, then click on Pull Requests

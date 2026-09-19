@@ -1,0 +1,1 @@
+Open VS Code in the current project directory

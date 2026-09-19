@@ -1,0 +1,1 @@
+Click inside the visible terminal, type ls -la, press Enter, then stop

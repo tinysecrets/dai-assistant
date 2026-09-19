@@ -65,12 +65,12 @@ case "$MODE" in
     exec "$ROOT/bin/dai" say "$INPUT"
     ;;
   do)
-    # Delegate to Agent-S via preset or direct instruction
-    if [[ -f "$ROOT/state/presets/$INPUT.txt" ]]; then
-      INSTR=$(cat "$ROOT/state/presets/$INPUT.txt")
-    else
-      INSTR="$INPUT"
-    fi
+    # Delegate to Agent-S via preset or direct instruction (config/presets + state/presets)
+    INSTR=""
+    for d in "$ROOT/config/presets" "$ROOT/state/presets"; do
+      if [[ -f "$d/$INPUT.txt" ]]; then INSTR=$(cat "$d/$INPUT.txt"); break; fi
+    done
+    [[ -n "$INSTR" ]] || INSTR="$INPUT"
     TOKEN=$("$ROOT/bin/issue-approval.sh" agent_s_gui_task "$INSTR" 2>/dev/null | tail -n1 || true)
     if [[ -z "$TOKEN" ]]; then
       dai_warn "no approval token — running dry-run first"

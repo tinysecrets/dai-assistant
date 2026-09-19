@@ -1,0 +1,1 @@
+Click the close button of the currently focused window

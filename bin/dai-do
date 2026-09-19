@@ -10,14 +10,29 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/bin/lib.sh"
 
-PRESET_DIR="$ROOT/state/presets"
+PRESET_DIRS=("$ROOT/config/presets" "$ROOT/state/presets")
 DRY=0
 
-if [[ "${1:-}" == "--list" ]]; then
-  echo "Presets in $PRESET_DIR:"
-  ls -1 "$PRESET_DIR" 2>/dev/null | sed 's/\.txt$//' | while read -r p; do
-    printf "  %-20s %s\n" "$p" "$(head -n1 "$PRESET_DIR/$p.txt" 2>/dev/null)"
+resolve_preset() {
+  local name="$1"
+  for d in "${PRESET_DIRS[@]}"; do
+    if [[ -f "$d/$name.txt" ]]; then
+      echo "$d/$name.txt"
+      return 0
+    fi
   done
+  return 1
+}
+
+if [[ "${1:-}" == "--list" ]]; then
+  echo "Presets (config/presets + state/presets, state overrides):"
+  for d in "${PRESET_DIRS[@]}"; do
+    [[ -d "$d" ]] || continue
+    ls -1 "$d" 2>/dev/null | sed 's/\.txt$//' | while read -r p; do
+      f=$(resolve_preset "$p")
+      printf "  %-20s %s [%s]\n" "$p" "$(head -n1 "$f" 2>/dev/null)" "$(basename $(dirname "$f"))"
+    done
+  done | sort -u
   exit 0
 fi
 
@@ -27,9 +42,9 @@ INPUT="${*:-}"
 [[ -n "$INPUT" ]] || dai_die "usage: dai-do <preset|instruction> [--dry-run] or dai-do --list"
 
 # Resolve preset file or direct instruction
-if [[ -f "$PRESET_DIR/$INPUT.txt" ]]; then
-  INSTR=$(cat "$PRESET_DIR/$INPUT.txt")
-  dai_info "preset $INPUT: $INSTR"
+if PRESET_FILE=$(resolve_preset "$INPUT"); then
+  INSTR=$(cat "$PRESET_FILE")
+  dai_info "preset $INPUT: $INSTR [$PRESET_FILE]"
 else
   INSTR="$INPUT"
 fi
