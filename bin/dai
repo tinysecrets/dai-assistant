@@ -62,7 +62,6 @@ case "$cmd" in
   unify)   exec "$ROOT/bin/dai-unify" "$@" ;;
 
   status)
-    # Status is read-only: never call the start/restart path here.
     printf '\n=== D-A-I STATUS ===\n'
     for pair in "model-router:$(router_url)" "agent-s-worker:$(worker_url)" "voice-bridge:http://$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1):$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)" "dashboard:http://$(dai_env_get DAI_DASHBOARD_HOST 127.0.0.1):$(dai_env_get DAI_DASHBOARD_PORT 8799)"; do
       name="${pair%%:*}"; url="${pair#*:}"
@@ -71,12 +70,32 @@ case "$cmd" in
     printf '\n'
     if [[ -e "$ROOT/vendor/vellum-assistant" ]]; then dai_ok "Vellum frame linked: $ROOT/vendor/vellum-assistant"; else dai_warn "Vellum frame not linked"; fi
     if [[ -x "$HOME/.bun/bin/vellum" ]]; then dai_ok "Vellum CLI present"; else dai_warn "Vellum CLI unavailable"; fi
+    printf '\n'
+    if command -v tailscale >/dev/null 2>&1; then
+      if tailscale status >/dev/null 2>&1; then dai_ok "tailscale connected"; else dai_info "tailscale installed, not connected"; fi
+    else
+      dai_info "tailscale not installed (remote_access via Tailscale unavailable)"
+    fi
+    if command -v ssh >/dev/null 2>&1; then dai_ok "ssh available"; else dai_info "ssh not available"; fi
+    if command -v deskflow >/dev/null 2>&1 || command -v deskflow-client >/dev/null 2>&1 || command -v barrier >/dev/null 2>&1; then
+      dai_ok "deskflow/barrier present"
+    else
+      dai_info "deskflow/barrier not installed (keyboard_mouse unavailable)"
+    fi
+    if command -v adb >/dev/null 2>&1; then dai_ok "adb present"; else dai_info "adb not installed (android_control unavailable)"; fi
+    if command -v scrcpy >/dev/null 2>&1; then dai_ok "scrcpy present"; else dai_info "scrcpy not installed"; fi
+    if curl -sf --max-time 2 http://127.0.0.1:6333/ >/dev/null 2>&1; then dai_ok "qdrant reachable at :6333"; else dai_info "qdrant not running (knowledge_memory uses Vellum native)"; fi
+    if curl -sf --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then dai_ok "ollama local reachable"; else dai_info "ollama local not running"; fi
+    if [[ -f "$ROOT/config/integrations.json" ]]; then
+      devs="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d.get("devices",[])))' "$ROOT/config/integrations.json" 2>/dev/null || echo "?")"
+      dai_info "registered devices in integrations.json: $devs"
+    fi
     dai_say ""
     ;;
 
   logs)
     lines="${1:-40}"
-    for name in model-router agent-s-worker xvfb voice-bridge; do
+    for name in model-router agent-s-worker xvfb voice-bridge dai-dashboard; do
       log="$DAI_LOG_DIR/$name.log"
       [[ -f "$log" ]] || continue
       dai_head "== $name (last $lines lines of ${log#"$ROOT"/}) =="
@@ -132,7 +151,6 @@ for model in doc.get("data", []):
   chat)
     require_router
     prompt="${*:-Say hi}"
-    # Assigned then exported: `export X="$(cmd)"` masks the command's status.
     DAI_ROUTER_URL="$(router_url)"
     export DAI_ROUTER_URL
     python3 - "$prompt" <<'PY'
@@ -192,8 +210,6 @@ PY
       python3 "$ROOT/services/$svc/server.py" --version 2>/dev/null || echo "(unavailable)"
     done
     printf '%-18s ' "lib/dai"
-    # PYTHONPATH rather than shell-quoting $ROOT into the Python source: the
-    # nested quoting needed to do that is exactly what SC2027 warns about.
     PYTHONPATH="$ROOT" python3 -c 'import lib.dai; print(lib.dai.__version__)'
     printf '%-18s ' "python"
     python3 -V 2>&1

@@ -27,8 +27,8 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;
 </section>
 <section class="grid">
 <div class="card"><div class="title"><h2>Voice engine</h2><span class="badge">LOCAL / OFFLINE</span></div><table><tbody id="voice"></tbody></table></div>
-<div class="card"><div class="title"><h2>Agent activity</h2><span class="badge" id="tb">0</span></div><table><thead><tr><th>Task</th><th>Status</th><th>Approval</th></tr></thead><tbody id="tasks"></tbody></table></div>
-<div class="card"><div class="title"><h2>Free-only policy</h2><span class="badge ok">LOCKED</span></div><div class="label">PAID MODELS</div><div class="value bad">BLOCKED</div><br><div class="label">FREE MODELS</div><div class="value ok">AUTOMATIC</div><br><div class="label">NEW FREE MODELS</div><div class="value" style="color:var(--cyan)">DISCOVERED</div></div>
+<div class="card"><div class="title"><h2>Agent activity</h2><span class="badge" id="tb">0</span></div><table><thead><tr><th>Task</th><th>Status</th><th>Mode</th></tr></thead><tbody id="tasks"></tbody></table></div>
+<div class="card"><div class="title"><h2>Free-only policy</h2><span class="badge ok">LOCKED</span></div><div class="label">PAID MODELS</div><div class="value bad">BLOCKED</div><br><div class="label">FREE MODELS</div><div class="value ok">AUTOMATIC</div><br><div class="label">NEW FREE MODELS</div><div class="value" style="color:var(--cyan)\">DISCOVERED</div></div>
 </section>
 <footer class="muted" style="text-align:center;padding:6px 0 20px;font-size:10px">Local command center • secrets never displayed • refreshes every 3 seconds</footer>
 </main>
@@ -41,9 +41,14 @@ function render(d){
  svc.innerHTML=a.map(x=>`<tr><td>${E(x[0])}</td><td>${P(!!x[1],x[1]?'ONLINE':'OFFLINE')}</td><td class="mono">${E(x[1]?.version||'—')}</td></tr>`).join('');
  const m=d.models||[];mc.textContent=m.length;models.innerHTML=m.length?m.map(x=>`<div class="model"><div><div class="name">${E(x.id||x.name)}</div><span class="violet">${E(x.dai?.origin||x.owned_by||'free')}</span></div><span class="pill ok">FREE</span></div>`).join(''):'<div class="empty">No models reported.</div>';
  const r=d.router||{};rs.textContent=r.ready_for_chat?'READY':'OFFLINE';rd.textContent=`${r.candidates_available??0} candidates • ${r.cooldowns_active??0} cooling`;
- const v=d.voice||{};vs.textContent=v.whisper_loaded||v.voice_loaded?'READY':'STANDBY';vd.textContent=`STT ${E(v.whisper_model||'—')} • TTS ${E(v.voice||'—')}`;q.textContent=d.worker?.queue_depth??0;
+ const v=d.voice||{};vs.textContent=v.whisper_loaded||v.voice_loaded?'READY':'STANDBY';vd.textContent=`STT ${E(v.whisper_model||'—')} • TTS ${E(v.voice||'—')}`;
+ const w=d.worker||{}; const qMeta=d.tasks_meta||{}; q.textContent=qMeta.queue_depth??w.queue_depth??0;
  voice.innerHTML=[['STT',v.whisper_model],['STT loaded',v.whisper_loaded?'yes':'on demand'],['TTS',v.voice],['TTS loaded',v.voice_loaded?'yes':'on demand'],['Workers',v.max_workers],['Formats',(v.formats||[]).join(', ')||'wav']].map(x=>`<tr><td class="label">${E(x[0])}</td><td>${E(x[1])}</td></tr>`).join('');
- const t=d.tasks||[];tb.textContent=t.length;tasks.innerHTML=t.length?t.slice(0,10).map(x=>`<tr><td>${E(String(x.id||'').slice(0,10))}<br><span class="muted">${E(x.instruction||'')}</span></td><td>${E(x.status||'queued')}</td><td>${x.approved?'yes':'pending'}</td></tr>`).join(''):'<tr><td colspan="3" class="empty">No active tasks.</td></tr>';
+ const t=d.tasks||[];tb.textContent=t.length;
+ tasks.innerHTML=t.length?t.slice(0,12).map(x=>{
+   const mode = x.dry_run===true ? 'dry-run' : (x.dry_run===false ? 'live' : (x.approved ? 'approved' : 'pending'));
+   return `<tr><td>${E(String(x.id||'').slice(0,10))}<br><span class="muted">${E((x.instruction||'').slice(0,80))}</span></td><td>${E(x.status||'queued')}</td><td>${E(mode)}</td></tr>`;
+ }).join(''):'<tr><td colspan="3" class="empty">No active tasks.</td></tr>';
  const c=d.cooldowns||{},k=Object.keys(c);cb.textContent=k.length;cd.innerHTML=k.length?k.map(x=>`<div class="model"><span>${E(x)}</span><span class="warn">${E(c[x])}</span></div>`).join(''):'<div class="empty">All routes clear.</div>';
 }
 async function refresh(){try{render(await (await fetch('/api/snapshot',{cache:'no-store'})).json())}catch(e){overall.textContent='DASHBOARD DISCONNECTED'}}

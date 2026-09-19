@@ -61,16 +61,36 @@ def snapshot() -> Dict[str, Any]:
     worker = _get_json(f"http://{w_host}:{w_port}/health")
     voice = _get_json(f"http://{v_host}:{v_port}/health")
     models = _get_json(f"http://{r_host}:{r_port}/v1/models")
-    tasks = _get_json(f"http://{w_host}:{w_port}/v1/tasks")
-    cooldowns = _get_json(f"http://{r_host}:{r_port}/v1/status/cooldowns")
+    tasks_raw = _get_json(f"http://{w_host}:{w_port}/v1/tasks")
+    cooldowns_raw = _get_json(f"http://{r_host}:{r_port}/v1/status/cooldowns")
+    models_data = (models or {}).get("data") if isinstance(models, dict) else None
+    tasks_data = None
+    tasks_meta = None
+    if isinstance(tasks_raw, dict):
+        tasks_data = tasks_raw.get("data")
+        tasks_meta = {
+            "count": tasks_raw.get("count"),
+            "queue_depth": tasks_raw.get("queue_depth"),
+            "running": tasks_raw.get("running"),
+        }
+    elif isinstance(tasks_raw, list):
+        tasks_data = tasks_raw
+    cooldowns_data = None
+    if isinstance(cooldowns_raw, dict):
+        inner = cooldowns_raw.get("cooldowns")
+        cooldowns_data = inner if isinstance(inner, dict) else cooldowns_raw
+    else:
+        cooldowns_data = cooldowns_raw
     return {
         "ts": time.time(),
         "router": router,
         "worker": worker,
         "voice": voice,
-        "models": (models or {}).get("data") if isinstance(models, dict) else None,
-        "tasks": tasks,
-        "cooldowns": cooldowns,
+        "models": models_data,
+        "tasks": tasks_data,
+        "tasks_meta": tasks_meta,
+        "cooldowns": cooldowns_data,
+        "cooldowns_meta": cooldowns_raw,
     }
 
 

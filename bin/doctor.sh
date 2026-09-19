@@ -344,13 +344,78 @@ else
   dai_warn "vellum CLI not found — run vendor/vellum-assistant/setup.sh, then ./bin/hatch-vellum.sh"
 fi
 
-for rel in skills/agent-s-delegate skills/english-to-code; do
+for rel in skills/agent-s-delegate skills/english-to-code skills/dai-voice; do
   if [[ -f "$ROOT/$rel/SKILL.md" ]]; then
     dai_ok "skill $(basename "$rel")"
   else
     dai_fail "skill $rel/SKILL.md missing"
   fi
 done
+
+dai_say ""
+dai_head "Device layer (integrations.json)"
+
+if [[ -f "$ROOT/config/integrations.json" ]]; then
+  dai_ok "config/integrations.json present"
+  cap_count="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("capabilities",[])))' "$ROOT/config/integrations.json" 2>/dev/null || echo "?")"
+  dai_info "capabilities registered: $cap_count"
+else
+  dai_warn "config/integrations.json missing — frame registry unavailable"
+fi
+
+if dai_have tailscale; then
+  if tailscale status >/dev/null 2>&1; then
+    dai_ok "tailscale available and connected"
+  else
+    dai_info "tailscale installed but not connected (tailscale status failed)"
+  fi
+else
+  dai_info "tailscale not installed — remote_access capability unavailable (device layer)"
+fi
+
+if dai_have ssh; then
+  dai_ok "ssh available ($(ssh -V 2>&1 | head -n1))"
+else
+  dai_info "ssh not installed — remote_access via SSH unavailable"
+fi
+
+if dai_have deskflow || dai_have deskflow-client || dai_have barrier || dai_have barrierc; then
+  dai_ok "deskflow/barrier available — keyboard_mouse capability present"
+else
+  dai_info "deskflow/barrier not installed — keyboard_mouse sharing unavailable (device layer)"
+fi
+
+if dai_have adb; then
+  dai_ok "adb available — android_control capability present"
+  if [[ -f "$ROOT/config/integrations.json" ]]; then
+    devs="$(python3 -c 'import json; d=json.load(open(sys.argv[1])); print(", ".join(x.get("name","") for x in d.get("devices",[])))' "$ROOT/config/integrations.json" 2>/dev/null || true)"
+    [[ -n "$devs" ]] && dai_info "registered devices: $devs"
+  fi
+else
+  dai_info "adb not installed — android_control via ADB unavailable"
+fi
+
+if dai_have scrcpy; then
+  dai_ok "scrcpy available — phone screen mirroring present"
+else
+  dai_info "scrcpy not installed — phone mirroring unavailable (device layer)"
+fi
+
+if curl -sf --max-time 2 http://127.0.0.1:6333/ >/dev/null 2>&1; then
+  dai_ok "qdrant reachable at :6333 — knowledge_memory substrate up"
+elif dai_have qdrant; then
+  dai_info "qdrant binary present but not answering at :6333"
+else
+  dai_info "qdrant not running — knowledge_memory uses Vellum native when available"
+fi
+
+DASH_PORT="$(dai_env_get DAI_DASHBOARD_PORT 8799)"
+DASH_URL="http://127.0.0.1:$DASH_PORT"
+if dai_http_up "$DASH_URL" 2; then
+  dai_ok "dashboard up at $DASH_URL"
+else
+  dai_info "dashboard not running — dai dashboard or dai up"
+fi
 
 # --- summary ---------------------------------------------------------------
 

@@ -42,24 +42,113 @@ if [[ -x "$ROOT/bin/install-vellum-skill.sh" && -e "$ROOT/vendor/vellum-assistan
   dai_ok "DAI core skills reconciled into Vellum"
 fi
 
-for f in "$ROOT/config/rotation-pool.json" "$ROOT/policy/sovereign.json"; do
+for f in "$ROOT/config/rotation-pool.json" "$ROOT/policy/sovereign.json" "$ROOT/config/free-models.json"; do
   python3 -m json.tool "$f" >/dev/null || dai_die "invalid JSON: $f"
 done
 dai_ok "routing and sovereign policy validated"
 
-if curl -sf --max-time 3 "http://127.0.0.1:11435/health" >/dev/null; then dai_ok "router is ready"; else dai_warn "router is down — run dai up"; fi
-if curl -sf --max-time 3 "http://127.0.0.1:8765/health" >/dev/null; then dai_ok "Agent-S worker is ready"; else dai_warn "Agent-S worker is down — run dai up"; fi
-if curl -sf --max-time 3 "http://127.0.0.1:8799/health" >/dev/null; then dai_ok "command center is ready"; else dai_warn "dashboard is down — run dai up"; fi
-if curl -sf --max-time 3 "http://127.0.0.1:8766/health" >/dev/null; then dai_ok "voice bridge is reachable"; else dai_warn "voice bridge is down"; fi
+# Core services — verify real capability, not just config
+if curl -sf --max-time 3 "http://127.0.0.1:11435/health" >/dev/null; then
+  dai_ok "router is ready"
+  # Verify rotation planning actually works
+  if curl -sf --max-time 3 "http://127.0.0.1:11435/v1/status/plan" >/dev/null; then
+    dai_ok "model routing plan endpoint works"
+  fi
+else
+  dai_warn "router is down — run dai up"
+fi
+
+if curl -sf --max-time 3 "http://127.0.0.1:8765/health" >/dev/null; then
+  dai_ok "Agent-S worker is ready"
+  # Verify dry-run works end-to-end
+  if curl -sf --max-time 3 -X POST http://127.0.0.1:8765/v1/tasks -H 'Content-Type: application/json' -d '{"instruction":"unify check dry run","dry_run":true}' >/dev/null; then
+    dai_ok "Agent-S dry-run task admission works"
+  fi
+else
+  dai_warn "Agent-S worker is down — run dai up"
+fi
+
+if curl -sf --max-time 3 "http://127.0.0.1:8799/health" >/dev/null; then
+  dai_ok "command center is ready"
+  if curl -sf --max-time 3 "http://127.0.0.1:8799/api/snapshot" >/dev/null; then
+    dai_ok "dashboard snapshot API works"
+  fi
+else
+  dai_warn "dashboard is down — run dai up"
+fi
+
+if curl -sf --max-time 3 "http://127.0.0.1:8766/health" >/dev/null; then
+  dai_ok "voice bridge is reachable"
+else
+  dai_warn "voice bridge is down"
+fi
+
+# Device layer — verify real presence, not just registry claim
+printf '\n=== DEVICE LAYER ===\n'
+if command -v tailscale >/dev/null 2>&1; then
+  if tailscale status >/dev/null 2>&1; then
+    dai_ok "tailscale connected"
+  else
+    dai_info "tailscale installed, not connected"
+  fi
+else
+  dai_info "tailscale not installed — remote_access via Tailscale unavailable here"
+fi
+
+if command -v ssh >/dev/null 2>&1; then
+  dai_ok "ssh available"
+else
+  dai_info "ssh not available"
+fi
+
+if command -v deskflow >/dev/null 2>&1 || command -v deskflow-client >/dev/null 2>&1 || command -v barrier >/dev/null 2>&1; then
+  dai_ok "deskflow/barrier present — keyboard_mouse sharing available"
+else
+  dai_info "deskflow/barrier not installed — keyboard_mouse unavailable here"
+fi
+
+if command -v adb >/dev/null 2>&1; then
+  dai_ok "adb present — android_control available"
+else
+  dai_info "adb not installed — android_control unavailable here"
+fi
+
+if command -v scrcpy >/dev/null 2>&1; then
+  dai_ok "scrcpy present — phone mirroring available"
+else
+  dai_info "scrcpy not installed — phone mirroring unavailable here"
+fi
+
+if curl -sf --max-time 2 http://127.0.0.1:6333/ >/dev/null 2>&1; then
+  dai_ok "qdrant reachable at :6333 — knowledge_memory up"
+else
+  dai_info "qdrant not running — Vellum memory uses native when available"
+fi
+
+if curl -sf --max-time 2 http://127.0.0.1:11434/api/tags >/dev/null 2>&1; then
+  dai_ok "ollama local reachable — fallback inference available"
+else
+  dai_info "ollama local not running — fallback unavailable (fine with cloud keys)"
+fi
+
+# Voice input check — arecord/mic
+if command -v arecord >/dev/null 2>&1; then
+  dai_ok "arecord present — voice input (STT) hardware path available"
+else
+  dai_info "arecord not installed — voice input via mic unavailable"
+fi
 
 printf '\n=== FRAME CONTENTS ===\n'
 python3 - "$REG" <<'PY'
 import json, sys
 d=json.load(open(sys.argv[1], encoding="utf-8"))
-for x in d["capabilities"]: print("  ✓", x["name"], "→", x["source"])
-print("  ✓ registered projects:", len(d["projects"]))
-print("  ✓ registered devices:", len(d["devices"]))
-print("  ✓ excluded by policy:", len(d["excluded"]))
+for x in d["capabilities"]:
+    print(f"  ✓ {x['name']} → {x['source']} [{x.get('mode','')}]")
+print(f"  ✓ registered projects: {len(d['projects'])}")
+print(f"  ✓ registered devices: {len(d['devices'])}")
+for dev in d["devices"]:
+    print(f"    - {dev['name']} ({dev['transport']}) {dev.get('address','') or dev.get('serial','')}")
+print(f"  ✓ excluded by policy: {len(d['excluded'])}")
 PY
 printf '\n'
 dai_ok "DAI is reconciled as the central frame"

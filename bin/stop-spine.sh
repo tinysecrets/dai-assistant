@@ -52,14 +52,30 @@ done
 # this repo's absolute path so it cannot match an unrelated process.  The
 # interpreter varies (voice-bridge may run from its venv), so match the script.
 for name in model-router agent-s-worker voice-bridge dai-dashboard; do
-  if pgrep -f "$ROOT/services/$name/server.py" >/dev/null 2>&1 || \
-     pgrep -f "$ROOT/bin/$name.py" >/dev/null 2>&1; then
+  matched=0
+  if pgrep -f "$ROOT/services/$name/server.py" >/dev/null 2>&1; then
     pkill -f "$ROOT/services/$name/server.py" 2>/dev/null || true
+    matched=1
+  fi
+  if pgrep -f "$ROOT/lib/dai/dashboard.py" >/dev/null 2>&1 && [[ "$name" == "dai-dashboard" ]]; then
+    pkill -f "$ROOT/lib/dai/dashboard.py" 2>/dev/null || true
+    matched=1
+  fi
+  if pgrep -f "$ROOT/bin/$name.py" >/dev/null 2>&1; then
     pkill -f "$ROOT/bin/$name.py" 2>/dev/null || true
+    matched=1
+  fi
+  if ((matched)); then
     dai_warn "stopped an orphaned $name (no pid file)"
     stopped=1
   fi
 done
+# Extra: dashboard may be running as lib/dai/dashboard.py without pid
+if pgrep -f "$ROOT/lib/dai/dashboard.py" >/dev/null 2>&1; then
+  pkill -f "$ROOT/lib/dai/dashboard.py" 2>/dev/null || true
+  dai_warn "stopped an orphaned dai-dashboard (lib/dai/dashboard.py)"
+  stopped=1
+fi
 
 if ((KEEP_XVFB)); then
   dai_info "leaving the agent display running (--keep-xvfb)"
