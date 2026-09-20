@@ -27,6 +27,22 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;
 <div class="card" style="grid-column:1 / -1"><div class="title"><h2>Omni Assistant</h2><span class="badge" id="omni-status">—</span></div>
 <div id="omni-details" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));margin-top:10px;">
 </div>
+<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
+  <button id="heal-btn" style="padding:8px 16px;background:var(--green);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">HEAL NOW</button>
+  <div style="display:flex;gap:8px;flex:1;min-width:300px;">
+    <select id="delegate-role" style="padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px">
+      <option value="code">code</option>
+      <option value="research">research</option>
+      <option value="debug">debug</option>
+      <option value="plan">plan</option>
+      <option value="review">review</option>
+    </select>
+    <input id="delegate-goal" type="text" placeholder="Goal for the agent..." style="flex:1;padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px">
+    <input id="delegate-context" type="text" placeholder="Optional context..." style="padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px;width:200px">
+    <button id="delegate-btn" style="padding:8px 16px;background:var(--violet);color:#fff;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">DELEGATE</button>
+  </div>
+</div>
+<div id="delegate-result" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
 </div>
 </section>
 <section class="grid">
@@ -135,4 +151,65 @@ async function sendChat(){
 }
 sendBtn.addEventListener('click',sendChat);
 input.addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+
+// Omni controls
+const healBtn=document.getElementById('heal-btn');
+const delegateBtn=document.getElementById('delegate-btn');
+const delegateRole=document.getElementById('delegate-role');
+const delegateGoal=document.getElementById('delegate-goal');
+const delegateContext=document.getElementById('delegate-context');
+const delegateResult=document.getElementById('delegate-result');
+
+healBtn.addEventListener('click',async()=>{
+  healBtn.disabled=true;
+  healBtn.textContent='HEALING...';
+  try{
+    const r=await fetch('/api/omni/heal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json();
+    if(d.ok){
+      delegateResult.textContent='Heal complete: '+(d.output||'ok');
+      delegateResult.style.color='var(--green)';
+    }else{
+      delegateResult.textContent='Heal failed: '+(d.error||'unknown');
+      delegateResult.style.color='var(--red)';
+    }
+  }catch(e){
+    delegateResult.textContent='Heal error: '+e.message;
+    delegateResult.style.color='var(--red)';
+  }
+  healBtn.disabled=false;
+  healBtn.textContent='HEAL NOW';
+});
+
+delegateBtn.addEventListener('click',async()=>{
+  const role=delegateRole.value;
+  const goal=delegateGoal.value.trim();
+  const context=delegateContext.value.trim();
+  if(!goal){
+    delegateResult.textContent='Goal required';
+    delegateResult.style.color='var(--amber)';
+    return;
+  }
+  delegateBtn.disabled=true;
+  delegateBtn.textContent='DELEGATING...';
+  delegateResult.textContent='';
+  try{
+    const r=await fetch('/api/omni/delegate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role,goal,context})});
+    const d=await r.json();
+    if(d.ok){
+      delegateResult.textContent='Delegated '+role+' agent: '+d.agent_id;
+      delegateResult.style.color='var(--violet)';
+      delegateGoal.value='';
+      delegateContext.value='';
+    }else{
+      delegateResult.textContent='Delegate failed: '+(d.error||'unknown');
+      delegateResult.style.color='var(--red)';
+    }
+  }catch(e){
+    delegateResult.textContent='Delegate error: '+e.message;
+    delegateResult.style.color='var(--red)';
+  }
+  delegateBtn.disabled=false;
+  delegateBtn.textContent='DELEGATE';
+});
 </script></body></html>

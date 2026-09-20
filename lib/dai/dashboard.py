@@ -298,6 +298,40 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
             return
+        elif self.path == "/api/omni/heal":
+            # Trigger a one-shot healing pass
+            try:
+                import subprocess
+                result = subprocess.run(
+                    [sys.executable, str(ROOT / "bin" / "omni-daemon.py"), "--once"],
+                    capture_output=True, text=True, timeout=60, cwd=str(ROOT)
+                )
+                output = result.stdout + result.stderr
+                self._send(200, json.dumps({"ok": result.returncode == 0, "output": output.strip()}).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            return
+        elif self.path == "/api/omni/delegate":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except Exception:
+                self._send(400, b'{"ok":false,"error":"invalid json"}', "application/json")
+                return
+            role = body.get("role", "code")
+            goal = body.get("goal", "")
+            context = body.get("context", "")
+            if not goal:
+                self._send(400, b'{"ok":false,"error":"goal required"}', "application/json")
+                return
+            try:
+                from lib.dai.omni.delegation import create_delegator
+                delegator = create_delegator(ROOT)
+                agent_id = delegator.delegate(role, goal, context)
+                self._send(200, json.dumps({"ok": True, "agent_id": agent_id}).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            return
         self._send(404, b'{"error":"not found"}', "application/json")
 
 
