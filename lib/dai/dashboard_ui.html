@@ -23,12 +23,21 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;
 <section class="grid">
 <div class="card"><div class="title"><h2>Spine services</h2><span class="badge" id="upd">—</span></div><table><tbody id="svc"></tbody></table></div>
 <div class="card"><div class="title"><h2>Free model pool</h2><span class="badge">AUTO-ROTATED</span></div><div id="models"></div></div>
-<div class="card"><div class="title"><h2>Routing cooldowns</h2><span class="badge" id="cb">0</span></div><div id="cd"></div></div>
+  <div class="card"><div class="title"><h2>Routing cooldowns</h2><span class="badge" id="cb">0</span></div><div id="cd"></div></div>
 </section>
 <section class="grid">
-<div class="card"><div class="title"><h2>Voice engine</h2><span class="badge">LOCAL / OFFLINE</span></div><table><tbody id="voice"></tbody></table></div>
-<div class="card"><div class="title"><h2>Agent activity</h2><span class="badge" id="tb">0</span></div><table><thead><tr><th>Task</th><th>Status</th><th>Mode</th></tr></thead><tbody id="tasks"></tbody></table></div>
-<div class="card"><div class="title"><h2>Free-only policy</h2><span class="badge ok">LOCKED</span></div><div class="label">PAID MODELS</div><div class="value bad">BLOCKED</div><br><div class="label">FREE MODELS</div><div class="value ok">AUTOMATIC</div><br><div class="label">NEW FREE MODELS</div><div class="value" style="color:var(--cyan)\">DISCOVERED</div></div>
+  <div class="card" style="grid-column:1 / -1"><div class="title"><h2>Chat</h2><span class="badge" id="chat-status">IDLE</span></div>
+    <div id="chat-messages" style="max-height:300px;overflow-y:auto;margin-bottom:10px;font-size:12px;line-height:1.6"></div>
+    <div style="display:flex;gap:8px"><input id="chat-input" type="text" placeholder="Send a message to the AI..." style="flex:1;padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px">
+    <button id="chat-send" style="padding:8px 16px;background:var(--cyan);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">SEND</button>
+  </div></div>
+</section>
+<section class="grid">
+  <div class="card" style="grid-column:1 / -1"><div class="title"><h2>Chat</h2><span class="badge" id="chat-status">IDLE</span></div>
+    <div id="chat-messages" style="max-height:320px;overflow-y:auto;margin-bottom:10px;font-size:12px;line-height:1.6"></div>
+    <div style="display:flex;gap:8px"><input id="chat-input" type="text" placeholder="Send a message to the AI..." style="flex:1;padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px">
+    <button id="chat-send" style="padding:8px 16px;background:var(--cyan);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">SEND</button>
+  </div></div>
 </section>
 <footer class="muted" style="text-align:center;padding:6px 0 20px;font-size:10px">Local command center • secrets never displayed • refreshes every 3 seconds</footer>
 </main>
@@ -53,4 +62,57 @@ function render(d){
 }
 async function refresh(){try{render(await (await fetch('/api/snapshot',{cache:'no-store'})).json())}catch(e){overall.textContent='DASHBOARD DISCONNECTED'}}
 refresh();setInterval(refresh,3000);
+
+// Chat panel
+const msgs=document.getElementById('chat-messages');
+const input=document.getElementById('chat-input');
+const sendBtn=document.getElementById('chat-send');
+const statusEl=document.getElementById('chat-status');
+
+function addMsg(role,text){
+  const d=document.createElement('div');
+  d.style.padding='6px 10px';
+  d.style.marginBottom='6px';
+  d.style.borderRadius='8px';
+  d.style.maxWidth='85%';
+  if(role==='user'){
+    d.style.background='#1a3a5c';
+    d.style.color='#e8eef7';
+    d.style.marginLeft='auto';
+    d.style.textAlign='right';
+  } else {
+    d.style.background='#152943';
+    d.style.color='#d8e0ec';
+  }
+  d.textContent=text;
+  msgs.appendChild(d);
+  msgs.scrollTop=msgs.scrollHeight;
+}
+
+async function sendChat(){
+  const text=input.value.trim();
+  if(!text) return;
+  addMsg('user',text);
+  input.value='';
+  statusEl.textContent='THINKING...';
+  sendBtn.disabled=true;
+  try{
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text})});
+    const d=await r.json();
+    if(d.ok){
+      addMsg('assistant',d.reply||'(no reply)');
+      statusEl.textContent='IDLE';
+    } else {
+      addMsg('assistant','Error: '+(d.error||'unknown'));
+      statusEl.textContent='ERROR';
+    }
+  }catch(e){
+    addMsg('assistant','Connection error');
+    statusEl.textContent='ERROR';
+  }
+  sendBtn.disabled=false;
+}
+
+sendBtn.addEventListener('click',sendChat);
+input.addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
 </script></body></html>

@@ -210,6 +210,39 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, b'{"error":"not found"}', "application/json")
 
+    def do_POST(self) -> None:
+        if self.path == "/api/chat":
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except Exception:
+                self._send(400, b'{"ok":false,"error":"invalid json"}', "application/json")
+                return
+            message = body.get("message", "")
+            if not message:
+                self._send(400, b'{"ok":false,"error":"message required"}', "application/json")
+                return
+            r_host, r_port = service_urls()["router"]
+            try:
+                req = urllib.request.Request(
+                    f"http://{r_host}:{r_port}/v1/chat/completions",
+                    data=json.dumps({
+                        "model": "dai/auto",
+                        "messages": [{"role": "user", "content": message}],
+                        "stream": False,
+                    }).encode(),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=120) as resp:
+                    data = json.loads(resp.read().decode("utf-8", errors="replace"))
+                reply = (data.get("choices") or [{}])[0].get("message", {}).get("content", "")
+                self._send(200, json.dumps({"ok": True, "reply": reply}).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            return
+        self._send(404, b'{"error":"not found"}', "application/json")
+
 
 def main() -> None:
     load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
