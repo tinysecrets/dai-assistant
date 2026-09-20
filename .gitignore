@@ -6,6 +6,8 @@ policy/approvals.json
 logs/
 state/
 *.pid
+storage/
+.qdrant-initialized
 
 # Generated / staged artifacts
 skills-ready/
