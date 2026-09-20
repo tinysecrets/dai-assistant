@@ -29,6 +29,7 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;
 </div>
 <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">
   <button id="heal-btn" style="padding:8px 16px;background:var(--green);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">HEAL NOW</button>
+  <button id="synthesize-btn" style="padding:8px 16px;background:var(--amber);color:#000;border:none;border-radius:8px;cursor:pointer;font-weight:700;font-size:12px">SYNTHESIZE SKILL</button>
   <div style="display:flex;gap:8px;flex:1;min-width:300px;">
     <select id="delegate-role" style="padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px">
       <option value="code">code</option>
@@ -43,9 +44,21 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 5px;
   </div>
 </div>
 <div id="delegate-result" style="margin-top:8px;font-size:11px;color:var(--muted)"></div>
+<div style="margin-top:12px;">
+  <input id="synthesize-desc" type="text" placeholder="Describe the fix pattern to synthesize into a skill..." style="flex:1;padding:8px 12px;background:#0a0f18;border:1px solid var(--line);border-radius:8px;color:var(--text);font:inherit;font-size:12px;width:100%;max-width:600px">
+</div>
 </div>
 </section>
 <section class="grid">
+<div class="card" style="grid-column:1 / -1"><div class="title"><h2>Running Agents</h2><span class="badge" id="agent-count">0</span></div>
+<table id="agents-table"><thead><tr><th>ID</th><th>Role</th><th>Goal</th><th>Status</th><th>PID</th><th>Created</th></tr></thead><tbody></tbody></table>
+</div>
+</section>
+<section class="grid">
+<div class="card"><div class="title"><h2>Memory</h2><span class="badge" id="mem-badge">—</span></div>
+<div id="memory-details" style="display:grid;gap:12px;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));margin-top:10px;">
+</div>
+</div>
 <div class="card"><div class="title"><h2>Spine services</h2><span class="badge" id="upd">—</span></div>
 <table><tbody id="svc"></tbody></table></div>
 <div class="card"><div class="title"><h2>Free model pool</h2><span class="badge">AUTO-ROTATED</span></div>
@@ -100,7 +113,7 @@ function render(d){
    <div><span class="label">State dir</span><span class="value mono">${omni.state_dir||'—'}</span></div>
  `;
 }
-async function refresh(){try{render(await (await fetch('/api/snapshot',{cache:'no-store'})).json())}catch(e){overall.textContent='DASHBOARD DISCONNECTED'}}
+async function refresh(){try{render(await (await fetch('/api/snapshot',{cache:'no-store'})).json()); await fetchOmniExtras()}catch(e){overall.textContent='DASHBOARD DISCONNECTED'}}
 refresh();setInterval(refresh,3000);
 // Chat panel
 const msgs=document.getElementById('chat-messages');
@@ -159,6 +172,8 @@ const delegateRole=document.getElementById('delegate-role');
 const delegateGoal=document.getElementById('delegate-goal');
 const delegateContext=document.getElementById('delegate-context');
 const delegateResult=document.getElementById('delegate-result');
+const synthesizeBtn=document.getElementById('synthesize-btn');
+const synthesizeDesc=document.getElementById('synthesize-desc');
 
 healBtn.addEventListener('click',async()=>{
   healBtn.disabled=true;
@@ -212,4 +227,94 @@ delegateBtn.addEventListener('click',async()=>{
   delegateBtn.disabled=false;
   delegateBtn.textContent='DELEGATE';
 });
+
+synthesizeBtn.addEventListener('click',async()=>{
+  const desc=synthesizeDesc.value.trim();
+  if(!desc){
+    delegateResult.textContent='Description required for synthesis';
+    delegateResult.style.color='var(--amber)';
+    return;
+  }
+  synthesizeBtn.disabled=true;
+  synthesizeBtn.textContent='SYNTHESIZING...';
+  delegateResult.textContent='';
+  try{
+    const r=await fetch('/api/omni/synthesize',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({description: desc})});
+    const d=await r.json();
+    if(d.ok){
+      delegateResult.textContent='Skill synthesized: '+d.skill_path;
+      delegateResult.style.color='var(--green)';
+      synthesizeDesc.value='';
+    }else{
+      delegateResult.textContent='Synthesis failed: '+(d.error||'unknown');
+      delegateResult.style.color='var(--red)';
+    }
+  }catch(e){
+    delegateResult.textContent='Synthesis error: '+e.message;
+    delegateResult.style.color='var(--red)';
+  }
+  synthesizeBtn.disabled=false;
+  synthesizeBtn.textContent='SYNTHESIZE SKILL';
+});
+
+// Fetch agents and memory on each refresh
+async function fetchOmniExtras(){
+  try{
+    // Agents
+    const agentsResp = await fetch('/api/omni/agents');
+    const agentsData = await agentsResp.json();
+    if(agentsData.ok){
+      renderAgents(agentsData.agents);
+    }
+    // Memory
+    const memResp = await fetch('/api/omni/memory');
+    const memData = await memResp.json();
+    if(memData.ok){
+      renderMemory(memData);
+    }
+  }catch(e){
+    // Silent fail for extras
+  }
+}
+
+function renderAgents(agents){
+  const tbody = document.querySelector('#agents-table tbody');
+  const countBadge = document.getElementById('agent-count');
+  const agentList = agents || {};
+  countBadge.textContent = Object.keys(agentList).length;
+  countBadge.className = Object.keys(agentList).length > 0 ? 'badge ok' : 'badge';
+
+  if(Object.keys(agentList).length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" class="empty">No agents running</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = Object.values(agentList).map(a => `
+    <tr>
+      <td>${E(a.id?.slice(0,12)||'')}</td>
+      <td><span class="pill ${a.role==='code'?'violet':a.role==='research'?'ok':a.role==='debug'?'warn':a.role==='plan'?'cyan':'amber'}">${E(a.role)}</span></td>
+      <td>${E((a.goal||'').slice(0,60))}${a.goal && a.goal.length>60?'...':''}</td>
+      <td><span class="pill ${a.status==='running'?'ok':a.status==='completed'?'ok':a.status==='failed'?'bad':a.status==='cancelled'?'warn':'warn'}">${E(a.status)}</span></td>
+      <td class="mono">${E(a.pid||'—')}</td>
+      <td class="mono">${a.created_at ? new Date(a.created_at*1000).toLocaleTimeString() : '—'}</td>
+    </tr>
+  `).join('');
+}
+
+function renderMemory(mem){
+  const badge = document.getElementById('mem-badge');
+  const details = document.getElementById('memory-details');
+  const total = (mem.episodic_events||0) + (mem.semantic_facts||0) + (mem.procedural_skills||0);
+  badge.textContent = total > 0 ? `${total} entries` : 'empty';
+  badge.className = total > 0 ? 'badge ok' : 'badge';
+  details.innerHTML = `
+    <div><span class="label">Episodic events</span><span class="value">${mem.episodic_events||0}</span></div>
+    <div><span class="label">Semantic facts</span><span class="value">${mem.semantic_facts||0}</span></div>
+    <div><span class="label">Procedural skills</span><span class="value">${mem.procedural_skills||0}</span></div>
+    <div><span class="label">Vector embeddings</span><span class="value">${mem.vector_embeddings||0}</span></div>
+    <div><span class="label">State dir size</span><span class="value">${(mem.state_dir_size_mb||0).toFixed(2)} MB</span></div>
+  `;
+}
+
+// Call fetchOmniExtras in render function
 </script></body></html>

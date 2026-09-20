@@ -70,17 +70,17 @@ def get_omni_status(dai_root: str) -> dict[str, Any]:
                     last_heal = lines[-1].strip()
         except Exception:
             last_heal = ""
-    # Delegation count
+    # Delegation - load full agent list
     agents_file = state_dir / "agents.json"
-    delegation_count = 0
+    agents = {}
     if agents_file.exists():
         try:
             with open(agents_file) as f:
                 data = json.load(f)
                 if isinstance(data, dict):
-                    delegation_count = len(data)
+                    agents = data
         except Exception:
-            delegation_count = 0
+            agents = {}
     # Memory usage approx
     mem_size = 0
     if state_dir.exists():
@@ -94,7 +94,8 @@ def get_omni_status(dai_root: str) -> dict[str, Any]:
         "running": running,
         "pid": pid,
         "healing_last": last_heal,
-        "delegation_count": delegation_count,
+        "delegation_count": len(agents),
+        "agents": agents,
         "memory_size_bytes": mem_size,
         "state_dir": str(state_dir)
     }
@@ -329,6 +330,48 @@ class Handler(BaseHTTPRequestHandler):
                 delegator = create_delegator(ROOT)
                 agent_id = delegator.delegate(role, goal, context)
                 self._send(200, json.dumps({"ok": True, "agent_id": agent_id}).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            return
+        elif self.path == "/api/omni/agents":
+            pass  # listed for routing clarity; handled below by memory/synthesize branches
+        elif self.path == "/api/omni/synthesize":
+            # Trigger skill synthesis
+            length = int(self.headers.get("Content-Length", 0))
+            try:
+                body = json.loads(self.rfile.read(length) or b"{}")
+            except Exception:
+                self._send(400, b'{"ok":false,"error":"invalid json"}', "application/json")
+                return
+            description = body.get("description", "")
+            if not description:
+                self._send(400, b'{"ok":false,"error":"description required"}', "application/json")
+                return
+            try:
+                from lib.dai.omni.synthesis import create_synthesizer
+                synthesizer = create_synthesizer(ROOT)
+                skill_path = synthesizer.synthesize(description)
+                self._send(200, json.dumps({"ok": True, "skill_path": str(skill_path)}).encode(), "application/json")
+            except ValueError as e:
+                self._send(400, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            except Exception as e:
+                self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
+            return
+        elif self.path == "/api/omni/memory":
+            # Return memory status
+            try:
+                from lib.dai.omni.memory import OmniMemory
+                memory = OmniMemory(ROOT)
+                # Use stats() method which exists
+                stats = memory.stats()
+                self._send(200, json.dumps({
+                    "ok": True,
+                    "episodic_events": stats.get("episodic_events", 0),
+                    "semantic_facts": stats.get("semantic_facts", 0),
+                    "procedural_skills": stats.get("procedural_skills", 0),
+                    "vector_embeddings": stats.get("vector_embeddings", 0),
+                    "state_dir_size_mb": stats.get("state_dir_size_mb", 0)
+                }).encode(), "application/json")
             except Exception as e:
                 self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
             return
