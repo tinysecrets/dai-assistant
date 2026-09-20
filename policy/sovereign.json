@@ -109,5 +109,24 @@
     "deft",
     "agent-vibes",
     ".config/genie"
-  ]
+  ],
+  "omni": {
+    "enabled": true,
+    "memory_dir": "state/omni",
+    "healing_interval_seconds": 60,
+    "max_concurrent_fixes": 2,
+    "auto_synthesize_skills": true,
+    "synthesize_after_occurrences": 3,
+    "delegation": {
+      "max_parallel": 4,
+      "default_timeout": 1800,
+      "use_opencode": true
+    },
+    "notes": [
+      "dai-omni provides continuous self-healing, persistent memory, and unbounded delegation",
+      "Memory stores: episodic (events), semantic (facts), procedural (how-to), vector (embeddings)",
+      "Healing runs every interval; dry-run by default; approval-gated for sudo/install/git-push",
+      "Skill synthesis auto-generates skills from repeated manual patterns (3+ occurrences)"
+    ]
+  }
 }

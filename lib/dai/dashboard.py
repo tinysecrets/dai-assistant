@@ -43,6 +43,62 @@ def service_urls() -> dict[str, tuple[str, int]]:
     }
 
 
+def get_omni_status(dai_root: str) -> dict[str, Any]:
+    """Get status of omni daemon."""
+    from pathlib import Path
+    state_dir = Path(dai_root) / "state" / "omni"
+    logs_dir = Path(dai_root) / "logs"
+    pid_file = state_dir / "daemon.pid"
+    running = False
+    pid = None
+    if pid_file.exists():
+        try:
+            pid = int(pid_file.read_text().strip())
+            os.kill(pid, 0)  # Check if process exists
+            running = True
+        except Exception:
+            running = False
+            pid = None
+    # Healing log last line
+    healing_log = logs_dir / "healing.log"
+    last_heal = ""
+    if healing_log.exists():
+        try:
+            with open(healing_log) as f:
+                lines = f.readlines()
+                if lines:
+                    last_heal = lines[-1].strip()
+        except Exception:
+            last_heal = ""
+    # Delegation count
+    agents_file = state_dir / "agents.json"
+    delegation_count = 0
+    if agents_file.exists():
+        try:
+            with open(agents_file) as f:
+                data = json.load(f)
+                if isinstance(data, dict):
+                    delegation_count = len(data)
+        except Exception:
+            delegation_count = 0
+    # Memory usage approx
+    mem_size = 0
+    if state_dir.exists():
+        for f in state_dir.rglob("*"):
+            if f.is_file():
+                try:
+                    mem_size += f.stat().st_size
+                except Exception:
+                    pass
+    return {
+        "running": running,
+        "pid": pid,
+        "healing_last": last_heal,
+        "delegation_count": delegation_count,
+        "memory_size_bytes": mem_size,
+        "state_dir": str(state_dir)
+    }
+
 def _get_json(url: str, timeout: float = 3.0) -> Optional[Any]:
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -81,6 +137,7 @@ def snapshot() -> Dict[str, Any]:
         cooldowns_data = inner if isinstance(inner, dict) else cooldowns_raw
     else:
         cooldowns_data = cooldowns_raw
+    omni = get_omni_status(str(ROOT))
     return {
         "ts": time.time(),
         "router": router,
@@ -91,8 +148,8 @@ def snapshot() -> Dict[str, Any]:
         "tasks_meta": tasks_meta,
         "cooldowns": cooldowns_data,
         "cooldowns_meta": cooldowns_raw,
+        "omni": omni,
     }
-
 
 class DashboardState:
     """Latest snapshot, refreshed by a background thread."""

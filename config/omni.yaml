@@ -1,0 +1,40 @@
+# Example configuration for dai-omni
+# Copy this to $DAI_ROOT/config/omni.yaml and edit as needed
+
+memory:
+  # Maximum size of episodic log in MB before rotation
+  max_episodic_mb: 500
+  # Maximum number of semantic facts to keep
+  max_semantic_entries: 10000
+  # Dimensionality of vector embeddings
+  vector_dim: 384
+  # Embedding model to use for semantic search
+  embedding_model: "sentence-transformers/all-MiniLM-L6-v2"
+
+healing:
+  # Interval between healing passes in seconds
+  interval_seconds: 60
+  # Maximum number of concurrent fixes to attempt
+  max_concurrent_fixes: 2
+  # Automatically restart services when unhealthy
+  auto_restart_services: true
+  # Number of occurrences of a fix before synthesizing a skill
+  synthesize_skills_after: 3
+
+agents:
+  # Maximum number of parallel sub-agents
+  max_parallel: 4
+  # Default timeout for sub-agent tasks in seconds
+  default_timeout: 1800
+  # Use OpenCode for code agents
+  use_opencode: true
+  # Use Claude Code for code agents (mutually exclusive with use_opencode)
+  use_claude_code: false
+
+persistence:
+  # How often to backup memory in hours
+  backup_interval_hours: 6
+  # Directory to store backups
+  backup_dir: "~/dai-backups/omni"
+  # Compress backups older than this many days
+  compress_after_days: 7
