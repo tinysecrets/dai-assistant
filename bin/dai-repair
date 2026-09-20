@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -u
+ROOT="$HOME/dai-assistant"
+log="$HOME/.local/state/dai/repair.log"
+mkdir -p "$(dirname "$log")"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+run(){ printf '\n>>> %s\n' "$*" | tee -a "$log"; "$@" 2>&1 | tee -a "$log"; return ${PIPESTATUS[0]}; }
+fixsvc(){ local s="$1"; systemctl --user daemon-reload >/dev/null 2>&1 || systemctl --user --machine="$(id -un)@.host" daemon-reload >/dev/null 2>&1 || true; systemctl --user enable "$s" >/dev/null 2>&1 || systemctl --user --machine="$(id -un)@.host" enable "$s" >/dev/null 2>&1 || true; systemctl --user restart "$s" >/dev/null 2>&1 || systemctl --user --machine="$(id -un)@.host" restart "$s" >/dev/null 2>&1 || true; }
+printf 'D-A-I Repair Center\n===================\n' | tee "$log"
+fixsvc audiosource-g8.service
+fixsvc g8-mic-router.service
+SRC=android-87f1610
+if pactl list short sources 2>/dev/null | awk '{print $2}' | grep -qx "$SRC"; then
+  pactl set-source-mute "$SRC" false 2>/dev/null || true
+  pactl set-default-source "$SRC" 2>/dev/null || true
+  timeout 2s parec --device="$SRC" --raw >/tmp/dai-mic-test.raw 2>/dev/null || true
+  bytes=$(wc -c </tmp/dai-mic-test.raw 2>/dev/null || echo 0)
+  printf 'LG G8 mic: READY (%s capture bytes)\n' "$bytes" | tee -a "$log"
+  rm -f /tmp/dai-mic-test.raw
+else
+  printf 'LG G8 mic: source not present; restart/retry did not restore it.\n' | tee -a "$log"
+fi
+VOICE_TEST=/tmp/dai-voice-test.wav
+if curl -sf --max-time 120 -X POST http://127.0.0.1:8766/v1/audio/speech -H 'Content-Type: application/json' --data '{"input":"D-A-I voice repair test","response_format":"wav"}' -o "$VOICE_TEST"; then
+  if file "$VOICE_TEST" | grep -q 'WAVE audio'; then
+    printf 'Voice TTS: READY\n' | tee -a "$log"
+    TRANSCRIBE="$(curl -sf --max-time 180 -X POST http://127.0.0.1:8766/v1/audio/transcriptions -F file=@"$VOICE_TEST" -F model=tiny -F language=en || true)"
+    if printf '%s' "$TRANSCRIBE" | grep -qi 'voice repair test'; then
+      printf 'Voice STT: READY\n' | tee -a "$log"
+    else
+      printf 'Voice STT: installed but verification did not match; see voice-bridge log.\n' | tee -a "$log"
+    fi
+  fi
+else
+  printf 'Voice TTS: verification failed; see voice-bridge log.\n' | tee -a "$log"
+fi
+rm -f "$VOICE_TEST"
+run adb devices -l || true
+run systemctl --user --machine="$(id -un)@.host" --no-pager --full status audiosource-g8.service g8-mic-router.service --lines=0 || true
+if [[ -x "$ROOT/bin/doctor.sh" ]]; then run "$ROOT/bin/doctor.sh" --quiet || true; fi
+printf '\nRepair pass complete. Log: %s\n' "$log" | tee -a "$log"
+printf '\nPress Enter to close...\n'; read -r

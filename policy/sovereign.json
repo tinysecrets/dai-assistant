@@ -46,7 +46,7 @@
       "password_dumps",
       "browser_cookies"
     ],
-    "free_cloud_only": true
+    "free_cloud_only": false
   },
   "agent_s": {
     "enabled": true,

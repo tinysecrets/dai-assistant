@@ -617,7 +617,7 @@
       "hugging_face_id": "google/gemma-4-26B-A4B-it",
       "name": "Google: Gemma 4 26B A4B  (free)",
       "created": 1775227989,
-      "description": "Gemma 4 26B A4B IT is an instruction-tuned Mixture-of-Experts (MoE) model from Google DeepMind. Despite 25.2B total parameters, only 3.8B activate per token during inference — delivering near-31B quality at...",
+      "description": "Gemma 4 26B A4B IT is an instruction-tuned Mixture-of-Experts (MoE) model from Google DeepMind. Despite 25.2B total parameters, only 3.8B activate per token during inference \u2014 delivering near-31B quality at...",
       "context_length": 262144,
       "architecture": {
         "modality": "text+image+video->text",
@@ -735,7 +735,7 @@
       "hugging_face_id": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
       "name": "NVIDIA: Nemotron 3 Nano Omni (free)",
       "created": 1777393095,
-      "description": "NVIDIA Nemotron™ 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
+      "description": "NVIDIA Nemotron\u2122 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
       "context_length": 256000,
       "architecture": {
         "modality": "text+image+audio+video->text",
@@ -1541,5 +1541,9 @@
         "default_enabled": true
       }
     }
+  ],
+  "ollama_local_models": [
+    "llama3.2:3b",
+    "hermes3:8b"
   ]
 }

@@ -131,7 +131,11 @@ fi
 # (optional runtime deps that are absent), so nothing has to be re-classified
 # here by matching substrings.
 for svc in model-router agent-s-worker voice-bridge; do
-  out="$(python3 "$ROOT/services/$svc/server.py" --check 2>&1)" || true
+  CHECK_PY="python3"
+  if [[ "$svc" == "voice-bridge" && -x "$HOME/.local/voice-venv/bin/python" ]]; then
+    CHECK_PY="$HOME/.local/voice-venv/bin/python"
+  fi
+  out="$("$CHECK_PY" "$ROOT/services/$svc/server.py" --check 2>&1)" || true
   report="$(printf '%s' "$out" | python3 -c '
 import json, sys
 try:
@@ -240,8 +244,10 @@ check_service() {
       piper="$(printf '%s' "$body" | dai_json_get voice_loaded)"
       ffmpeg="$(printf '%s' "$body" | dai_json_get ffmpeg)"
       dai_info "whisper=${whisper:-?} piper=${piper:-?} ffmpeg=${ffmpeg:-?}"
-      if [[ "$whisper" != "true" || "$piper" != "true" ]]; then
-        dai_warn "voice-bridge up but models not loaded — it needs ~/.local/voice-venv (faster-whisper, piper)"
+      if [[ "$whisper" == "true" && "$piper" == "true" ]]; then
+        dai_ok "voice models currently loaded"
+      else
+        dai_info "voice models are installed and lazy-load on first use (whisper=${whisper:-?} piper=${piper:-?})"
       fi
     else
       live="$(printf '%s' "$body" | dai_json_get live_capable)"

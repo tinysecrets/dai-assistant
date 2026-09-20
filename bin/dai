@@ -33,6 +33,7 @@
 #   dai version     print component versions
 #   dai dashboard   serve the HTML dashboard on :8799 (or $DAI_DASHBOARD_PORT)
 #   dai hq          launch the tmux split-screen command center
+#   dai repair      one-shot repair of common audio, D-A-I service, ADB, and device failures
 #   dai unify       reconcile Vellum, skills, projects, devices and core services into the DAI frame
 #
 # Every subcommand is a thin wrapper: the underlying scripts stay usable
@@ -67,6 +68,7 @@ case "$cmd" in
   keys)    exec "$ROOT/bin/import-keys.sh" "$@" ;;
   skills)  exec "$ROOT/bin/install-vellum-skill.sh" "$@" ;;
   hatch)   exec "$ROOT/bin/hatch-vellum.sh" "$@" ;;
+  repair)  exec "$ROOT/bin/dai-repair" "$@" ;;
   unify)   exec "$ROOT/bin/dai-unify" "$@" ;;
 
   status)
