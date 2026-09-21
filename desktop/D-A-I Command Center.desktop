@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=D-A-I Command Center
+Comment=Launch the D-A-I spine and open its headquarters
+Exec=/home/justin/dai-assistant/bin/dai-hq-launch
+Icon=applications-system
+Terminal=true
+Categories=Utility;

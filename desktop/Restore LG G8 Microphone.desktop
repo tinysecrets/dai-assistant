@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Restore LG G8 Microphone
+Comment=Reconnect the LG G8 microphone and make it the default input
+Exec=/home/justin/.local/bin/dai-repair
+Icon=audio-input-microphone
+Terminal=true
+Categories=AudioVideo;Audio;

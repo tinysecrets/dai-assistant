@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=D-A-I Repair Center
+Comment=One-click repair for microphone, D-A-I services, ADB and recovery
+Exec=/home/justin/.local/bin/dai-repair
+Icon=system-run
+Terminal=true
+Categories=Utility;System;
