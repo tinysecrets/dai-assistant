@@ -10,43 +10,173 @@
     "vellum": "vendor/vellum-assistant"
   },
   "capabilities": [
-    {"name":"personal_assistant","source":"vellum-assistant","mode":"primary"},
-    {"name":"free_model_rotation","source":"model-router","mode":"core"},
-    {"name":"gui_computer_use","source":"Agent-S","mode":"approval_gated"},
-    {"name":"voice_stt_tts","source":"voice-bridge","mode":"local"},
-    {"name":"command_center","source":"dai-headquarters","mode":"local"},
-    {"name":"local_models","source":"Ollama","mode":"fallback"},
-    {"name":"remote_access","source":"Tailscale+SSH","mode":"device_layer"},
-    {"name":"keyboard_mouse","source":"Deskflow","mode":"device_layer"},
-    {"name":"android_control","source":"ADB+scrcpy","mode":"device_layer"},
-    {"name":"knowledge_memory","source":"Vellum+Qdrant","mode":"memory_layer"},
-    {"name":"scheduled_heartbeat","source":"dai heartbeat","mode":"autonomous"},
-    {"name":"project_orchestration","source":"dai-unify","mode":"registry"}
+    {
+      "name": "personal_assistant",
+      "source": "vellum-assistant",
+      "mode": "primary"
+    },
+    {
+      "name": "free_model_rotation",
+      "source": "model-router",
+      "mode": "core"
+    },
+    {
+      "name": "gui_computer_use",
+      "source": "Agent-S",
+      "mode": "approval_gated"
+    },
+    {
+      "name": "voice_stt_tts",
+      "source": "voice-bridge",
+      "mode": "local"
+    },
+    {
+      "name": "command_center",
+      "source": "dai-headquarters",
+      "mode": "local"
+    },
+    {
+      "name": "local_models",
+      "source": "Ollama",
+      "mode": "fallback"
+    },
+    {
+      "name": "remote_access",
+      "source": "Tailscale+SSH",
+      "mode": "device_layer"
+    },
+    {
+      "name": "keyboard_mouse",
+      "source": "Deskflow",
+      "mode": "device_layer"
+    },
+    {
+      "name": "android_control",
+      "source": "ADB+scrcpy",
+      "mode": "device_layer"
+    },
+    {
+      "name": "knowledge_memory",
+      "source": "Vellum+Qdrant",
+      "mode": "memory_layer"
+    },
+    {
+      "name": "scheduled_heartbeat",
+      "source": "dai heartbeat",
+      "mode": "autonomous"
+    },
+    {
+      "name": "project_orchestration",
+      "source": "dai-unify",
+      "mode": "registry"
+    }
   ],
   "projects": [
-    {"name":"bigagi","path":"~/bigagi","role":"agent_platform"},
-    {"name":"Agent-S","path":"~/Agent-S","role":"computer_use"},
-    {"name":"agent-team","path":"~/agent-team","role":"multi_agent"},
-    {"name":"agent-vibes","path":"~/agent-vibes","role":"agent_tooling"},
-    {"name":"Ai_Station","path":"~/Ai_Station","role":"ai_workspace"},
-    {"name":"bytebot","path":"~/bytebot","role":"computer_automation_reference"},
-    {"name":"CamoPocket","path":"~/CamoPocket","role":"mobile_interface"},
-    {"name":"Genie-1.5","path":"~/Genie-1.5","role":"assistant_reference"},
-    {"name":"genie-sidekick","path":"~/genie-sidekick","role":"assistant_tools"},
-    {"name":"real_Genie","path":"~/real_Genie","role":"assistant_backend"},
-    {"name":"hermes","path":"~/hermes","role":"assistant_reference"},
-    {"name":"nova-sovereign","path":"~/nova-sovereign","role":"agent_reference"},
-    {"name":"realwah-lah.com","path":"~/workspace/realwah-lah.com","role":"product_backend"},
-    {"name":"OpenClaw","path":"~/.openclaw","role":"external_agent_runtime"}
+    {
+      "name": "bigagi",
+      "path": "~/workspace/projects/experiments/bigagi",
+      "role": "agent_platform"
+    },
+    {
+      "name": "Agent-S",
+      "path": "~/workspace/repos/inspect/Agent-S",
+      "role": "computer_use"
+    },
+    {
+      "name": "agent-team",
+      "path": "~/workspace/projects/active/agent-team",
+      "role": "multi_agent"
+    },
+    {
+      "name": "agent-vibes",
+      "path": "~/workspace/projects/active/agent-vibes",
+      "role": "agent_tooling"
+    },
+    {
+      "name": "Ai_Station",
+      "path": "~/workspace/projects/experiments/Ai_Station",
+      "role": "ai_workspace"
+    },
+    {
+      "name": "bytebot",
+      "path": "~/workspace/projects/active/bytebot",
+      "role": "computer_automation_reference"
+    },
+    {
+      "name": "CamoPocket",
+      "path": "~/workspace/projects/active/CamoPocket",
+      "role": "mobile_interface"
+    },
+    {
+      "name": "Genie-1.5",
+      "path": "~/workspace/projects/active/Genie-1.5",
+      "role": "assistant_reference"
+    },
+    {
+      "name": "genie-sidekick",
+      "path": "~/workspace/projects/active/genie-sidekick",
+      "role": "assistant_tools"
+    },
+    {
+      "name": "real_Genie",
+      "path": "~/workspace/projects/active/real_Genie",
+      "role": "assistant_backend"
+    },
+    {
+      "name": "hermes",
+      "path": "~/hermes",
+      "role": "assistant_reference"
+    },
+    {
+      "name": "nova-sovereign",
+      "path": "~/workspace/projects/active/nova-sovereign",
+      "role": "agent_reference"
+    },
+    {
+      "name": "realwah-lah.com",
+      "path": "~/workspace/projects/active/realwah-lah.com",
+      "role": "product_backend"
+    },
+    {
+      "name": "OpenClaw",
+      "path": "~/.openclaw",
+      "role": "external_agent_runtime"
+    }
   ],
   "devices": [
-    {"name":"S22 Ultra","transport":"adb+scrcpy","address":"100.104.165.28:5555","role":"phone"},
-    {"name":"Fire 7","transport":"adb","serial":"G0W0X8089425F6QV","role":"tablet"},
-    {"name":"Lubuntu peer","transport":"ssh+deskflow","address":"100.94.224.16","role":"desktop"},
-    {"name":"Debian host","transport":"local+tailscale","address":"100.105.171.108","role":"primary"}
+    {
+      "name": "S22 Ultra",
+      "transport": "adb+scrcpy",
+      "address": "100.104.165.28:5555",
+      "role": "phone"
+    },
+    {
+      "name": "Fire 7",
+      "transport": "adb",
+      "serial": "G0W0X8089425F6QV",
+      "role": "tablet"
+    },
+    {
+      "name": "Lubuntu peer",
+      "transport": "ssh+deskflow",
+      "address": "100.94.224.16",
+      "role": "desktop"
+    },
+    {
+      "name": "Debian host",
+      "transport": "local+tailscale",
+      "address": "100.105.171.108",
+      "role": "primary"
+    }
   ],
   "excluded": [
-    {"name":"BetterAndroRAT","reason":"explicitly excluded by sovereign policy"},
-    {"name":"unauthorized_device_control","reason":"explicitly excluded by sovereign policy"}
+    {
+      "name": "BetterAndroRAT",
+      "reason": "explicitly excluded by sovereign policy"
+    },
+    {
+      "name": "unauthorized_device_control",
+      "reason": "explicitly excluded by sovereign policy"
+    }
   ]
 }
