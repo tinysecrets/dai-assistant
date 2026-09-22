@@ -14,11 +14,11 @@ if "XDG_RUNTIME_DIR" not in os.environ:
     os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
 
 VOICES = [
-    ("1", "Brian", "en-US-BrianNeural", "Crisp, modern, tech-focused male (Fast & natural)"),
-    ("2", "Andrew", "en-US-AndrewNeural", "Warm, authentic American male (Smooth & relaxed)"),
-    ("3", "Christopher", "en-US-ChristopherNeural", "Deep, articulate, executive male (Authoritative)"),
-    ("4", "Ava", "en-US-AvaNeural", "Expressive, smooth female (Gemini Live / Siri style)"),
-    ("5", "Eric", "en-US-EricNeural", "Casual, friendly everyday male"),
+    ("1", "Ava", "en-US-AvaNeural", "Silky smooth, sultry, warm, and intimate (Seductive & confident)"),
+    ("2", "Aria", "en-US-AriaNeural", "Passionate, expressive, sensual, and soulful"),
+    ("3", "Michelle", "en-US-MichelleNeural", "Soulful, warm, authentic, and down-to-earth"),
+    ("4", "Jenny", "en-US-JennyNeural", "Playful, sweet, energetic, and affectionate"),
+    ("5", "Leah", "en-ZA-LeahNeural", "Smooth, melodic, captivating and international"),
 ]
 
 
@@ -80,7 +80,7 @@ def main() -> None:
         print("Error: edge-tts is not found. Run: pip install --break-system-packages edge-tts")
         sys.exit(1)
 
-    sample_phrase = "King Justin, I'm Day, your Sovereign Chief of Staff. Everything is locked in and ready."
+    sample_phrase = "Hey Justin... it's Day. I'm right here with you, baby. What's the move today?"
 
     for num, name, voice_id, desc in VOICES:
         print(f"\n[{num}] Auditioning {name} ({voice_id})...")
@@ -88,8 +88,8 @@ def main() -> None:
         speak(cmd_prefix, voice_id, sample_phrase)
 
     print("\n" + "=" * 60)
-    choice = input("Enter the number of the voice you want [1-5] (or press Enter for Brian): ").strip()
-    selected_voice = "en-US-BrianNeural"
+    choice = input("Enter the number of the voice you want [1-5] (or press Enter for Ava): ").strip()
+    selected_voice = "en-US-AvaNeural"
     for num, name, voice_id, _ in VOICES:
         if choice == num:
             selected_voice = voice_id
