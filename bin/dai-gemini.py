@@ -3,8 +3,10 @@
 
 Replica of Google Gemini Live + Autonomous Job Assigner:
 - King Justin is the sole boss and creator. No corporate lecturing, tone-policing, or preachy refusals.
-- Natural Voice Wake: "Hey DAI", "Come here DAI", "DAI come here", "DAI"
-- Dual Brain: Local Whisper/Piper audio + Frontier LLM (GitHub Models GPT-4o / DAI Router)
+- Natural Voice Wake: "Hey DAI", "Come here DAI", "DAI come here", "DAI", "Hey Day", "Yo Day"
+- Dual Brain: Local Whisper audio + Frontier LLM (GitHub Models GPT-4o / DAI Router)
+- Natural Human Voice Engine: Edge-TTS neural speech (GuyNeural) with Piper fallback (properly resampled)
+- Real-time VU audio meter showing exact mic input and RMS volume
 - Boss & Job Assigner Loop:
     * Breaks goals into tactical steps
     * Executes real bash/python commands
@@ -25,12 +27,17 @@ import signal
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.request
 import wave
 from pathlib import Path
+
+# Ensure XDG_RUNTIME_DIR is set so PipeWire / PulseAudio commands always connect
+if "XDG_RUNTIME_DIR" not in os.environ:
+    os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTER_URL = os.environ.get("DAI_ROUTER_URL", "http://127.0.0.1:11435")
@@ -40,16 +47,17 @@ GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
 
 SAMPLE_RATE = 16000
 CHUNK_SECONDS = 3.0
-RMS_THRESHOLD = 800
+RMS_THRESHOLD = 220  # Sensitive enough to catch conversational room voice, ignores background hum
 
 WAKE_PATTERNS = [
-    r"\bhey\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\bhey\s+(?:d\.?a\.?i\.?|day|dey|dave|date|bae|dan)\b",
     r"\bcome\s+here\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"\b(?:d\.?a\.?i\.?|day|dey)\s+come\s+here\b",
-    r"\byo\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\byo\s+(?:d\.?a\.?i\.?|day|dey|dave)\b",
     r"\bhi\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"\bok\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"^\s*(?:d\.?a\.?i\.?|day)\b",
+    r"\b(?:d\.?a\.?i\.?|day)\b.*(?:listen|wake|you there|what's up|status)",
 ]
 
 _stop_event = threading.Event()
@@ -93,30 +101,37 @@ def generate_chime_wav() -> bytes:
 CHIME_BYTES = generate_chime_wav()
 
 
-def get_mic_device() -> str | None:
+def get_mic_device() -> tuple[str | None, str]:
     """Detect if the LG G8 mic (android-87f1610) is active, or use default."""
     try:
-        out = subprocess.check_output(["pactl", "list", "short", "sources"], text=True, stderr=subprocess.DEVNULL)
+        out = subprocess.check_output(
+            ["pactl", "list", "short", "sources"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+            env=os.environ,
+        )
         if "android-87f1610" in out:
-            return "android-87f1610"
+            return "android-87f1610", "LG G8 (android-87f1610)"
+        lines = [line.split()[1] for line in out.strip().splitlines() if ".monitor" not in line and len(line.split()) >= 2]
+        if lines:
+            return lines[0], f"Pulse ({lines[0]})"
     except Exception:
         pass
-    return None
+    return None, "Default ALSA/Pulse"
 
 
 def play_audio(data: bytes, fmt: str = "wav") -> None:
-    """Play audio reliably through system audio via temp file."""
-    import tempfile
+    """Play audio reliably through system audio via temp file with correct resampling."""
     with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as f:
         f.write(data)
         tmp_name = f.name
     try:
         if shutil.which("paplay"):
-            subprocess.run(["paplay", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
-        elif shutil.which("aplay"):
-            subprocess.run(["aplay", "-q", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
+            subprocess.run(["paplay", tmp_name], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
         elif shutil.which("mpv"):
-            subprocess.run(["mpv", "--no-terminal", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
+            subprocess.run(["mpv", "--no-terminal", tmp_name], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+        elif shutil.which("aplay"):
+            subprocess.run(["aplay", "-q", tmp_name], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
     except Exception:
         pass
     finally:
@@ -130,9 +145,53 @@ def play_chime() -> None:
     play_audio(CHIME_BYTES, "wav")
 
 
+def speak_via_edge_tts(text: str) -> bool:
+    """Speak using crystal-clear natural human neural voice (Edge-TTS: GuyNeural)."""
+    edge_bin = shutil.which("edge-tts")
+    if not edge_bin:
+        cand = Path.home() / ".local" / "bin" / "edge-tts"
+        if cand.is_file() and os.access(cand, os.X_OK):
+            edge_bin = str(cand)
+        elif (Path.home() / ".local/voice-venv/bin/edge-tts").is_file():
+            edge_bin = str(Path.home() / ".local/voice-venv/bin/edge-tts")
+
+    if not edge_bin:
+        return False
+
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        tmp_mp3 = f.name
+
+    try:
+        res = subprocess.run(
+            [edge_bin, "--voice", "en-US-GuyNeural", "--text", text, "--write-media", tmp_mp3],
+            capture_output=True,
+            timeout=15,
+            env=os.environ,
+        )
+        if res.returncode == 0 and os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 100:
+            if shutil.which("mpv"):
+                subprocess.run(["mpv", "--no-terminal", tmp_mp3], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            elif shutil.which("paplay"):
+                subprocess.run(["paplay", tmp_mp3], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            return True
+    except Exception:
+        pass
+    finally:
+        try:
+            os.remove(tmp_mp3)
+        except Exception:
+            pass
+    return False
+
+
 def speak_text(text: str) -> None:
-    """Speak text using local piper-tts via voice-bridge."""
+    """Speak text using Edge neural human voice, with Piper fallback."""
     print(f"\n[DAI Speaks]: {text}")
+    # 1. Try human neural voice first (no robotic giant distortion)
+    if speak_via_edge_tts(text):
+        return
+
+    # 2. Fallback to local voice-bridge (piper-tts)
     try:
         req = urllib.request.Request(
             f"{VOICE_URL}/v1/audio/speech",
@@ -171,7 +230,8 @@ def transcribe_wav(wav_bytes: bytes) -> str:
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
             return data.get("text", "").strip()
-    except Exception:
+    except Exception as e:
+        print(f"\n[Voice STT Notice]: Whisper request failed: {e}")
         return ""
 
 
@@ -224,7 +284,6 @@ def call_llm(messages: list[dict], temperature: float = 0.3) -> str:
     """Call frontier LLM: GitHub Models (GPT-4o) if token exists, else local router."""
     gh_token = get_github_token()
     if gh_token:
-        # Use GitHub Models GPT-4o
         payload = {
             "messages": messages,
             "model": "gpt-4o",
@@ -244,9 +303,8 @@ def call_llm(messages: list[dict], temperature: float = 0.3) -> str:
                 data = json.loads(resp.read().decode())
                 return data["choices"][0]["message"]["content"].strip()
         except Exception:
-            pass  # Fall through to router
+            pass
 
-    # Fall back to DAI Model Router
     payload = {
         "model": "dai/auto",
         "messages": messages,
@@ -264,7 +322,7 @@ def call_llm(messages: list[dict], temperature: float = 0.3) -> str:
 
 
 def decide_action(user_prompt: str) -> dict:
-    """Classify the user intent into an action."""
+    """Classify user intent into an action."""
     messages = [
         {"role": "system", "content": SOVEREIGN_SYSTEM_PROMPT},
         {"role": "user", "content": user_prompt},
@@ -280,14 +338,7 @@ def decide_action(user_prompt: str) -> dict:
 
 
 def execute_boss_task(goal: str) -> str:
-    """The Boss & Job Assigner Closed Loop:
-
-    1. Planner breaks down the goal into bash steps.
-    2. Runs each step locally.
-    3. Verifies exit codes (Verifier Gate).
-    4. If failure, loops with error diagnostic to fix it until a WIN is achieved (up to 3 tries).
-    5. Returns honest, verified spoken summary.
-    """
+    """The Boss & Job Assigner Closed Loop."""
     print(f"\n[Boss Loop Activated]: Goal -> '{goal}'")
     speak_text("On it Boss. Breaking it down and assigning the crew.")
 
@@ -305,23 +356,20 @@ Return JSON only.
         plan_json = json.loads(re.search(r"\{.*\}", raw_plan, re.DOTALL).group(0))
         commands = plan_json.get("commands", [])
     except Exception:
-        # Fallback to direct goal execution
         commands = [goal]
 
     max_attempts = 3
     final_output = ""
-    success = False
 
     for cmd in commands:
         print(f"\n[Boss Assigns Step]: {cmd}")
         current_cmd = cmd
 
         for attempt in range(1, max_attempts + 1):
-            res = subprocess.run(current_cmd, shell=True, capture_output=True, text=True, timeout=60)
+            res = subprocess.run(current_cmd, shell=True, capture_output=True, text=True, timeout=60, env=os.environ)
             if res.returncode == 0:
                 print(f"[Step Passed]: {current_cmd} (exit 0)")
                 final_output = res.stdout.strip() or "Step completed cleanly."
-                success = True
                 break
             else:
                 print(f"[Step Failed (Attempt {attempt}/{max_attempts})]: Exit {res.returncode}")
@@ -329,7 +377,6 @@ Return JSON only.
                 if attempt == max_attempts:
                     return f"Boss, we hit a snag on: {current_cmd}. Error was: {err_text[:120]}."
 
-                # Self-healing loop: ask model for the fix
                 fix_prompt = f"""A bash command failed on Debian.
 Command: {current_cmd}
 Exit code: {res.returncode}
@@ -346,7 +393,6 @@ Return ONLY JSON: {{"fix": "corrected bash command"}}"""
                 except Exception:
                     break
 
-    # Summarize final result for speech
     summary_prompt = f"""King Justin gave this goal: {goal}
 The execution finished with this output:
 {final_output[:1500]}
@@ -370,7 +416,7 @@ def handle_user_command(command: str) -> None:
         if not target.startswith("http://") and not target.startswith("https://"):
             target = f"https://{target}"
         print(f"[Opening Web/App]: {target}")
-        subprocess.Popen(["xdg-open", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(["xdg-open", target], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=os.environ)
         speak_text(spoken or "Opening that up for you, Boss.")
 
     elif action == "boss_task":
@@ -391,22 +437,22 @@ def handle_user_command(command: str) -> None:
         except Exception:
             speak_text("Agent-S worker is offline right now.")
 
-    else:  # speak
+    else:
         if spoken:
             speak_text(spoken)
 
 
 def record_chunk(seconds: float = 3.0) -> bytes | None:
-    mic = get_mic_device()
+    mic, _ = get_mic_device()
     num_bytes = int(seconds * SAMPLE_RATE * 2)
 
-    # 1. Try parec (native PulseAudio / PipeWire capture)
+    # 1. Native parec (PulseAudio / PipeWire capture)
     if shutil.which("parec"):
-        cmd = ["parec", "--rate=16000", "--channels=1", "--format=s16le"]
+        cmd = ["parec", "--rate=16000", "--channels=1", "--format=s16le", "--raw"]
         if mic:
             cmd.extend(["--device", mic])
         try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=os.environ)
             raw = proc.stdout.read(num_bytes)
             proc.terminate()
             try:
@@ -419,19 +465,18 @@ def record_chunk(seconds: float = 3.0) -> bytes | None:
             pass
 
     # 2. Try arecord through PulseAudio plugin
-    for dev in (["pulse", "default"] if not mic else ["pulse"]):
-        try:
-            cmd = ["arecord", "-q", "-D", dev, "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
-            proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2)
-            if proc.returncode == 0 and len(proc.stdout) > 0:
-                return proc.stdout
-        except Exception:
-            pass
+    try:
+        cmd = ["arecord", "-q", "-D", "pulse", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
+        proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2, env=os.environ)
+        if proc.returncode == 0 and len(proc.stdout) > 0:
+            return proc.stdout
+    except Exception:
+        pass
 
     # 3. Fallback to default ALSA
     try:
         cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
-        proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2)
+        proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2, env=os.environ)
         if proc.returncode == 0:
             return proc.stdout
     except Exception:
@@ -452,7 +497,7 @@ def pcm_to_wav(pcm_data: bytes) -> bytes:
 def proactive_health_watchdog() -> None:
     """Alerts Justin before problems happen (Disk, Memory, Swap)."""
     while not _stop_event.is_set():
-        _stop_event.wait(900)  # Check every 15 min
+        _stop_event.wait(900)
         if _stop_event.is_set():
             break
         try:
@@ -471,12 +516,22 @@ def proactive_health_watchdog() -> None:
 
 def main() -> None:
     gh = "ENABLED (GPT-4o Frontier Brain)" if get_github_token() else "OFF (Using DAI Local Router)"
+    mic_id, mic_label = get_mic_device()
+
     print("=" * 65)
     print(" 🎙️  DAI GEMINI SOVEREIGN MODE — KING JUSTIN'S CHIEF OF STAFF")
     print(f" 🧠 Frontier Engine: {gh}")
-    print(" 🔊 Voice Summons: 'Hey DAI', 'Come here DAI', 'DAI come here'")
+    print(f" 🎤 Active Mic:      {mic_label}")
+    print(" 🔊 Voice Summons:   'Hey Day', 'Come here Day', 'Day come here', 'Yo Day'")
     print(" 🛡️  Sovereign Policy: Zero preachiness, zero faking, win-loop active")
-    print(" Press Ctrl+C to stop")
+
+    # Check Voice STT / TTS service
+    try:
+        urllib.request.urlopen(f"{VOICE_URL}/health", timeout=2)
+        print(f" ⚡ Voice Bridge:    ONLINE at {VOICE_URL}")
+    except Exception:
+        print(f" ⚠️  Voice Bridge:    OFFLINE at {VOICE_URL} (Whisper/Piper down)")
+        print("    Tip: run './bin/dai up' to start the voice bridge service.")
     print("=" * 65)
 
     threading.Thread(target=proactive_health_watchdog, daemon=True).start()
@@ -494,16 +549,28 @@ def main() -> None:
 
     while not _stop_event.is_set():
         pcm = record_chunk(CHUNK_SECONDS)
-        if not pcm or calculate_rms(pcm) < RMS_THRESHOLD:
+        if not pcm:
+            time.sleep(0.1)
             continue
 
+        rms = calculate_rms(pcm)
+        meter = "#" * min(int(rms / 50), 20)
+        print(f"\r[Listening: {mic_label}] RMS: {int(rms):4d} |{meter:<20}|", end="")
+        sys.stdout.flush()
+
+        if rms < RMS_THRESHOLD:
+            continue
+
+        print(f"\n[Mic Activity Detected]: RMS {int(rms)} -> Transcribing...")
         text = transcribe_wav(pcm_to_wav(pcm))
         if not text:
+            print("[Voice Engine]: No speech recognized.")
             continue
 
+        print(f"[Heard]: \"{text}\"")
         woke, command = extract_wake_and_command(text)
         if woke:
-            print(f"\n[Summoned]: Heard '{text}'")
+            print(f"\n[Summoned by Boss]: Heard '{text}'")
             play_chime()
             if command and len(command.split()) >= 2:
                 handle_user_command(command)
@@ -513,6 +580,7 @@ def main() -> None:
                 if followup_pcm:
                     followup_text = transcribe_wav(pcm_to_wav(followup_pcm))
                     if followup_text:
+                        print(f"[Followup Heard]: \"{followup_text}\"")
                         handle_user_command(followup_text)
                     else:
                         speak_text("Didn't catch that, Boss.")
