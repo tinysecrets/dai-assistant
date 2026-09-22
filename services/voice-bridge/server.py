@@ -60,8 +60,8 @@ load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
 SERVICE = ServiceInfo("voice-bridge", "1.0", "docs/API.md")
 VERSION = SERVICE.version
 
-WHISPER_MODEL = os.environ.get("DAI_WHISPER_MODEL", "tiny")
-PIPER_VOICE = os.environ.get("DAI_PIPER_VOICE", "en_US-lessac-medium")
+WHISPER_MODEL = os.environ.get("DAI_WHISPER_MODEL", "base.en")
+PIPER_VOICE = os.environ.get("DAI_PIPER_VOICE", "en_US-bryce-medium")
 VOICE_MODELS_DIR = Path(os.environ.get("DAI_VOICE_MODELS_DIR", str(Path.home() / ".local" / "voice-models")))
 HOST = os.environ.get("DAI_VOICE_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DAI_VOICE_BRIDGE_PORT", "8766"))
@@ -341,6 +341,7 @@ class VoiceHandler(BaseHTTPRequestHandler):
                         language=language if isinstance(language, str) and language else None,
                         beam_size=5,
                         vad_filter=True,
+                        initial_prompt="Justin, King Justin, DAI, Day, sovereign, boss, Debian, terminal, system, Hey Day",
                     )
                     text = "".join(seg.text for seg in segments).strip()
                 finally:

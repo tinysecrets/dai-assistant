@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""DAI Voice Audition Tool — Listen to candidate voices and pick your favorite."""
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+# Ensure XDG_RUNTIME_DIR is set
+if "XDG_RUNTIME_DIR" not in os.environ:
+    os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
+
+VOICES = [
+    ("1", "Brian", "en-US-BrianNeural", "Crisp, modern, tech-focused male (Fast & natural)"),
+    ("2", "Andrew", "en-US-AndrewNeural", "Warm, authentic American male (Smooth & relaxed)"),
+    ("3", "Christopher", "en-US-ChristopherNeural", "Deep, articulate, executive male (Authoritative)"),
+    ("4", "Ava", "en-US-AvaNeural", "Expressive, smooth female (Gemini Live / Siri style)"),
+    ("5", "Eric", "en-US-EricNeural", "Casual, friendly everyday male"),
+]
+
+
+def find_edge_tts() -> list[str] | None:
+    if shutil.which("edge-tts"):
+        return [shutil.which("edge-tts")]
+    cand = Path.home() / ".local" / "bin" / "edge-tts"
+    if cand.is_file() and os.access(cand, os.X_OK):
+        return [str(cand)]
+    for py in ["python3", "/usr/bin/python3", sys.executable, str(Path.home() / ".local/voice-venv/bin/python")]:
+        try:
+            res = subprocess.run([py, "-m", "edge_tts", "--version"], capture_output=True, timeout=2, env=os.environ)
+            if res.returncode == 0:
+                return [py, "-m", "edge_tts"]
+        except Exception:
+            pass
+    return None
+
+
+def speak(cmd_prefix: list[str], voice_id: str, text: str) -> None:
+    with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+        tmp_mp3 = f.name
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        tmp_wav = f.name
+    try:
+        cmd = cmd_prefix + ["--voice", voice_id, "--rate=+5%", "--text", text, "--write-media", tmp_mp3]
+        subprocess.run(cmd, capture_output=True, timeout=15, env=os.environ)
+        if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 100:
+            if shutil.which("ffmpeg"):
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_mp3, "-ar", "24000", "-ac", "1", tmp_wav],
+                    capture_output=True,
+                    timeout=10,
+                    env=os.environ,
+                )
+                play_file = tmp_wav if os.path.exists(tmp_wav) else tmp_mp3
+            else:
+                play_file = tmp_mp3
+
+            if play_file.endswith(".wav") and shutil.which("paplay"):
+                subprocess.run(["paplay", play_file], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
+            elif shutil.which("mpv"):
+                subprocess.run(["mpv", "--no-terminal", play_file], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
+    finally:
+        for p in (tmp_mp3, tmp_wav):
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+
+
+def main() -> None:
+    print("=" * 60)
+    print(" 🎙️  DAY VOICE AUDITION — PICK YOUR FAVORITE NEURAL VOICE")
+    print("=" * 60)
+
+    cmd_prefix = find_edge_tts()
+    if not cmd_prefix:
+        print("Error: edge-tts is not found. Run: pip install --break-system-packages edge-tts")
+        sys.exit(1)
+
+    sample_phrase = "King Justin, I'm Day, your Sovereign Chief of Staff. Everything is locked in and ready."
+
+    for num, name, voice_id, desc in VOICES:
+        print(f"\n[{num}] Auditioning {name} ({voice_id})...")
+        print(f"    Style: {desc}")
+        speak(cmd_prefix, voice_id, sample_phrase)
+
+    print("\n" + "=" * 60)
+    choice = input("Enter the number of the voice you want [1-5] (or press Enter for Brian): ").strip()
+    selected_voice = "en-US-BrianNeural"
+    for num, name, voice_id, _ in VOICES:
+        if choice == num:
+            selected_voice = voice_id
+            print(f"✅ Selected: {name} ({voice_id})")
+            break
+
+    # Save to ~/.dai-voice
+    config_file = Path.home() / ".dai-voice"
+    config_file.write_text(f"export DAI_VOICE=\"{selected_voice}\"\n")
+    print(f"Saved to {config_file}!")
+    print(f"To use this voice in all sessions, run: export DAI_VOICE=\"{selected_voice}\"")
+
+
+if __name__ == "__main__":
+    main()
