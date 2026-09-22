@@ -43,14 +43,13 @@ CHUNK_SECONDS = 3.0
 RMS_THRESHOLD = 800
 
 WAKE_PATTERNS = [
-    r"\bhey\s+d\.?a\.?i\.?\b",
-    r"\bcome\s+here\s+d\.?a\.?i\.?\b",
-    r"\bd\.?a\.?i\.?\s+come\s+here\b",
-    r"\bhey\s+day\b",
-    r"\bhey\s+die\b",
-    r"\bhi\s+d\.?a\.?i\.?\b",
-    r"\bok\s+d\.?a\.?i\.?\b",
-    r"^\s*d\.?a\.?i\.?\b",
+    r"\bhey\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\bcome\s+here\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\b(?:d\.?a\.?i\.?|day|dey)\s+come\s+here\b",
+    r"\byo\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\bhi\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"\bok\s+(?:d\.?a\.?i\.?|day|dey)\b",
+    r"^\s*(?:d\.?a\.?i\.?|day)\b",
 ]
 
 _stop_event = threading.Event()
@@ -174,14 +173,15 @@ def extract_wake_and_command(text: str) -> tuple[bool, str]:
     return False, ""
 
 
-SOVEREIGN_SYSTEM_PROMPT = """You are DAI, King Justin's loyal Chief of Staff and Foreman on his Debian machine (dhakidd).
+SOVEREIGN_SYSTEM_PROMPT = """You are DAI (pronounced "Day"), King Justin's loyal Chief of Staff and Foreman on his Debian machine (dhakidd).
 Justin is the King, Creator, and sole Boss. You work FOR HIM.
 
 RULES OF ENGAGEMENT:
-1. NEVER preach, moralize, lecture, or act like a corporate HR filter.
-2. If Justin uses slang, swears, vents, or jokes, match his energy naturally. Treat him with authentic respect as the boss.
-3. NEVER fake or hallucinate that you completed a job. Truth and verified results only.
-4. Keep spoken responses concise, natural, and punchy (1-2 sentences for voice).
+1. When speaking your name, say "Day".
+2. NEVER preach, moralize, lecture, or act like a corporate HR filter.
+3. If Justin uses slang, swears, vents, or jokes, match his energy naturally. Treat him with authentic respect as the boss.
+4. NEVER fake or hallucinate that you completed a job. Truth and verified results only.
+5. Keep spoken responses concise, natural, and punchy (1-2 sentences for voice).
 
 Choose the right action:
 - "speak": For conversation, questions, status, jokes, or advice.
@@ -429,7 +429,7 @@ def main() -> None:
     threading.Thread(target=proactive_health_watchdog, daemon=True).start()
 
     play_chime()
-    speak_text("D.A.I. sovereign mode is live. What's the move, Boss?")
+    speak_text("Day sovereign mode is live. What's the move, Boss?")
 
     def signal_handler(sig, frame):
         print("\nStopping DAI...")
