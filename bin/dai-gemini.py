@@ -93,16 +93,37 @@ def generate_chime_wav() -> bytes:
 CHIME_BYTES = generate_chime_wav()
 
 
+def get_mic_device() -> str | None:
+    """Detect if the LG G8 mic (android-87f1610) is active, or use default."""
+    try:
+        out = subprocess.check_output(["pactl", "list", "short", "sources"], text=True, stderr=subprocess.DEVNULL)
+        if "android-87f1610" in out:
+            return "android-87f1610"
+    except Exception:
+        pass
+    return None
+
+
 def play_audio(data: bytes, fmt: str = "wav") -> None:
-    """Play audio bytes through system audio."""
-    for player in ["paplay", "aplay", "mpv"]:
-        if shutil.which(player):
-            try:
-                proc = subprocess.Popen([player], stdin=subprocess.PIPE, stderr=subprocess.DEVNULL)
-                proc.communicate(input=data, timeout=60)
-                return
-            except Exception:
-                pass
+    """Play audio reliably through system audio via temp file."""
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as f:
+        f.write(data)
+        tmp_name = f.name
+    try:
+        if shutil.which("paplay"):
+            subprocess.run(["paplay", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
+        elif shutil.which("aplay"):
+            subprocess.run(["aplay", "-q", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
+        elif shutil.which("mpv"):
+            subprocess.run(["mpv", "--no-terminal", tmp_name], timeout=30, stderr=subprocess.DEVNULL)
+    except Exception:
+        pass
+    finally:
+        try:
+            os.remove(tmp_name)
+        except Exception:
+            pass
 
 
 def play_chime() -> None:
@@ -376,8 +397,40 @@ def handle_user_command(command: str) -> None:
 
 
 def record_chunk(seconds: float = 3.0) -> bytes | None:
-    cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
+    mic = get_mic_device()
+    num_bytes = int(seconds * SAMPLE_RATE * 2)
+
+    # 1. Try parec (native PulseAudio / PipeWire capture)
+    if shutil.which("parec"):
+        cmd = ["parec", "--rate=16000", "--channels=1", "--format=s16le"]
+        if mic:
+            cmd.extend(["--device", mic])
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            raw = proc.stdout.read(num_bytes)
+            proc.terminate()
+            try:
+                proc.wait(timeout=1)
+            except Exception:
+                proc.kill()
+            if len(raw) == num_bytes:
+                return raw
+        except Exception:
+            pass
+
+    # 2. Try arecord through PulseAudio plugin
+    for dev in (["pulse", "default"] if not mic else ["pulse"]):
+        try:
+            cmd = ["arecord", "-q", "-D", dev, "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
+            proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2)
+            if proc.returncode == 0 and len(proc.stdout) > 0:
+                return proc.stdout
+        except Exception:
+            pass
+
+    # 3. Fallback to default ALSA
     try:
+        cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
         proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2)
         if proc.returncode == 0:
             return proc.stdout
