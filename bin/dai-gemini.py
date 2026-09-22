@@ -442,56 +442,68 @@ def handle_user_command(command: str) -> None:
             speak_text(spoken)
 
 
-def record_chunk(seconds: float = 3.0) -> bytes | None:
+def record_wav_chunk(seconds: float = 3.0) -> tuple[bytes | None, float]:
+    """Record audio directly into a valid WAV file from LG G8 / Pulse / ALSA and return (wav_bytes, rms)."""
     mic, _ = get_mic_device()
-    num_bytes = int(seconds * SAMPLE_RATE * 2)
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = tmp.name
 
-    # 1. Native parec (PulseAudio / PipeWire capture)
-    if shutil.which("parec"):
-        cmd = ["parec", "--rate=16000", "--channels=1", "--format=s16le", "--raw"]
-        if mic:
-            cmd.extend(["--device", mic])
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=os.environ)
-            raw = proc.stdout.read(num_bytes)
-            proc.terminate()
+    recorded = False
+    try:
+        # 1. Native parec with file-format=wav
+        if shutil.which("parec"):
+            cmd = ["parec", "--rate=16000", "--channels=1", "--file-format=wav"]
+            if mic:
+                cmd.extend(["-d", mic])
             try:
-                proc.wait(timeout=1)
+                with open(tmp_path, "wb") as out_f:
+                    proc = subprocess.Popen(cmd, stdout=out_f, stderr=subprocess.DEVNULL, env=os.environ)
+                    time.sleep(seconds)
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=1)
+                    except Exception:
+                        proc.kill()
+                if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 1000:
+                    recorded = True
             except Exception:
-                proc.kill()
-            if len(raw) == num_bytes:
-                return raw
+                pass
+
+        # 2. Fallback to arecord with explicit -t wav
+        if not recorded and shutil.which("arecord"):
+            for dev in ["pulse", "default"]:
+                cmd = ["arecord", "-q", "-D", dev, "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds)), "-t", "wav", tmp_path]
+                try:
+                    res = subprocess.run(cmd, timeout=seconds + 2, env=os.environ)
+                    if res.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 1000:
+                        recorded = True
+                        break
+                except Exception:
+                    pass
+
+        if not recorded or not os.path.exists(tmp_path):
+            return None, 0.0
+
+        # Read WAV to calculate true RMS
+        with wave.open(tmp_path, "rb") as w:
+            frames = w.readframes(w.getnframes())
+            count = len(frames) // 2
+            if count == 0:
+                return None, 0.0
+            shorts = struct.unpack(f"<{count}h", frames)
+            rms = math.sqrt(sum(s * s for s in shorts) / count)
+
+        with open(tmp_path, "rb") as f:
+            wav_bytes = f.read()
+
+        return wav_bytes, rms
+    except Exception:
+        return None, 0.0
+    finally:
+        try:
+            os.remove(tmp_path)
         except Exception:
             pass
-
-    # 2. Try arecord through PulseAudio plugin
-    try:
-        cmd = ["arecord", "-q", "-D", "pulse", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
-        proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2, env=os.environ)
-        if proc.returncode == 0 and len(proc.stdout) > 0:
-            return proc.stdout
-    except Exception:
-        pass
-
-    # 3. Fallback to default ALSA
-    try:
-        cmd = ["arecord", "-q", "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds))]
-        proc = subprocess.run(cmd, capture_output=True, timeout=seconds + 2, env=os.environ)
-        if proc.returncode == 0:
-            return proc.stdout
-    except Exception:
-        pass
-    return None
-
-
-def pcm_to_wav(pcm_data: bytes) -> bytes:
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(1)
-        w.setsampwidth(2)
-        w.setframerate(SAMPLE_RATE)
-        w.writeframes(pcm_data)
-    return buf.getvalue()
 
 
 def proactive_health_watchdog() -> None:
@@ -548,12 +560,11 @@ def main() -> None:
     signal.signal(signal.SIGTERM, signal_handler)
 
     while not _stop_event.is_set():
-        pcm = record_chunk(CHUNK_SECONDS)
-        if not pcm:
+        wav_data, rms = record_wav_chunk(CHUNK_SECONDS)
+        if not wav_data:
             time.sleep(0.1)
             continue
 
-        rms = calculate_rms(pcm)
         meter = "#" * min(int(rms / 50), 20)
         print(f"\r[Listening: {mic_label}] RMS: {int(rms):4d} |{meter:<20}|", end="")
         sys.stdout.flush()
@@ -562,7 +573,7 @@ def main() -> None:
             continue
 
         print(f"\n[Mic Activity Detected]: RMS {int(rms)} -> Transcribing...")
-        text = transcribe_wav(pcm_to_wav(pcm))
+        text = transcribe_wav(wav_data)
         if not text:
             print("[Voice Engine]: No speech recognized.")
             continue
@@ -576,9 +587,9 @@ def main() -> None:
                 handle_user_command(command)
             else:
                 speak_text("I'm here Justin, what's up?")
-                followup_pcm = record_chunk(5.0)
-                if followup_pcm:
-                    followup_text = transcribe_wav(pcm_to_wav(followup_pcm))
+                followup_wav, _ = record_wav_chunk(5.0)
+                if followup_wav:
+                    followup_text = transcribe_wav(followup_wav)
                     if followup_text:
                         print(f"[Followup Heard]: \"{followup_text}\"")
                         handle_user_command(followup_text)
