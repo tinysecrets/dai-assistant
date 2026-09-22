@@ -3,11 +3,11 @@
 
 Replica of Google Gemini Live + Autonomous Job Assigner:
 - King Justin is the sole boss and creator. No corporate lecturing, tone-policing, or preachy refusals.
-- Natural Voice Wake: "Hey DAI", "Come here DAI", "DAI come here", "DAI", "Hey Day", "Yo Day"
-- Dual Brain: Local Whisper audio + Frontier LLM (GitHub Models GPT-4o / DAI Router)
-- Natural Human Voice Engine: Edge-TTS neural speech (GuyNeural) with Piper fallback (properly resampled)
-- Real-time VU audio meter showing exact mic input and RMS volume
-- Boss & Job Assigner Loop:
+- Natural Voice Wake: "Hey Day", "Come here Day", "Day come here", "Day", "Yo Day"
+- Continuous Voice Activity Detection (VAD): phrase-based streaming with pre-speech buffering (no broken words)
+- Natural Human Neural Voices: Edge-TTS (Brian, Andrew, Christopher, Ava) with ffmpeg PipeWire playback
+- Dual Brain: Local Whisper (base.en/small.en) + Frontier LLM (GitHub Models GPT-4o / DAI Router)
+- Boss & Job Assigner Closed Loop:
     * Breaks goals into tactical steps
     * Executes real bash/python commands
     * Verifies exit codes (NEVER fakes or hallucinates success)
@@ -45,9 +45,12 @@ VOICE_URL = os.environ.get("DAI_VOICE_URL", "http://127.0.0.1:8766")
 WORKER_URL = os.environ.get("DAI_WORKER_URL", "http://127.0.0.1:8765")
 GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
 
+# Voice Configuration: Brian is modern & conversational; Andrew is warm & natural
+VOICE_NAME = os.environ.get("DAI_VOICE", "en-US-BrianNeural")
+VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+6%")
+
 SAMPLE_RATE = 16000
-CHUNK_SECONDS = 3.0
-RMS_THRESHOLD = 220  # Sensitive enough to catch conversational room voice, ignores background hum
+RMS_THRESHOLD = 200.0  # Sensitivity gate for speech start
 
 WAKE_PATTERNS = [
     r"\bhey\s+(?:d\.?a\.?i\.?|day|dey|dave|date|bae|dan)\b",
@@ -57,7 +60,7 @@ WAKE_PATTERNS = [
     r"\bhi\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"\bok\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"^\s*(?:d\.?a\.?i\.?|day)\b",
-    r"\b(?:d\.?a\.?i\.?|day)\b.*(?:listen|wake|you there|what's up|status)",
+    r"\b(?:d\.?a\.?i\.?|day)\b.*(?:listen|wake|you there|what's up|status|system)",
 ]
 
 _stop_event = threading.Event()
@@ -120,8 +123,25 @@ def get_mic_device() -> tuple[str | None, str]:
     return None, "Default ALSA/Pulse"
 
 
+def find_edge_tts_cmd() -> list[str] | None:
+    """Locate the edge-tts CLI tool in standard paths or Python modules."""
+    if shutil.which("edge-tts"):
+        return [shutil.which("edge-tts")]
+    cand = Path.home() / ".local" / "bin" / "edge-tts"
+    if cand.is_file() and os.access(cand, os.X_OK):
+        return [str(cand)]
+    for py in ["python3", "/usr/bin/python3", sys.executable, str(Path.home() / ".local/voice-venv/bin/python")]:
+        try:
+            res = subprocess.run([py, "-m", "edge_tts", "--version"], capture_output=True, timeout=2, env=os.environ)
+            if res.returncode == 0:
+                return [py, "-m", "edge_tts"]
+        except Exception:
+            pass
+    return None
+
+
 def play_audio(data: bytes, fmt: str = "wav") -> None:
-    """Play audio reliably through system audio via temp file with correct resampling."""
+    """Play audio reliably through PipeWire/Pulse via temp file."""
     with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as f:
         f.write(data)
         tmp_name = f.name
@@ -146,52 +166,70 @@ def play_chime() -> None:
 
 
 def speak_via_edge_tts(text: str) -> bool:
-    """Speak using crystal-clear natural human neural voice (Edge-TTS: GuyNeural)."""
-    edge_bin = shutil.which("edge-tts")
-    if not edge_bin:
-        cand = Path.home() / ".local" / "bin" / "edge-tts"
-        if cand.is_file() and os.access(cand, os.X_OK):
-            edge_bin = str(cand)
-        elif (Path.home() / ".local/voice-venv/bin/edge-tts").is_file():
-            edge_bin = str(Path.home() / ".local/voice-venv/bin/edge-tts")
-
-    if not edge_bin:
+    """Synthesize human neural voice using Edge-TTS with ffmpeg PipeWire playback."""
+    cmd_prefix = find_edge_tts_cmd()
+    if not cmd_prefix:
         return False
 
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
         tmp_mp3 = f.name
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        tmp_wav = f.name
 
     try:
-        res = subprocess.run(
-            [edge_bin, "--voice", "en-US-GuyNeural", "--text", text, "--write-media", tmp_mp3],
-            capture_output=True,
-            timeout=15,
-            env=os.environ,
-        )
-        if res.returncode == 0 and os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 100:
-            if shutil.which("mpv"):
-                subprocess.run(["mpv", "--no-terminal", tmp_mp3], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
-            elif shutil.which("paplay"):
-                subprocess.run(["paplay", tmp_mp3], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
-            return True
+        cmd = cmd_prefix + [
+            "--voice", VOICE_NAME,
+            f"--rate={VOICE_RATE}",
+            "--text", text,
+            "--write-media", tmp_mp3,
+        ]
+        res = subprocess.run(cmd, capture_output=True, timeout=15, env=os.environ)
+        if not (res.returncode == 0 and os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 100):
+            return False
+
+        # Convert MP3 to standard 24kHz WAV so paplay plays it with pristine quality
+        if shutil.which("ffmpeg"):
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", tmp_mp3, "-ar", "24000", "-ac", "1", tmp_wav],
+                capture_output=True,
+                timeout=10,
+                env=os.environ,
+            )
+            play_file = tmp_wav if (os.path.exists(tmp_wav) and os.path.getsize(tmp_wav) > 100) else tmp_mp3
+        else:
+            play_file = tmp_mp3
+
+        played = False
+        if play_file.endswith(".wav") and shutil.which("paplay"):
+            r = subprocess.run(["paplay", play_file], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        if not played and shutil.which("mpv"):
+            r = subprocess.run(["mpv", "--no-terminal", play_file], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        if not played and play_file.endswith(".wav") and shutil.which("aplay"):
+            r = subprocess.run(["aplay", "-q", "-r", "24000", "-f", "S16_LE", play_file], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        return played
     except Exception:
-        pass
+        return False
     finally:
-        try:
-            os.remove(tmp_mp3)
-        except Exception:
-            pass
-    return False
+        for p in (tmp_mp3, tmp_wav):
+            try:
+                os.remove(p)
+            except Exception:
+                pass
 
 
 def speak_text(text: str) -> None:
     """Speak text using Edge neural human voice, with Piper fallback."""
-    print(f"\n[DAI Speaks]: {text}")
-    # 1. Try human neural voice first (no robotic giant distortion)
+    print(f"\n[Day Speaks]: {text}")
     if speak_via_edge_tts(text):
         return
 
-    # 2. Fallback to local voice-bridge (piper-tts)
+    # Fallback to local voice-bridge (piper-tts)
     try:
         req = urllib.request.Request(
             f"{VOICE_URL}/v1/audio/speech",
@@ -227,20 +265,12 @@ def transcribe_wav(wav_bytes: bytes) -> str:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode())
             return data.get("text", "").strip()
     except Exception as e:
         print(f"\n[Voice STT Notice]: Whisper request failed: {e}")
         return ""
-
-
-def calculate_rms(audio_bytes: bytes) -> float:
-    count = len(audio_bytes) // 2
-    if count == 0:
-        return 0.0
-    shorts = struct.unpack(f"<{count}h", audio_bytes)
-    return math.sqrt(sum(s * s for s in shorts) / count)
 
 
 def extract_wake_and_command(text: str) -> tuple[bool, str]:
@@ -252,6 +282,107 @@ def extract_wake_and_command(text: str) -> tuple[bool, str]:
             after = re.sub(r"^[,.\-?!]+\s*", "", after)
             return True, after
     return False, ""
+
+
+def stream_speech_phrase(mic: str | None, threshold: float = 200.0, silence_limit: float = 0.8, max_duration: float = 12.0) -> tuple[bytes | None, float]:
+    """Continuous Voice Activity Detection (VAD).
+
+    Listens in 0.2s slices. When user speaks (RMS >= threshold), buffers with 0.4s
+    pre-speech audio, continues until 0.8s of silence after speech, and returns
+    full unbroken WAV bytes. Words are NEVER cut in half.
+    """
+    slice_sec = 0.2
+    slice_bytes = int(SAMPLE_RATE * 2 * slice_sec)
+
+    proc = None
+    if shutil.which("parec"):
+        cmd = ["parec", "--rate=16000", "--channels=1", "--format=s16le", "--raw"]
+        if mic:
+            cmd.extend(["-d", mic])
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=os.environ)
+        except Exception:
+            proc = None
+
+    if proc is None and shutil.which("arecord"):
+        cmd = ["arecord", "-q", "-D", "pulse", "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "raw"]
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=os.environ)
+        except Exception:
+            return None, 0.0
+
+    if proc is None:
+        return None, 0.0
+
+    pre_buffer = []
+    speech_chunks = []
+    speaking = False
+    silence_slices = 0
+    max_silence_slices = int(silence_limit / slice_sec)
+    max_slices = int(max_duration / slice_sec)
+    peak_rms = 0.0
+
+    try:
+        while not _stop_event.is_set():
+            raw = proc.stdout.read(slice_bytes)
+            if len(raw) != slice_bytes:
+                break
+
+            count = len(raw) // 2
+            shorts = struct.unpack(f"<{count}h", raw)
+            rms = math.sqrt(sum(s * s for s in shorts) / count)
+            if rms > peak_rms:
+                peak_rms = rms
+
+            if not speaking:
+                meter = "#" * min(int(rms / 40), 20)
+                mic_label = mic or "Default"
+                print(f"\r[Listening: {mic_label}] RMS: {int(rms):4d} |{meter:<20}|", end="")
+                sys.stdout.flush()
+
+                pre_buffer.append(raw)
+                if len(pre_buffer) > 2:
+                    pre_buffer.pop(0)
+
+                if rms >= threshold:
+                    speaking = True
+                    print(f"\n[Speech Detected]: RMS {int(rms)} -> Recording full phrase...")
+                    speech_chunks.extend(pre_buffer)
+                    speech_chunks.append(raw)
+                    silence_slices = 0
+            else:
+                speech_chunks.append(raw)
+                if rms < threshold:
+                    silence_slices += 1
+                    if silence_slices >= max_silence_slices:
+                        break
+                else:
+                    silence_slices = 0
+
+                if len(speech_chunks) >= max_slices:
+                    break
+
+        proc.terminate()
+        try:
+            proc.wait(timeout=0.5)
+        except Exception:
+            proc.kill()
+
+        if not speech_chunks or len(speech_chunks) < 3:
+            return None, peak_rms
+
+        pcm_all = b"".join(speech_chunks)
+        buf = io.BytesIO()
+        with wave.open(buf, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(SAMPLE_RATE)
+            w.writeframes(pcm_all)
+        return buf.getvalue(), peak_rms
+    except Exception:
+        if proc:
+            proc.kill()
+        return None, 0.0
 
 
 SOVEREIGN_SYSTEM_PROMPT = """You are DAI (pronounced "Day"), King Justin's loyal Chief of Staff and Foreman on his Debian machine (dhakidd).
@@ -442,70 +573,6 @@ def handle_user_command(command: str) -> None:
             speak_text(spoken)
 
 
-def record_wav_chunk(seconds: float = 3.0) -> tuple[bytes | None, float]:
-    """Record audio directly into a valid WAV file from LG G8 / Pulse / ALSA and return (wav_bytes, rms)."""
-    mic, _ = get_mic_device()
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp_path = tmp.name
-
-    recorded = False
-    try:
-        # 1. Native parec with file-format=wav
-        if shutil.which("parec"):
-            cmd = ["parec", "--rate=16000", "--channels=1", "--file-format=wav"]
-            if mic:
-                cmd.extend(["-d", mic])
-            try:
-                with open(tmp_path, "wb") as out_f:
-                    proc = subprocess.Popen(cmd, stdout=out_f, stderr=subprocess.DEVNULL, env=os.environ)
-                    time.sleep(seconds)
-                    proc.terminate()
-                    try:
-                        proc.wait(timeout=1)
-                    except Exception:
-                        proc.kill()
-                if os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 1000:
-                    recorded = True
-            except Exception:
-                pass
-
-        # 2. Fallback to arecord with explicit -t wav
-        if not recorded and shutil.which("arecord"):
-            for dev in ["pulse", "default"]:
-                cmd = ["arecord", "-q", "-D", dev, "-f", "S16_LE", "-r", str(SAMPLE_RATE), "-c", "1", "-d", str(int(seconds)), "-t", "wav", tmp_path]
-                try:
-                    res = subprocess.run(cmd, timeout=seconds + 2, env=os.environ)
-                    if res.returncode == 0 and os.path.exists(tmp_path) and os.path.getsize(tmp_path) > 1000:
-                        recorded = True
-                        break
-                except Exception:
-                    pass
-
-        if not recorded or not os.path.exists(tmp_path):
-            return None, 0.0
-
-        # Read WAV to calculate true RMS
-        with wave.open(tmp_path, "rb") as w:
-            frames = w.readframes(w.getnframes())
-            count = len(frames) // 2
-            if count == 0:
-                return None, 0.0
-            shorts = struct.unpack(f"<{count}h", frames)
-            rms = math.sqrt(sum(s * s for s in shorts) / count)
-
-        with open(tmp_path, "rb") as f:
-            wav_bytes = f.read()
-
-        return wav_bytes, rms
-    except Exception:
-        return None, 0.0
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
-
 def proactive_health_watchdog() -> None:
     """Alerts Justin before problems happen (Disk, Memory, Swap)."""
     while not _stop_event.is_set():
@@ -534,16 +601,16 @@ def main() -> None:
     print(" 🎙️  DAI GEMINI SOVEREIGN MODE — KING JUSTIN'S CHIEF OF STAFF")
     print(f" 🧠 Frontier Engine: {gh}")
     print(f" 🎤 Active Mic:      {mic_label}")
+    print(f" 🗣️  Voice Engine:    Edge-TTS ({VOICE_NAME} @ {VOICE_RATE})")
     print(" 🔊 Voice Summons:   'Hey Day', 'Come here Day', 'Day come here', 'Yo Day'")
+    print(" ⚡ VAD Mode:        Continuous phrase streaming (no broken words)")
     print(" 🛡️  Sovereign Policy: Zero preachiness, zero faking, win-loop active")
 
-    # Check Voice STT / TTS service
     try:
         urllib.request.urlopen(f"{VOICE_URL}/health", timeout=2)
         print(f" ⚡ Voice Bridge:    ONLINE at {VOICE_URL}")
     except Exception:
-        print(f" ⚠️  Voice Bridge:    OFFLINE at {VOICE_URL} (Whisper/Piper down)")
-        print("    Tip: run './bin/dai up' to start the voice bridge service.")
+        print(f" ⚠️  Voice Bridge:    OFFLINE at {VOICE_URL} (Run './bin/dai up' to start)")
     print("=" * 65)
 
     threading.Thread(target=proactive_health_watchdog, daemon=True).start()
@@ -552,7 +619,7 @@ def main() -> None:
     speak_text("Day sovereign mode is live. What's the move, Boss?")
 
     def signal_handler(sig, frame):
-        print("\nStopping DAI...")
+        print("\nStopping Day...")
         _stop_event.set()
         sys.exit(0)
 
@@ -560,19 +627,12 @@ def main() -> None:
     signal.signal(signal.SIGTERM, signal_handler)
 
     while not _stop_event.is_set():
-        wav_data, rms = record_wav_chunk(CHUNK_SECONDS)
+        wav_data, peak_rms = stream_speech_phrase(mic_id, threshold=RMS_THRESHOLD)
         if not wav_data:
-            time.sleep(0.1)
+            time.sleep(0.05)
             continue
 
-        meter = "#" * min(int(rms / 50), 20)
-        print(f"\r[Listening: {mic_label}] RMS: {int(rms):4d} |{meter:<20}|", end="")
-        sys.stdout.flush()
-
-        if rms < RMS_THRESHOLD:
-            continue
-
-        print(f"\n[Mic Activity Detected]: RMS {int(rms)} -> Transcribing...")
+        print("[Voice Engine]: Transcribing full phrase...")
         text = transcribe_wav(wav_data)
         if not text:
             print("[Voice Engine]: No speech recognized.")
@@ -587,7 +647,7 @@ def main() -> None:
                 handle_user_command(command)
             else:
                 speak_text("I'm here Justin, what's up?")
-                followup_wav, _ = record_wav_chunk(5.0)
+                followup_wav, _ = stream_speech_phrase(mic_id, threshold=RMS_THRESHOLD, max_duration=8.0)
                 if followup_wav:
                     followup_text = transcribe_wav(followup_wav)
                     if followup_text:
