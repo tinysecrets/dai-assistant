@@ -249,6 +249,10 @@ PY
     exec "$ROOT/bin/dai-test-voice" "$@"
     ;;
 
+  audition)
+    exec "$ROOT/bin/dai-audition" "$@"
+    ;;
+
   listen)
     exec "$ROOT/bin/dai-listen" "$@"
     ;;
