@@ -241,6 +241,10 @@ PY
     exec "$ROOT/bin/dai-do" "$@"
     ;;
 
+  gemini|live)
+    exec "$ROOT/bin/dai-gemini" "$@"
+    ;;
+
   listen)
     exec "$ROOT/bin/dai-listen" "$@"
     ;;
