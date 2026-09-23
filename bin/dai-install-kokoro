@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# dai-install-kokoro — Setup sovereign Kokoro-82M human voice engine on dhakidd
+set -euo pipefail
+
+CYAN='\033[0;36m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+printf "${CYAN}====================================================\n"
+printf " 🎙️  INSTALLING KOKORO-82M HUMAN NEURAL VOICE\n"
+printf "====================================================${NC}\n\n"
+
+# 1. Install Python packages
+printf "${YELLOW}[1/3] Installing kokoro-onnx and soundfile...${NC}\n"
+pip install --break-system-packages kokoro-onnx soundfile
+
+# 2. Download Model files
+MODEL_DIR="$HOME/.local/voice-models/kokoro"
+mkdir -p "$MODEL_DIR"
+
+if [[ ! -f "$MODEL_DIR/kokoro-v1.0.onnx" ]]; then
+  printf "${YELLOW}[2/3] Downloading Kokoro-82M model weights (88MB)...${NC}\n"
+  curl -L -o "$MODEL_DIR/kokoro-v1.0.onnx" "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx"
+else
+  printf "${GREEN}[2/3] Kokoro model weights already present.${NC}\n"
+fi
+
+if [[ ! -f "$MODEL_DIR/voices-v1.0.bin" ]]; then
+  printf "${YELLOW}[3/3] Downloading Kokoro neural voices (28MB)...${NC}\n"
+  curl -L -o "$MODEL_DIR/voices-v1.0.bin" "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
+else
+  printf "${GREEN}[3/3] Kokoro neural voices already present.${NC}\n"
+fi
+
+printf "\n${GREEN}====================================================\n"
+printf " ✅ Kokoro-82M Installation Complete!\n"
+printf " Run: ./bin/dai audition to hear Day's new human voice.\n"
+printf "====================================================${NC}\n"
