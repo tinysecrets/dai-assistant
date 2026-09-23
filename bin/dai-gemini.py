@@ -73,17 +73,13 @@ DEFAULT_KOKORO_VOICE = os.environ.get("DAI_KOKORO_VOICE", "af_bella")
 VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+0%")
 
 SAMPLE_RATE = 16000
-RMS_THRESHOLD = 200.0  # Sensitivity gate for speech start
+RMS_THRESHOLD = 80.0  # Sensitive gate: picks up conversational voice across the room
 
 WAKE_PATTERNS = [
-    r"\bhey\s+(?:d\.?a\.?i\.?|day|dey|dave|date|bae|dan)\b",
+    r"\b(?:hey|yo|hi|ok|hello|aye)?\s*(?:d\.?a\.?i\.?|day|dey|dave|date|bae|dan|baby)\b",
     r"\bcome\s+here\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"\b(?:d\.?a\.?i\.?|day|dey)\s+come\s+here\b",
-    r"\byo\s+(?:d\.?a\.?i\.?|day|dey|dave)\b",
-    r"\bhi\s+(?:d\.?a\.?i\.?|day|dey)\b",
-    r"\bok\s+(?:d\.?a\.?i\.?|day|dey)\b",
     r"^\s*(?:d\.?a\.?i\.?|day)\b",
-    r"\b(?:d\.?a\.?i\.?|day)\b.*(?:listen|wake|you there|what's up|status|system)",
 ]
 
 _stop_event = threading.Event()
@@ -128,7 +124,7 @@ CHIME_BYTES = generate_chime_wav()
 
 
 def get_mic_device() -> tuple[str | None, str]:
-    """Detect if the LG G8 mic (android-87f1610) is active, or use default."""
+    """Detect if the LG G8 mic (android-87f1610) is active, unmuted, or use default."""
     try:
         out = subprocess.check_output(
             ["pactl", "list", "short", "sources"],
@@ -137,6 +133,8 @@ def get_mic_device() -> tuple[str | None, str]:
             env=os.environ,
         )
         if "android-87f1610" in out:
+            subprocess.run(["pactl", "set-source-mute", "android-87f1610", "false"], stderr=subprocess.DEVNULL, env=os.environ)
+            subprocess.run(["pactl", "set-source-volume", "android-87f1610", "100%"], stderr=subprocess.DEVNULL, env=os.environ)
             return "android-87f1610", "LG G8 (android-87f1610)"
         lines = [line.split()[1] for line in out.strip().splitlines() if ".monitor" not in line and len(line.split()) >= 2]
         if lines:
@@ -403,16 +401,17 @@ def transcribe_wav(wav_bytes: bytes) -> str:
 
 def extract_wake_and_command(text: str) -> tuple[bool, str]:
     lower = text.lower().strip()
+    clean = re.sub(r"[^\w\s]", " ", lower)
+    clean = " ".join(clean.split())
     for pattern in WAKE_PATTERNS:
-        match = re.search(pattern, lower)
+        match = re.search(pattern, clean)
         if match:
-            after = lower[match.end():].strip()
-            after = re.sub(r"^[,.\-?!]+\s*", "", after)
-            return True, after
-    return False, ""
+            after = clean[match.end():].strip()
+            return True, after or "what's up"
+    return False, lower
 
 
-def stream_speech_phrase(mic: str | None, threshold: float = 200.0, silence_limit: float = 0.8, max_duration: float = 12.0) -> tuple[bytes | None, float]:
+def stream_speech_phrase(mic: str | None, threshold: float = 80.0, silence_limit: float = 0.8, max_duration: float = 12.0) -> tuple[bytes | None, float]:
     """Continuous Voice Activity Detection (VAD).
 
     Listens in 0.2s slices. When user speaks (RMS >= threshold), buffers with 0.4s
@@ -768,21 +767,13 @@ def main() -> None:
 
         print(f"[Heard]: \"{text}\"")
         woke, command = extract_wake_and_command(text)
-        if woke:
-            print(f"\n[Summoned by Boss]: Heard '{text}'")
-            play_chime()
-            if command and len(command.split()) >= 2:
-                handle_user_command(command)
-            else:
-                speak_text("I'm right here with you, my boy. What we on?")
-                followup_wav, _ = stream_speech_phrase(mic_id, threshold=RMS_THRESHOLD, max_duration=8.0)
-                if followup_wav:
-                    followup_text = transcribe_wav(followup_wav)
-                    if followup_text:
-                        print(f"[Followup Heard]: \"{followup_text}\"")
-                        handle_user_command(followup_text)
-                    else:
-                        speak_text("Say that one more time for me, my boy.")
+
+        print(f"\n[Answering Boss]: '{text}'")
+        play_chime()
+        if woke and (not command or command == "what's up"):
+            speak_text("I'm right here with you, my boy. What we on?")
+        else:
+            handle_user_command(command or text)
 
 
 if __name__ == "__main__":
