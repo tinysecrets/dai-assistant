@@ -18,17 +18,17 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 KOKORO_VOICES = [
-    ("1", "Heart (Kokoro)", "af_heart", "Warm, intimate, breathy, authentic human tone (Top recommendation)"),
-    ("2", "Bella (Kokoro)", "af_bella", "Silky smooth, sultry, seductive, and playful"),
-    ("3", "Nicole (Kokoro)", "af_nicole", "Sensual, confident, articulate, and expressive"),
-    ("4", "Sarah (Kokoro)", "af_sarah", "Soft, gentle, sweet, and affectionate"),
-    ("5", "Sky (Kokoro)", "af_sky", "Lively, modern, upbeat, and natural"),
+    ("1", "Bella (Kokoro)", "af_bella", "Sultry, smooth, laid-back urban flow (Cool & effortless)"),
+    ("2", "Nicole (Kokoro)", "af_nicole", "Confident, street-smart, rhythmic, and smooth"),
+    ("3", "Heart (Kokoro)", "af_heart", "Warm, breathy, intimate, and soulful"),
+    ("4", "Sarah (Kokoro)", "af_sarah", "Soft, relaxed, down-to-earth, and affectionate"),
+    ("5", "Sky (Kokoro)", "af_sky", "Lively, modern, sharp, and natural"),
 ]
 
 EDGE_VOICES = [
-    ("6", "Ava (Edge)", "en-US-AvaNeural", "Silky, modern, seductive (Edge-TTS)"),
-    ("7", "Aria (Edge)", "en-US-AriaNeural", "Passionate, expressive, bold (Edge-TTS)"),
-    ("8", "Michelle (Edge)", "en-US-MichelleNeural", "Soulful, warm, down-to-earth (Edge-TTS)"),
+    ("6", "Michelle (Edge)", "en-US-MichelleNeural", "Soulful, warm, authentic urban cadence"),
+    ("7", "Aria (Edge)", "en-US-AriaNeural", "Confident, bold, rhythmic flow"),
+    ("8", "Ava (Edge)", "en-US-AvaNeural", "Silky, modern, seductive"),
 ]
 
 
@@ -44,7 +44,7 @@ def play_audio(path: str) -> None:
 def speak_kokoro(voice_id: str, text: str) -> bool:
     try:
         from lib.dai.kokoro_engine import synthesize_speech
-        wav = synthesize_speech(text, voice=voice_id, speed=1.0)
+        wav = synthesize_speech(text, voice=voice_id, speed=0.96)
         if wav and os.path.exists(wav):
             play_audio(wav)
             try:
@@ -98,7 +98,7 @@ def main() -> None:
         if ans in ("", "y", "yes"):
             has_kokoro = ensure_kokoro_installed()
 
-    sample_phrase = "Hey Justin... it's Day. I'm right here with you, baby. What's the move today?"
+    sample_phrase = "What it do, my boy... What we doing for it?"
 
     if has_kokoro:
         print("\n--- 🌟 LOCAL HUMAN NEURAL VOICES (KOKORO-82M) ---")
@@ -114,8 +114,8 @@ def main() -> None:
         speak_edge(voice_id, sample_phrase)
 
     print("\n" + "=" * 65)
-    choice = input("Enter voice number to lock in [1-8] (default: 1 Heart): ").strip()
-    selected_voice = "af_heart"
+    choice = input("Enter voice number to lock in [1-8] (default: 1 Bella): ").strip()
+    selected_voice = "af_bella"
     engine = "kokoro"
 
     for num, name, voice_id, _ in KOKORO_VOICES:

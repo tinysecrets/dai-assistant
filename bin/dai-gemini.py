@@ -55,12 +55,17 @@ if VOICE_CONFIG.is_file():
                 v = line.split("=", 1)[1].strip().strip("\"'")
                 if v:
                     os.environ["DAI_VOICE"] = v
+            if line.startswith("export DAI_KOKORO_VOICE=") or line.startswith("DAI_KOKORO_VOICE="):
+                v = line.split("=", 1)[1].strip().strip("\"'")
+                if v:
+                    os.environ["DAI_KOKORO_VOICE"] = v
     except Exception:
         pass
 
-# Voice Configuration: Ava is sultry, smooth, intimate and expressive
-VOICE_NAME = os.environ.get("DAI_VOICE", "en-US-AvaNeural")
-VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+2%")
+# Voice Configuration: Bella is sultry, smooth, laid-back urban flow
+DEFAULT_KOKORO_VOICE = os.environ.get("DAI_KOKORO_VOICE", "af_bella")
+VOICE_NAME = os.environ.get("DAI_VOICE", "en-US-MichelleNeural")
+VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+0%")
 
 SAMPLE_RATE = 16000
 RMS_THRESHOLD = 200.0  # Sensitivity gate for speech start
@@ -242,7 +247,7 @@ def speak_via_kokoro(text: str) -> bool:
         from lib.dai.kokoro_engine import is_kokoro_available, synthesize_speech
         if not is_kokoro_available():
             return False
-        voice = os.environ.get("DAI_KOKORO_VOICE", "af_heart")
+        voice = os.environ.get("DAI_KOKORO_VOICE", DEFAULT_KOKORO_VOICE)
         wav_path = synthesize_speech(text, voice=voice, speed=1.0)
         if not wav_path or not os.path.exists(wav_path):
             return False
@@ -729,7 +734,7 @@ def main() -> None:
     threading.Thread(target=proactive_health_watchdog, daemon=True).start()
 
     play_chime()
-    speak_text("Hey Justin... Day is locked in and ready for you, baby. What's the move?")
+    speak_text("What it do, my boy... What we doing for it today?")
 
     def signal_handler(sig, frame):
         print("\nStopping Day...")
@@ -759,7 +764,7 @@ def main() -> None:
             if command and len(command.split()) >= 2:
                 handle_user_command(command)
             else:
-                speak_text("I'm right here baby, what do you need?")
+                speak_text("I'm right here with you, my boy. What we on?")
                 followup_wav, _ = stream_speech_phrase(mic_id, threshold=RMS_THRESHOLD, max_duration=8.0)
                 if followup_wav:
                     followup_text = transcribe_wav(followup_wav)
@@ -767,7 +772,7 @@ def main() -> None:
                         print(f"[Followup Heard]: \"{followup_text}\"")
                         handle_user_command(followup_text)
                     else:
-                        speak_text("Say that one more time for me, baby.")
+                        speak_text("Say that one more time for me, my boy.")
 
 
 if __name__ == "__main__":
