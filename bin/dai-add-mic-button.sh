@@ -63,9 +63,7 @@ EOF
 chmod +x "$LAUNCHER_PATH"
 
 if command -v gsettings >/dev/null 2>&1; then
-    current_objects=$(gsettings get org.mate.panel object-id-list 2>/dev/null || echo "[]")
-    if ! echo "$current_objects" | grep -q "dictate_launcher"; then
-        python3 - << 'PYEOF'
+    python3 - << 'PYEOF'
 import subprocess, ast
 try:
     out = subprocess.check_output(["gsettings", "get", "org.mate.panel", "object-id-list"], text=True).strip()
@@ -73,22 +71,26 @@ try:
     if "dictate_launcher" not in objs:
         objs.append("dictate_launcher")
         subprocess.run(["gsettings", "set", "org.mate.panel", "object-id-list", str(objs)], check=True)
-except Exception:
-    pass
+except Exception as e:
+    print(f"Panel list notice: {e}")
 PYEOF
-        gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ object-type 'launcher' 2>/dev/null || true
-        gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ toplevel-id 'top' 2>/dev/null || true
-        gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ position 12 2>/dev/null || true
-        gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ panel-right-stick false 2>/dev/null || true
-        gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ launcher-location "$LAUNCHER_PATH" 2>/dev/null || true
-        echo "  -> Microphone button pinned directly to MATE panel taskbar!"
-    fi
+    gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ object-type 'launcher' 2>/dev/null || true
+    gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ toplevel-id 'top' 2>/dev/null || true
+    gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ position 15 2>/dev/null || true
+    gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ panel-right-stick false 2>/dev/null || true
+    gsettings set org.mate.panel.object:/org/mate/panel/objects/dictate_launcher/ launcher-location "$LAUNCHER_PATH" 2>/dev/null || true
+
+    # Force MATE panel to reload so the new button renders immediately
+    nohup mate-panel --replace >/dev/null 2>&1 &
+    echo "  -> Microphone button pinned directly to MATE panel taskbar!"
 fi
 
-# 4. Copy to Desktop
+# 4. Copy to Desktop & Mark Trusted
 echo "[3/3] Placing 🎤 Mic Button on Desktop..."
-cp -f "$LAUNCHER_PATH" "$HOME/Desktop/🎤 Dictate.desktop" 2>/dev/null || true
-chmod +x "$HOME/Desktop/🎤 Dictate.desktop" 2>/dev/null || true
+DESK_PATH="$HOME/Desktop/🎤 Dictate.desktop"
+cp -f "$LAUNCHER_PATH" "$DESK_PATH" 2>/dev/null || true
+chmod +x "$DESK_PATH" 2>/dev/null || true
+gio set "$DESK_PATH" metadata::trusted yes 2>/dev/null || true
 
 echo ""
 echo "================================================================="

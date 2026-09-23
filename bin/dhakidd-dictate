@@ -22,8 +22,9 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
 
 mkdir -p "$STATE"
-exec 9>"$LOCK"
-flock -n 9 || exit 0
+
+# Clean up lock trap - use simple PID state
+rm -f "$LOCK"
 
 # --- State 1: Already recording -> Stop, Transcribe, and Paste ---
 if [ -s "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; then
@@ -116,19 +117,9 @@ fi
     exit 1
 }
 
-# Auto-timeout after 30 seconds so it never hangs in background
-(
-    ffmpeg -loglevel error -f pulse -i "$SOURCE" -ac 1 -ar 16000 -c:a pcm_s16le "$WAV" >/dev/null 2>&1
-) &
+# Start ffmpeg recording with clean detached process
+nohup ffmpeg -loglevel error -f pulse -i "$SOURCE" -ac 1 -ar 16000 -c:a pcm_s16le "$WAV" >/dev/null 2>&1 &
 REC_PID=$!
 echo "$REC_PID" > "$PIDFILE"
 
-# Watchdog: auto-stop after 30 seconds if user forgot to press Super+D
-(
-    sleep 30
-    if [ -s "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null)" = "$REC_PID" ]; then
-        kill -INT "$REC_PID" 2>/dev/null || true
-    fi
-) &
-
-notify-send '🎤 Dictation' 'Listening to S22... Press Super+D or click icon when done.' 2>/dev/null || true
+notify-send '🎤 Dictation' 'Listening to S22... Tap F9 or click icon when done.' 2>/dev/null || true
