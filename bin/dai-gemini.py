@@ -55,6 +55,10 @@ if VOICE_CONFIG.is_file():
                 v = line.split("=", 1)[1].strip().strip("\"'")
                 if v:
                     os.environ["DAI_VOICE"] = v
+            if line.startswith("export DAI_VOICE_ENGINE=") or line.startswith("DAI_VOICE_ENGINE="):
+                v = line.split("=", 1)[1].strip().strip("\"'")
+                if v:
+                    os.environ["DAI_VOICE_ENGINE"] = v
             if line.startswith("export DAI_KOKORO_VOICE=") or line.startswith("DAI_KOKORO_VOICE="):
                 v = line.split("=", 1)[1].strip().strip("\"'")
                 if v:
@@ -62,9 +66,10 @@ if VOICE_CONFIG.is_file():
     except Exception:
         pass
 
-# Voice Configuration: Bella is sultry, smooth, laid-back urban flow
+# Voice Configuration
+VOICE_ENGINE = os.environ.get("DAI_VOICE_ENGINE", "edge")
+VOICE_NAME = os.environ.get("DAI_VOICE", "en-US-AvaNeural")
 DEFAULT_KOKORO_VOICE = os.environ.get("DAI_KOKORO_VOICE", "af_bella")
-VOICE_NAME = os.environ.get("DAI_VOICE", "en-US-MichelleNeural")
 VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+0%")
 
 SAMPLE_RATE = 16000
@@ -332,19 +337,24 @@ def speak_via_elevenlabs(text: str) -> bool:
 
 def speak_text(text: str) -> None:
     """Speak text using highest available quality human voice:
-    1. ElevenLabs (if key in .env)
-    2. Kokoro-82M (af_heart / af_bella local sovereign neural voice)
-    3. Edge-TTS neural backup
-    4. Local Piper fallback
+    Honors DAI_VOICE_ENGINE (edge | kokoro | elevenlabs) set by audition.
     """
     print(f"\n[Day Speaks]: {text}")
-    if speak_via_elevenlabs(text):
+    engine = os.environ.get("DAI_VOICE_ENGINE", "edge").lower()
+
+    if engine == "edge" and speak_via_edge_tts(text):
+        return
+    elif engine == "kokoro" and speak_via_kokoro(text):
+        return
+    elif engine == "elevenlabs" and speak_via_elevenlabs(text):
         return
 
+    # Fallback chain if preferred engine is unavailable
+    if speak_via_edge_tts(text):
+        return
     if speak_via_kokoro(text):
         return
-
-    if speak_via_edge_tts(text):
+    if speak_via_elevenlabs(text):
         return
 
     # Fallback to local voice-bridge (piper-tts)
@@ -719,7 +729,7 @@ def main() -> None:
     print(" 🎙️  DAI GEMINI SOVEREIGN MODE — KING JUSTIN'S CHIEF OF STAFF")
     print(f" 🧠 Frontier Engine: {gh}")
     print(f" 🎤 Active Mic:      {mic_label}")
-    print(f" 🗣️  Voice Engine:    Edge-TTS ({VOICE_NAME} @ {VOICE_RATE})")
+    print(f" 🗣️  Voice Engine:    {VOICE_ENGINE.upper()} ({VOICE_NAME if VOICE_ENGINE == 'edge' else DEFAULT_KOKORO_VOICE})")
     print(" 🔊 Voice Summons:   'Hey Day', 'Come here Day', 'Day come here', 'Yo Day'")
     print(" ⚡ VAD Mode:        Continuous phrase streaming (no broken words)")
     print(" 🛡️  Sovereign Policy: Zero preachiness, zero faking, win-loop active")
