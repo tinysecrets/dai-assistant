@@ -124,7 +124,7 @@ CHIME_BYTES = generate_chime_wav()
 
 
 def get_mic_device() -> tuple[str | None, str]:
-    """Detect if the LG G8 mic (android-87f1610) is active, unmuted, or use default."""
+    """Detect Samsung S22 Ultra mic (s22-mic), unmuted, or fall back to default."""
     try:
         out = subprocess.check_output(
             ["pactl", "list", "short", "sources"],
@@ -132,6 +132,10 @@ def get_mic_device() -> tuple[str | None, str]:
             stderr=subprocess.DEVNULL,
             env=os.environ,
         )
+        if "s22-mic" in out:
+            subprocess.run(["pactl", "set-source-mute", "s22-mic", "false"], stderr=subprocess.DEVNULL, env=os.environ)
+            subprocess.run(["pactl", "set-source-volume", "s22-mic", "100%"], stderr=subprocess.DEVNULL, env=os.environ)
+            return "s22-mic", "Samsung S22 Ultra (s22-mic)"
         if "android-87f1610" in out:
             subprocess.run(["pactl", "set-source-mute", "android-87f1610", "false"], stderr=subprocess.DEVNULL, env=os.environ)
             subprocess.run(["pactl", "set-source-volume", "android-87f1610", "100%"], stderr=subprocess.DEVNULL, env=os.environ)

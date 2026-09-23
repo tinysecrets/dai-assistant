@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# S22 Ultra Unified Microphone Streamer (Self-Healing USB + Wi-Fi / Tailscale)
+# Streams Samsung S22 Ultra microphone into PipeWire virtual node 's22-mic'
+# Feeds DAI Assistant, Dictator (Super+D), and Browser Voice Search seamlessly
+# ==============================================================================
+
+set -uo pipefail
+
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+
+CONF="$HOME/.config/dhakidd-bridge.conf"
+USB_SERIAL="RFCT428ZRSZ"
+PHONE_TS_IP=""
+if [ -f "$CONF" ]; then
+    # shellcheck source=/dev/null
+    source "$CONF" 2>/dev/null || true
+fi
+
+ensure_virtual_mic_node() {
+    if ! pactl list short sources 2>/dev/null | grep -q "s22-mic"; then
+        echo "[S22 Mic]: Creating PipeWire virtual microphone 's22-mic'..."
+        pactl load-module module-null-sink media.class=Audio/Source/Virtual \
+            sink_name=s22-mic channel_map=front-left,front-right rate=48000 \
+            sink_properties=device.description="Samsung_S22_Ultra_Mic" >/dev/null 2>&1 || true
+    fi
+    pactl set-source-mute s22-mic false 2>/dev/null || true
+    pactl set-source-volume s22-mic 100% 2>/dev/null || true
+    pactl set-default-source s22-mic 2>/dev/null || true
+}
+
+find_s22_device() {
+    # 1. Prefer direct USB connection if active
+    if adb devices 2>/dev/null | grep -E "^${USB_SERIAL}\s+device" >/dev/null; then
+        echo "$USB_SERIAL"
+        return 0
+    fi
+
+    # 2. Check Tailscale / Wi-Fi IP if defined
+    if [ -n "$PHONE_TS_IP" ]; then
+        if adb devices 2>/dev/null | grep -E "^${PHONE_TS_IP}:[0-9]+\s+device" >/dev/null; then
+            adb devices 2>/dev/null | awk -v ip="$PHONE_TS_IP" '$1 ~ ("^" ip ":[0-9]+$") && $2=="device"{print $1; exit}'
+            return 0
+        fi
+        # Try auto-connecting to Tailscale IP on default port 5555
+        adb connect "${PHONE_TS_IP}:5555" >/dev/null 2>&1 || true
+        sleep 1
+        if adb devices 2>/dev/null | grep -E "^${PHONE_TS_IP}:[0-9]+\s+device" >/dev/null; then
+            adb devices 2>/dev/null | awk -v ip="$PHONE_TS_IP" '$1 ~ ("^" ip ":[0-9]+$") && $2=="device"{print $1; exit}'
+            return 0
+        fi
+    fi
+
+    # 3. Any active authorized adb device that is NOT the old LG G8
+    local any_dev
+    any_dev="$(adb devices 2>/dev/null | awk '$1 !~ /LMG820/ && $2=="device"{print $1; exit}')"
+    if [ -n "$any_dev" ]; then
+        echo "$any_dev"
+        return 0
+    fi
+
+    return 1
+}
+
+echo "=== S22 Ultra Microphone Daemon Started ==="
+
+while true; do
+    ensure_virtual_mic_node
+
+    DEV="$(find_s22_device || true)"
+    if [ -z "$DEV" ]; then
+        # Wait and retry connection
+        sleep 3
+        continue
+    fi
+
+    echo "[S22 Mic]: Connected to S22 ($DEV). Starting microphone stream..."
+
+    # Method 1: Native Scrcpy 2.0+ mic forwarder (low latency, no extra apk)
+    if command -v scrcpy >/dev/null 2>&1; then
+        PULSE_SINK=s22-mic scrcpy -s "$DEV" --no-video --no-window --no-playback \
+            --audio-source=mic --audio-codec=raw --record-format=wav \
+            --audio-buffer=40 --audio-output-buffer=10 >/dev/null 2>&1 || \
+        PULSE_SINK=s22-mic scrcpy -s "$DEV" --no-video --no-window \
+            --audio-source=mic --audio-buffer=40 >/dev/null 2>&1 || true
+    fi
+
+    echo "[S22 Mic]: Stream interrupted. Reconnecting in 2s..."
+    sleep 2
+done
