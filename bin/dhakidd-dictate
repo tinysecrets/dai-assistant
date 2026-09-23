@@ -46,9 +46,18 @@ if [ -s "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; the
     fi
 
     rm -f "$WAV.txt"
-    "$WHISPER" -m "$MODEL" -t 6 -l en -nt -otxt "$WAV" >/dev/null 2>&1 || true
+    TEXT=""
+    if [ -x "$WHISPER" ] && [ -s "$MODEL" ]; then
+        "$WHISPER" -m "$MODEL" -t 6 -l en -nt -otxt "$WAV" >/dev/null 2>&1 || true
+        TEXT=$(sed ':a;N;$!ba;s/\n/ /g' "$WAV.txt" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+    fi
 
-    TEXT=$(sed ':a;N;$!ba;s/\n/ /g' "$WAV.txt" 2>/dev/null | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || true)
+    # Fallback to local Voice Bridge STT API (http://127.0.0.1:8766) if whisper-cli didn't produce text
+    if [ -z "$TEXT" ]; then
+        TEXT=$(curl -sf --max-time 15 -X POST http://127.0.0.1:8766/v1/audio/transcriptions \
+            -F file=@"$WAV" -F model=base -F language=en 2>/dev/null | \
+            python3 -c "import sys, json; print(json.load(sys.stdin).get('text', '').strip())" 2>/dev/null || true)
+    fi
 
     if [ -n "$TEXT" ]; then
         # Use Clipboard Paste (Ctrl+V) so modern web chat boxes (React/Vue/Arena) receive it instantly
@@ -75,8 +84,15 @@ if [ -s "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE" 2>/dev/null)" 2>/dev/null; the
 fi
 
 # --- State 2: Start Recording ---
-[ -x "$WHISPER" ] && [ -s "$MODEL" ] || {
-    notify-send '🎤 Dictation' 'Whisper engine or model missing in ~/.local/share/dhakidd-whisper' 2>/dev/null || true
+HAS_ENGINE=0
+if [ -x "$WHISPER" ] && [ -s "$MODEL" ]; then
+    HAS_ENGINE=1
+elif curl -sf --max-time 2 http://127.0.0.1:8766/health >/dev/null 2>&1; then
+    HAS_ENGINE=1
+fi
+
+[ "$HAS_ENGINE" -eq 1 ] || {
+    notify-send '🎤 Dictation' 'Voice Bridge / Whisper engine is not running.' 2>/dev/null || true
     exit 1
 }
 

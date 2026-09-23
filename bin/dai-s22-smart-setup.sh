@@ -65,11 +65,20 @@ echo "  -> s22-mic.service restarted with Python multi-transport engine."
 # --- 3. Fix Super+D and Super+X Keybindings in MATE Desktop ---
 echo "[3/5] Locking in Super+D keybinding in MATE..."
 if command -v gsettings >/dev/null 2>&1; then
+    # Disable default 'show-desktop' taking over Super+D
     gsettings set org.mate.Marco.global-keybindings show-desktop '' 2>/dev/null || true
+
+    # Marco Window Manager Keybindings
     gsettings set org.mate.Marco.global-keybindings run-command-1 '<Mod4>d' 2>/dev/null || true
     gsettings set org.mate.Marco.keybinding-commands command-1 "$HOME/.local/bin/dhakidd-dictate" 2>/dev/null || true
     gsettings set org.mate.Marco.global-keybindings run-command-2 '<Mod4>x' 2>/dev/null || true
     gsettings set org.mate.Marco.keybinding-commands command-2 "$HOME/.local/bin/dhakidd-dictate" 2>/dev/null || true
+
+    # MATE Settings Daemon Media-Keys (Universal Desktop Handler)
+    gsettings set org.mate.SettingsDaemon.plugins.media-keys custom-keybindings "['/org/mate/settings-daemon/plugins/media-keys/custom-keybindings/custom0/']" 2>/dev/null || true
+    gsettings set org.mate.SettingsDaemon.plugins.media-keys.custom-keybinding:/org/mate/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ name 'Dictator' 2>/dev/null || true
+    gsettings set org.mate.SettingsDaemon.plugins.media-keys.custom-keybinding:/org/mate/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ command "$HOME/.local/bin/dhakidd-dictate" 2>/dev/null || true
+    gsettings set org.mate.SettingsDaemon.plugins.media-keys.custom-keybinding:/org/mate/settings-daemon/plugins/media-keys/custom-keybindings/custom0/ binding '<Super>d' 2>/dev/null || true
 fi
 
 # --- 4. Desktop Launchers ---
