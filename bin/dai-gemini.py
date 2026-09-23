@@ -411,6 +411,26 @@ def extract_wake_and_command(text: str) -> tuple[bool, str]:
     return False, lower
 
 
+def is_dictation_active() -> bool:
+    """Detect if dhakidd-dictate (Super+D Whisper dictation) is actively recording."""
+    pidfile = os.path.expanduser("~/.local/state/dhakidd-dictate/recording.pid")
+    if os.path.exists(pidfile):
+        try:
+            with open(pidfile) as f:
+                content = f.read().strip()
+            if content:
+                pid = int(content)
+                os.kill(pid, 0)
+                return True
+        except (ProcessLookupError, ValueError):
+            return False
+        except PermissionError:
+            return True
+        except Exception:
+            pass
+    return False
+
+
 def stream_speech_phrase(mic: str | None, threshold: float = 80.0, silence_limit: float = 0.8, max_duration: float = 12.0) -> tuple[bytes | None, float]:
     """Continuous Voice Activity Detection (VAD).
 
@@ -753,10 +773,23 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    last_assistant_speech_time = time.time()  # Start awake from intro greeting
+    CONVERSATIONAL_WINDOW_SEC = 15.0
+
     while not _stop_event.is_set():
+        # 1. Non-interception: If Dictator (Super+D) is active, pause and do not capture
+        if is_dictation_active():
+            time.sleep(0.2)
+            continue
+
         wav_data, peak_rms = stream_speech_phrase(mic_id, threshold=RMS_THRESHOLD)
         if not wav_data:
             time.sleep(0.05)
+            continue
+
+        # 2. Check again if dictation started while recording
+        if is_dictation_active():
+            print("\n[Voice Engine]: Dictator active (Super+D) — stepping aside so your words go straight to screen.")
             continue
 
         print("[Voice Engine]: Transcribing full phrase...")
@@ -768,12 +801,31 @@ def main() -> None:
         print(f"[Heard]: \"{text}\"")
         woke, command = extract_wake_and_command(text)
 
+        now = time.time()
+        in_dialogue = (now - last_assistant_speech_time) < CONVERSATIONAL_WINDOW_SEC
+
+        clean_lower = text.lower().strip()
+
+        # Standby / dismiss commands
+        if any(s in clean_lower for s in ["never mind", "that's all", "go to sleep", "rest day", "stand by", "standby", "be quiet", "shut up"]):
+            last_assistant_speech_time = 0.0
+            play_chime()
+            speak_text("Got you, my boy. Standing by.")
+            continue
+
+        # Non-interception: If not addressed with wake words and dialogue window expired, stay silent
+        if not woke and not in_dialogue:
+            print(f"[Standby]: Ignored ambient speech (Say 'Hey Day' or 'Yo Day' to talk to me)")
+            continue
+
         print(f"\n[Answering Boss]: '{text}'")
         play_chime()
         if woke and (not command or command == "what's up"):
             speak_text("I'm right here with you, my boy. What we on?")
         else:
             handle_user_command(command or text)
+
+        last_assistant_speech_time = time.time()
 
 
 if __name__ == "__main__":
