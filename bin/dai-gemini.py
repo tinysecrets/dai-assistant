@@ -124,7 +124,7 @@ CHIME_BYTES = generate_chime_wav()
 
 
 def get_mic_device() -> tuple[str | None, str]:
-    """Detect Samsung S22 Ultra mic (s22-mic), unmuted, or fall back to default."""
+    """Detect Samsung S22 Ultra mic (android-4f3b250 or s22-mic), unmuted, or fall back to default."""
     try:
         out = subprocess.check_output(
             ["pactl", "list", "short", "sources"],
@@ -132,6 +132,10 @@ def get_mic_device() -> tuple[str | None, str]:
             stderr=subprocess.DEVNULL,
             env=os.environ,
         )
+        if "android-4f3b250" in out:
+            subprocess.run(["pactl", "set-source-mute", "android-4f3b250", "false"], stderr=subprocess.DEVNULL, env=os.environ)
+            subprocess.run(["pactl", "set-source-volume", "android-4f3b250", "100%"], stderr=subprocess.DEVNULL, env=os.environ)
+            return "android-4f3b250", "Samsung S22 Ultra (android-4f3b250)"
         if "s22-mic" in out:
             subprocess.run(["pactl", "set-source-mute", "s22-mic", "false"], stderr=subprocess.DEVNULL, env=os.environ)
             subprocess.run(["pactl", "set-source-volume", "s22-mic", "100%"], stderr=subprocess.DEVNULL, env=os.environ)

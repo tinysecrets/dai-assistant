@@ -98,13 +98,17 @@ fi
 
 rm -f "$WAV" "$WAV.txt"
 
-# Find best capture source: prefer s22-mic, else default
-SOURCE="s22-mic"
-if ! pactl list short sources 2>/dev/null | grep -q "s22-mic"; then
-    SOURCE=$(pactl get-default-source 2>/dev/null || echo "")
-    case "$SOURCE" in
-        *.monitor) SOURCE=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ {print $2; exit}') ;;
-    esac
+# Find best capture source: prefer S22 Ultra (android-4f3b250 or s22-mic), else default
+SOURCE="android-4f3b250"
+if ! pactl list short sources 2>/dev/null | grep -q "android-4f3b250"; then
+    if pactl list short sources 2>/dev/null | grep -q "s22-mic"; then
+        SOURCE="s22-mic"
+    else
+        SOURCE=$(pactl get-default-source 2>/dev/null || echo "")
+        case "$SOURCE" in
+            *.monitor) SOURCE=$(pactl list short sources 2>/dev/null | awk '$2 !~ /\.monitor$/ {print $2; exit}') ;;
+        esac
+    fi
 fi
 
 [ -n "$SOURCE" ] || {
