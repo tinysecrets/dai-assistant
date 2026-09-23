@@ -74,13 +74,23 @@ def ensure_model() -> bool:
     return True
 
 
+FILLERS = {"huh", "uh", "um", "ah", "eh", "er", "ha", "mm", "hm", "hmm", "huff"}
+
+
+def clean_recognized_text(text: str) -> str:
+    """Filter out breath noises, sighs, and mic throat clears."""
+    words = text.strip().split()
+    cleaned = [w for w in words if w.lower() not in FILLERS]
+    return " ".join(cleaned).strip()
+
+
 def type_live_text(text: str) -> None:
+    text = clean_recognized_text(text)
     if not text:
         return
     # Stream text live into focused window
     try:
-        # Use xdotool type for real-time word flow
-        subprocess.run(["xdotool", "type", "--clearmodifiers", "--delay", "1", "--", text], stderr=subprocess.DEVNULL)
+        subprocess.run(["xdotool", "type", "--clearmodifiers", "--delay", "1", "--", text + " "], stderr=subprocess.DEVNULL)
     except Exception:
         pass
 
@@ -118,7 +128,7 @@ def run_live_stream() -> None:
                 res = json.loads(rec.Result())
                 text = res.get("text", "").strip()
                 if text:
-                    type_live_text(text + " ")
+                    type_live_text(text)
     finally:
         proc.kill()
         subprocess.Popen(["notify-send", "-t", "1500", "🎙️ Live Mic Off", "Finished dictating."], stderr=subprocess.DEVNULL)
