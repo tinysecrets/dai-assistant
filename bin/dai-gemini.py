@@ -416,6 +416,21 @@ def is_dictation_active() -> bool:
     pidfile = os.path.expanduser("~/.local/state/dhakidd-dictate/recording.pid")
     if os.path.exists(pidfile):
         try:
+            # If pidfile has been sitting for over 40 seconds, it is an abandoned orphan
+            st = os.stat(pidfile)
+            if (time.time() - st.st_mtime) > 40.0:
+                try:
+                    with open(pidfile) as f:
+                        pid = int(f.read().strip())
+                    os.kill(pid, 15)  # SIGTERM stuck ffmpeg
+                except Exception:
+                    pass
+                try:
+                    os.remove(pidfile)
+                except Exception:
+                    pass
+                return False
+
             with open(pidfile) as f:
                 content = f.read().strip()
             if content:
@@ -423,6 +438,10 @@ def is_dictation_active() -> bool:
                 os.kill(pid, 0)
                 return True
         except (ProcessLookupError, ValueError):
+            try:
+                os.remove(pidfile)
+            except Exception:
+                pass
             return False
         except PermissionError:
             return True
