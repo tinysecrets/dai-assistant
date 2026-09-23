@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DAI Voice Audition Tool — Listen to candidate voices and pick your favorite."""
+"""DAI Voice Audition Tool — Hear the natural human neural voices."""
 from __future__ import annotations
 
 import os
@@ -13,94 +13,128 @@ from pathlib import Path
 if "XDG_RUNTIME_DIR" not in os.environ:
     os.environ["XDG_RUNTIME_DIR"] = f"/run/user/{os.getuid()}"
 
-VOICES = [
-    ("1", "Ava", "en-US-AvaNeural", "Silky smooth, sultry, warm, and intimate (Seductive & confident)"),
-    ("2", "Aria", "en-US-AriaNeural", "Passionate, expressive, sensual, and soulful"),
-    ("3", "Michelle", "en-US-MichelleNeural", "Soulful, warm, authentic, and down-to-earth"),
-    ("4", "Jenny", "en-US-JennyNeural", "Playful, sweet, energetic, and affectionate"),
-    ("5", "Leah", "en-ZA-LeahNeural", "Smooth, melodic, captivating and international"),
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+KOKORO_VOICES = [
+    ("1", "Heart (Kokoro)", "af_heart", "Warm, intimate, breathy, authentic human tone (Top recommendation)"),
+    ("2", "Bella (Kokoro)", "af_bella", "Silky smooth, sultry, seductive, and playful"),
+    ("3", "Nicole (Kokoro)", "af_nicole", "Sensual, confident, articulate, and expressive"),
+    ("4", "Sarah (Kokoro)", "af_sarah", "Soft, gentle, sweet, and affectionate"),
+    ("5", "Sky (Kokoro)", "af_sky", "Lively, modern, upbeat, and natural"),
+]
+
+EDGE_VOICES = [
+    ("6", "Ava (Edge)", "en-US-AvaNeural", "Silky, modern, seductive (Edge-TTS)"),
+    ("7", "Aria (Edge)", "en-US-AriaNeural", "Passionate, expressive, bold (Edge-TTS)"),
+    ("8", "Michelle (Edge)", "en-US-MichelleNeural", "Soulful, warm, down-to-earth (Edge-TTS)"),
 ]
 
 
-def find_edge_tts() -> list[str] | None:
-    if shutil.which("edge-tts"):
-        return [shutil.which("edge-tts")]
-    cand = Path.home() / ".local" / "bin" / "edge-tts"
-    if cand.is_file() and os.access(cand, os.X_OK):
-        return [str(cand)]
-    for py in ["python3", "/usr/bin/python3", sys.executable, str(Path.home() / ".local/voice-venv/bin/python")]:
-        try:
-            res = subprocess.run([py, "-m", "edge_tts", "--version"], capture_output=True, timeout=2, env=os.environ)
-            if res.returncode == 0:
-                return [py, "-m", "edge_tts"]
-        except Exception:
-            pass
-    return None
+def play_audio(path: str) -> None:
+    if shutil.which("paplay"):
+        subprocess.run(["paplay", path], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
+    elif shutil.which("mpv"):
+        subprocess.run(["mpv", "--no-terminal", path], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
+    elif shutil.which("aplay"):
+        subprocess.run(["aplay", "-q", "-r", "24000", "-f", "S16_LE", path], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
 
 
-def speak(cmd_prefix: list[str], voice_id: str, text: str) -> None:
+def speak_kokoro(voice_id: str, text: str) -> bool:
+    try:
+        from lib.dai.kokoro_engine import synthesize_speech
+        wav = synthesize_speech(text, voice=voice_id, speed=1.0)
+        if wav and os.path.exists(wav):
+            play_audio(wav)
+            try:
+                os.remove(wav)
+            except Exception:
+                pass
+            return True
+    except Exception as e:
+        print(f"Kokoro error: {e}")
+    return False
+
+
+def speak_edge(voice_id: str, text: str) -> bool:
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
         tmp_mp3 = f.name
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
         tmp_wav = f.name
     try:
-        cmd = cmd_prefix + ["--voice", voice_id, "--rate=+5%", "--text", text, "--write-media", tmp_mp3]
-        subprocess.run(cmd, capture_output=True, timeout=15, env=os.environ)
-        if os.path.exists(tmp_mp3) and os.path.getsize(tmp_mp3) > 100:
+        cmd = ["edge-tts", "--voice", voice_id, "--rate=+2%", "--text", text, "--write-media", tmp_mp3]
+        res = subprocess.run(cmd, capture_output=True, timeout=15, env=os.environ)
+        if res.returncode == 0 and os.path.exists(tmp_mp3):
             if shutil.which("ffmpeg"):
-                subprocess.run(
-                    ["ffmpeg", "-y", "-i", tmp_mp3, "-ar", "24000", "-ac", "1", tmp_wav],
-                    capture_output=True,
-                    timeout=10,
-                    env=os.environ,
-                )
-                play_file = tmp_wav if os.path.exists(tmp_wav) else tmp_mp3
+                subprocess.run(["ffmpeg", "-y", "-i", tmp_mp3, "-ar", "24000", "-ac", "1", tmp_wav], capture_output=True, timeout=10, env=os.environ)
+                play_audio(tmp_wav)
             else:
-                play_file = tmp_mp3
-
-            if play_file.endswith(".wav") and shutil.which("paplay"):
-                subprocess.run(["paplay", play_file], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
-            elif shutil.which("mpv"):
-                subprocess.run(["mpv", "--no-terminal", play_file], timeout=20, stderr=subprocess.DEVNULL, env=os.environ)
+                play_audio(tmp_mp3)
+            return True
+    except Exception:
+        pass
     finally:
         for p in (tmp_mp3, tmp_wav):
             try:
                 os.remove(p)
             except Exception:
                 pass
+    return False
 
 
 def main() -> None:
-    print("=" * 60)
-    print(" 🎙️  DAY VOICE AUDITION — PICK YOUR FAVORITE NEURAL VOICE")
-    print("=" * 60)
+    print("=" * 65)
+    print(" 🎙️  DAY VOICE AUDITION — KING JUSTIN'S SUITE")
+    print("=" * 65)
 
-    cmd_prefix = find_edge_tts()
-    if not cmd_prefix:
-        print("Error: edge-tts is not found. Run: pip install --break-system-packages edge-tts")
-        sys.exit(1)
+    from lib.dai.kokoro_engine import is_kokoro_available, ensure_kokoro_installed
+
+    has_kokoro = is_kokoro_available()
+    if not has_kokoro:
+        print("\nKokoro-82M human voice engine is not yet installed.")
+        print("Would you like to install it now? (Takes ~15s, 116MB total)")
+        ans = input("Install Kokoro? [Y/n]: ").strip().lower()
+        if ans in ("", "y", "yes"):
+            has_kokoro = ensure_kokoro_installed()
 
     sample_phrase = "Hey Justin... it's Day. I'm right here with you, baby. What's the move today?"
 
-    for num, name, voice_id, desc in VOICES:
-        print(f"\n[{num}] Auditioning {name} ({voice_id})...")
-        print(f"    Style: {desc}")
-        speak(cmd_prefix, voice_id, sample_phrase)
+    if has_kokoro:
+        print("\n--- 🌟 LOCAL HUMAN NEURAL VOICES (KOKORO-82M) ---")
+        for num, name, voice_id, desc in KOKORO_VOICES:
+            print(f"\n[{num}] {name}...")
+            print(f"    Style: {desc}")
+            speak_kokoro(voice_id, sample_phrase)
 
-    print("\n" + "=" * 60)
-    choice = input("Enter the number of the voice you want [1-5] (or press Enter for Ava): ").strip()
-    selected_voice = "en-US-AvaNeural"
-    for num, name, voice_id, _ in VOICES:
+    print("\n--- ☁️  CLOUD BACKUP VOICES (EDGE-TTS) ---")
+    for num, name, voice_id, desc in EDGE_VOICES:
+        print(f"\n[{num}] {name}...")
+        print(f"    Style: {desc}")
+        speak_edge(voice_id, sample_phrase)
+
+    print("\n" + "=" * 65)
+    choice = input("Enter voice number to lock in [1-8] (default: 1 Heart): ").strip()
+    selected_voice = "af_heart"
+    engine = "kokoro"
+
+    for num, name, voice_id, _ in KOKORO_VOICES:
         if choice == num:
             selected_voice = voice_id
-            print(f"✅ Selected: {name} ({voice_id})")
+            engine = "kokoro"
+            print(f"✅ Selected: {name} (Kokoro: {voice_id})")
             break
 
-    # Save to ~/.dai-voice
+    for num, name, voice_id, _ in EDGE_VOICES:
+        if choice == num:
+            selected_voice = voice_id
+            engine = "edge"
+            print(f"✅ Selected: {name} (Edge: {voice_id})")
+            break
+
     config_file = Path.home() / ".dai-voice"
-    config_file.write_text(f"export DAI_VOICE=\"{selected_voice}\"\n")
-    print(f"Saved to {config_file}!")
-    print(f"To use this voice in all sessions, run: export DAI_VOICE=\"{selected_voice}\"")
+    config_file.write_text(f"export DAI_VOICE_ENGINE=\"{engine}\"\nexport DAI_VOICE=\"{selected_voice}\"\nexport DAI_KOKORO_VOICE=\"{selected_voice}\"\n")
+    print(f"\nSaved preference to {config_file}!")
 
 
 if __name__ == "__main__":

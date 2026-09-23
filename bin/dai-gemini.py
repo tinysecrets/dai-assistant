@@ -236,9 +236,109 @@ def speak_via_edge_tts(text: str) -> bool:
                 pass
 
 
+def speak_via_kokoro(text: str) -> bool:
+    """Synthesize local sovereign human voice via Kokoro-82M."""
+    try:
+        from lib.dai.kokoro_engine import is_kokoro_available, synthesize_speech
+        if not is_kokoro_available():
+            return False
+        voice = os.environ.get("DAI_KOKORO_VOICE", "af_heart")
+        wav_path = synthesize_speech(text, voice=voice, speed=1.0)
+        if not wav_path or not os.path.exists(wav_path):
+            return False
+        played = False
+        if shutil.which("paplay"):
+            r = subprocess.run(["paplay", wav_path], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        if not played and shutil.which("mpv"):
+            r = subprocess.run(["mpv", "--no-terminal", wav_path], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        try:
+            os.remove(wav_path)
+        except Exception:
+            pass
+        return played
+    except Exception:
+        return False
+
+
+def speak_via_elevenlabs(text: str) -> bool:
+    """Synthesize ultra-realistic human voice via ElevenLabs if key exists."""
+    api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    if not api_key:
+        env_file = ROOT / ".env"
+        if env_file.exists():
+            for line in env_file.read_text(errors="ignore").splitlines():
+                if line.strip().startswith("ELEVENLABS_API_KEY="):
+                    api_key = line.split("=", 1)[1].strip().strip("\"'")
+                    break
+    if not api_key:
+        return False
+
+    voice_id = os.environ.get("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+    try:
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+        headers = {
+            "xi-api-key": api_key,
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        }
+        payload = {
+            "text": text,
+            "model_id": "eleven_turbo_v2_5",
+            "voice_settings": {"stability": 0.45, "similarity_boost": 0.85, "style": 0.35},
+        }
+        req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            audio_data = resp.read()
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            tmp_mp3 = f.name
+            f.write(audio_data)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_wav = f.name
+
+        if shutil.which("ffmpeg"):
+            subprocess.run(["ffmpeg", "-y", "-i", tmp_mp3, "-ar", "24000", "-ac", "1", tmp_wav], capture_output=True, timeout=10, env=os.environ)
+            play_file = tmp_wav if os.path.exists(tmp_wav) else tmp_mp3
+        else:
+            play_file = tmp_mp3
+
+        played = False
+        if play_file.endswith(".wav") and shutil.which("paplay"):
+            r = subprocess.run(["paplay", play_file], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+        if not played and shutil.which("mpv"):
+            r = subprocess.run(["mpv", "--no-terminal", play_file], timeout=30, stderr=subprocess.DEVNULL, env=os.environ)
+            if r.returncode == 0:
+                played = True
+
+        for p in (tmp_mp3, tmp_wav):
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+        return played
+    except Exception:
+        return False
+
+
 def speak_text(text: str) -> None:
-    """Speak text using Edge neural human voice, with Piper fallback."""
+    """Speak text using highest available quality human voice:
+    1. ElevenLabs (if key in .env)
+    2. Kokoro-82M (af_heart / af_bella local sovereign neural voice)
+    3. Edge-TTS neural backup
+    4. Local Piper fallback
+    """
     print(f"\n[Day Speaks]: {text}")
+    if speak_via_elevenlabs(text):
+        return
+
+    if speak_via_kokoro(text):
+        return
+
     if speak_via_edge_tts(text):
         return
 
