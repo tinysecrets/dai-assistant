@@ -120,7 +120,7 @@ def main() -> int:
         print("[Debug Agent] Diagnosis:\n" + diagnosis, flush=True)
         print("[Debug Agent] Agent completed successfully.", flush=True)
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Router unreachable is itself a useful finding; report and exit non-fatally.
         print(f"[Debug Agent] Router interpretation unavailable: {exc}", flush=True)
         print("[Debug Agent] Raw evidence above stands as the report.", flush=True)
