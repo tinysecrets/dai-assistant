@@ -398,7 +398,7 @@ def build_runtime(env: Optional[Mapping[str, str]] = None, *, root: Path = ROOT)
     return WorkerRuntime(
         root=root,
         env_path=env_path,
-        policy_file=CachedJsonFile(Path(str(source.get("DAI_POLICY") or (root / "policy" / "sovereign.json"))), {}),
+        policy_file=CachedJsonFile(Path(str(source.get("DAI_POLICY") or source.get("DAI_POLICY_FILE") or (root / "policy" / "sovereign.json"))), {}),
         approvals=ApprovalStore(Path(str(source.get("DAI_APPROVALS") or (root / "policy" / "approvals.json")))),
         state_dir=Path(str(source.get("DAI_AGENT_S_STATE") or (root / "state" / "agent-s-tasks"))),
         redactor=redactor,
