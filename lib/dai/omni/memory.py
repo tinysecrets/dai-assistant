@@ -262,7 +262,7 @@ class OmniMemory:
     # ===== Procedural Memory (How-To) =====
 
     def learn_procedure(self, name: str, steps: List[Dict], context: str = "",
-                       success_rate: float = 1.0, tags: List[str] = None):
+                       success_rate: float = 1.0, tags: Optional[List[str]] = None):
         """Store a learned procedure."""
         self._procedural_cache[name] = {
             "steps": steps,
@@ -371,10 +371,8 @@ class OmniMemory:
             events = []
             with open(self.episodic_path) as f:
                 for line in f:
-                    try:
+                    with contextlib.suppress(Exception):
                         events.append(json.loads(line))
-                    except Exception:
-                        pass
             if len(events) > 10000:
                 with open(self.episodic_path, "w") as f:
                     for e in events[-10000:]:

@@ -10,6 +10,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+
 class OmniHealer:
     """Self-healing engine for dai-assistant spine."""
 

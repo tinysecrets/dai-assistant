@@ -1,5 +1,7 @@
 """Bounded policy engine for DAI local autonomy. Fails closed."""
+
 from __future__ import annotations
+
 import json
 import re
 import subprocess
