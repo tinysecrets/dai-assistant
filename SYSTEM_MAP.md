@@ -1,118 +1,40 @@
-# Sovereign System Map: DHakidd Desktop & Samsung S22 Unified Audio
+# DAI System Map
 
-**Target Machine**: Debian 13.6 (trixie) | Host: `dhakidd` | User: `justin` | Desktop: MATE / X11  
-**Last Verified & Hardened**: September 23, 2026  
-**Status**: Cleaned, Consolidated, and Verified Sovereign  
+**Purpose:** DAI is the central orchestration frame. This document records intended roles, not proof that a device or service is currently connected. Run `./bin/dai doctor`, `./bin/dai unify`, and the workstation/device checks before treating a capability as ready.
 
----
+## Canonical workstation roles
 
-## 1. Device Map & Boundary Enforcement
-
-| # | System / Device | Hardware Identity / Serial | Assigned Sovereign Role | Strict Security Boundary |
-|---|---|---|---|---|
-| 1 | **Debian Desktop** | Host `dhakidd`, User `justin`, Kernel 6.12 | **Primary Computer** (DAI, PipeWire, Deskflow, Launchers) | **The ONLY system modified.** Central command center. |
-| 2 | **Ubuntu Computer** | Secondary separate machine | Standalone development | **Untouched.** Zero changes, zero commands, zero packages applied. |
-| 3 | **Samsung S22 Ultra** | Serial `RFCT428ZRSZ`, Model `SM-S908U` | **Sole Universal Microphone & Phone Screen** | Dedicated mic (`android-4f3b250`) and scrcpy phone mirror. |
-| 4 | **LG G8** | Serial `LMG820UM5abe4c22` | **Retired Audio Bridge** | Replaced by S22 Ultra. Services stopped and disabled cleanly. |
-| 5 | **Sky Tablet** | Separate Android tablet | Standalone device | **Untouched.** Excluded from all audits and bridges. |
-
----
-
-## 2. Complete Audio Architecture (Zero Echo, Zero Playback)
-
-The Samsung Galaxy S22 Ultra is the **single source of truth for microphone input** on `dhakidd`.
-
-```
-                  [SAMSUNG GALAXY S22 ULTRA]
-                      (SM-S908U / RFCT428ZRSZ)
-                               │
-            ┌──────────────────┼──────────────────┐
-            ▼                  ▼                  ▼
-       [USB Cable]        [Local Wi-Fi]      [Tailscale]
-            └──────────────────┬──────────────────┘
-                               │ (ADB Transport Tunnel)
-                               ▼
-            [audiosource-s22.service (Zero Echo)]
-            • Streams microphone via fr.dzx.audiosource
-            • No audio playback engine (100% silent on PC speakers)
-                               │
-                               ▼
-            [PipeWire / PulseAudio Source: android-4f3b250]
-            • Native capture module: module-pipe-source
-            • Sample rate: 44.1kHz / 48kHz, 16-bit Mono
-            • Kept as system default source by s22-mic-router.service
-                               │
-            ┌──────────────────┴──────────────────┐
-            ▼                                     ▼
-   [🎙️ Live Voice Typing]                  [🗣️ DAI Gemini Live]
- • Real-time streaming STT             • Continuous voice assistant
- • Types live word-by-word             • Sultry Ava Neural voice engine
- • Accommodates slow speech & pauses   • Wakes on "Hey Day" / "Yo Day"
- • Hotkey: F9 / Desktop Icon           • Steps aside when you type
-```
-
----
-
-## 3. The 3 Core Tools & How They Work Together
-
-### A. 🎙️ Live Voice Typing (`bin/s22-live-speech.py` -> `~/.local/bin/dhakidd-dictate`)
-- **Trigger**: Single tap of **`F9`** key OR double-click **`🎙️ Live Voice Typing`** on your Desktop.
-- **Behavior**:
-  - Words appear on screen in real time as you speak them.
-  - Accommodates natural pauses, slow speech, and thinking time.
-  - **Never cuts you off mid-sentence.**
-  - Includes breath/filler filter (strips out throat clears, sighs, and "huh").
-- **To Finish**: Tap **`F9`** once more when your full thought is complete.
-
-### B. 🗣️ DAI Gemini Live Assistant (`bin/dai gemini`)
-- **Trigger**: Click **`D-A-I Gemini Live`** on Desktop OR run `./bin/dai gemini`.
-- **Persona**: King Justin's loyal, sultry Chief of Staff (Voice: `en-US-AvaNeural`).
-- **Wake Summons**: *"Hey Day"*, *"Yo Day"*, *"Come here Day"*, *"Day come here"*.
-- **Intelligence**: Auto-routes intent to web search, terminal tasks, status checks, or smooth conversation.
-- **Conversational Window**: Stays in continuous 2-way dialogue for 15 seconds after speaking; automatically returns to standby when you're done.
-
-### C. 📱 S22 Screen & Phone Control (`~/.local/bin/scrcpy`)
-- **Trigger**: Click **`dhakidd-s22.desktop`** on Desktop OR run `scrcpy`.
-- **Hardening**: Pinned strictly to `scrcpy -s RFCT428ZRSZ --no-audio`.
-- **Isolation**: Displays the phone screen with low latency. Audio forwarding is disabled on the screen window to prevent any interference with the dedicated background microphone bridge.
-
----
-
-## 4. Clickable Desktop Interface (Phase 6)
-
-Located in `~/Desktop/` and `~/Desktop/00_COMMAND_CENTER/`:
-
-| Launcher Name | Executable Target | What It Does |
+| Node | Role | Boundary |
 |---|---|---|
-| **🎙️ Live Voice Typing** | `~/.local/bin/dhakidd-dictate` | Real-time word-by-word streaming typing into active window |
-| **D-A-I Gemini Live** | `~/dai-assistant/bin/dai gemini` | Starts Ava voice assistant in terminal / background |
-| **D-A-I Command Center** | `~/dai-assistant/bin/dai-hq-launch` | Opens DAI Headquarters tmux workspace & dashboard |
-| **D-A-I Repair Center** | `~/dai-assistant/bin/dai-repair` | One-click diagnostic, healing, and restart utility |
-| **dhakidd-s22** | `~/.local/bin/scrcpy` | Opens Samsung S22 Ultra screen mirror on PC |
+| Debian | Primary brain: DAI router, policy, dashboard, orchestration | The central control plane |
+| Lubuntu | Secondary workstation / worker | Remote changes require explicit authorization |
+| Samsung S22 Ultra | Primary mobile interface; optional hot-plug phone, camera, and microphone bridge | Detect transport and health at runtime; never infer connectivity from a saved IP |
+| LG G8 | Permanent edge-node target for sensors, camera, and optional audio bridge | Treat as unavailable until ADB and service health are observed |
+| Samsung A16 | Worker node | Keep execution bounded and approval-gated |
+| TV / Roku | Media endpoint only | No workstation administration |
+| Deskflow | Input bridge between authorized desktops | Explicit user-session control only |
+| scrcpy / ADB | Android display and device-control bridge | Confirm exact device serial at runtime; do not hard-code personal device identifiers in tracked files |
+| PipeWire | Single PC microphone-routing layer | Select source from live device discovery |
+| Tailscale + SSH | Network fabric | Discover current peer addresses; do not commit private addresses |
 
----
+## Required safety invariants
 
-## 5. System Recovery & Self-Healing (Phase 7)
+- `dry_run_default: true` remains the default for computer-use tasks.
+- `require_approval_token: true` remains required for live Agent-S execution.
+- Approval tokens must be single-use and scoped to the exact action.
+- Destructive commands, package installation, elevated privileges, secret export, external messages, publishing, and system configuration changes require explicit approval.
+- Provider/model choice must never weaken the execution policy. Model output is untrusted input, not authorization.
+- Keep API keys, private SSH keys, cookies, device serials, private IPs, and live runtime state out of tracked files.
+- A registry entry is only a declaration. A capability is “ready” only after a live health check proves it.
 
-- **Single Command Recovery**:
-  ```bash
-  cd ~/dai-assistant && ./bin/dai-repair
-  ```
-- **Automated Service Supervision**:
-  - `audiosource-s22.service`: Runs `workspace/audiosource/audiosource -s RFCT428ZRSZ run -r`. Automatically reconnects if USB is unplugged/replugged or switched to Wi-Fi.
-  - `s22-mic-router.service`: Continuously verifies `android-4f3b250` is unmuted and set as the active default source for all desktop apps.
-  - `dai-spine.service`: Supervises the local router, worker, and voice-bridge.
+## Verification sequence
 
----
+1. `./bin/doctor.sh`
+2. `./bin/dai unify`
+3. `./bin/smoke.sh --tests-only`
+4. `python3 -m unittest discover -s tests -t . -v`
+5. Check router, Agent-S, dashboard, and voice-bridge health endpoints on localhost.
+6. Confirm the phone/edge devices with live ADB discovery and confirm the actual PipeWire default source.
+7. Review the service unit definitions and logs before enabling or restarting services.
 
-## 6. Safe Archive Record (`~/archive/2026-cleanup/`)
-
-All obsolete experiments, timestamped backups, and broken legacy symlinks were consolidated safely into `~/archive/2026-cleanup/`:
-- `bridge.bak-20260908-102502`
-- `bridge.pre-finish.20260918-142509`
-- `s22-bridge-controller.pre-finish.20260918-142509`
-- `restore-g8-mic` (0-byte dead file)
-- `ai.backup.20260829-141013`
-- `dai-assistant.desktop` (old dead path pointing to deleted directory)
-- `dhakidd-dai.desktop` (old dead path pointing to deleted directory)
-- Broken self-referencing `opencode` symlink removed.
+**Status:** Re-audit required. The previous map contained stale device roles and identifiers. This sanitized version intentionally omits personal serials, network addresses, and local-only paths.
