@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Bring the full DAI runtime online: brain + memory + hands + voice + UI.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+export PATH="$HOME/.bun/bin:$PATH"
+
+"$ROOT/bin/start-spine.sh" "$@"
+
+if [[ -x "$HOME/.bun/bin/vellum" ]]; then
+  if ! "$HOME/.bun/bin/vellum" ps 2>/dev/null | grep -q 'debian-ai.*healthy'; then
+    "$ROOT/bin/hatch-vellum.sh" >/tmp/dai-hatch.log 2>&1 || dai_warn "Vellum hatch failed; see /tmp/dai-hatch.log"
+  fi
+  "$HOME/.bun/bin/vellum" wake debian-ai >/tmp/dai-vellum-wake.log 2>&1 || dai_warn "Vellum wake failed; see /tmp/dai-vellum-wake.log"
+fi
+
+PIDFILE="$ROOT/state/omni/daemon.pid"
+if [[ -f "$PIDFILE" ]] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+  dai_ok "Omni runtime already active"
+else
+  mkdir -p "$ROOT/state/omni"
+  nohup python3 "$ROOT/bin/omni-daemon.py" --interval 60 >"$ROOT/logs/omni.log" 2>&1 &
+  echo $! >"$PIDFILE"
+  dai_ok "Omni dry-run runtime started"
+fi
+
+curl -sf --max-time 5 http://127.0.0.1:8799/health >/dev/null && dai_ok "Command center ready at :8799"
+dai_ok "DAI assistant runtime is ONLINE — brain, memory, voice, research, code and GUI actions connected"

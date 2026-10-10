@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$ROOT/bin/lib.sh"
+name="${1:-}"
+case "$name" in
+  model-router.service) svc=model-router; pattern="services/model-router/server.py"; cmd=(python3 "$ROOT/services/model-router/server.py") ;;
+  agent-s-worker.service) svc=agent-s-worker; pattern="services/agent-s-worker/server.py"; cmd=(python3 "$ROOT/services/agent-s-worker/server.py") ;;
+  voice-bridge.service)
+    svc=voice-bridge
+    pattern="services/voice-bridge/server.py"
+    py="$HOME/.local/voice-venv/bin/python"
+    [[ -x "$py" ]] || py=python3
+    cmd=("$py" "$ROOT/services/voice-bridge/server.py")
+    ;;
+  dashboard.service|dai-dashboard.service)
+    svc=dai-dashboard
+    pattern="lib/dai/dashboard.py"
+    cmd=(python3 "$ROOT/lib/dai/dashboard.py")
+    ;;
+  deskflow-healer.service)
+    svc=deskflow-healer
+    pattern="deskflow-healer"
+    cmd=("$HOME/.local/bin/deskflow-healer")
+    ;;
+  omni-daemon.service)
+    svc=omni-daemon
+    pattern="bin/omni-daemon.py"
+    cmd=(python3 -u "$ROOT/bin/omni-daemon.py" --interval 60)
+    ;;
+  *) echo "REFUSED: service not allowlisted: $name" >&2; exit 2 ;;
+esac
+mkdir -p "$DAI_STATE_DIR" "$DAI_LOG_DIR"
+if pid="$(dai_read_pid "$svc" "$pattern" 2>/dev/null)"; then
+  dai_stop_pid "$pid" "$svc"
+else
+  pid="$(pgrep -f -- "$pattern" | head -1 || true)"
+  [[ -n "$pid" ]] && dai_stop_pid "$pid" "$svc"
+fi
+log="$DAI_LOG_DIR/$svc.log"
+nohup "${cmd[@]}" >>"$log" 2>&1 &
+pid=$!
+printf "%s\n" "$pid" >"$DAI_STATE_DIR/$svc.pid"
+echo "RESTARTED $name pid=$pid"
+sleep 1
+if ! kill -0 "$pid" 2>/dev/null || ! ps -p "$pid" -o args= 2>/dev/null | grep -qF -- "$pattern"; then
+  echo "FAILED_TO_START $name" >&2
+  exit 1
+fi
+echo "STARTED $name"

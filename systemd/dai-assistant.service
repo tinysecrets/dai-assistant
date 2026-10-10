@@ -1,0 +1,16 @@
+[Unit]
+Description=DAI Assistant runtime (brain, memory, voice, GUI hands and command center)
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=PATH=%h/.bun/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h/dai-assistant
+ExecStart=%h/dai-assistant/bin/dai-assistant
+RemainAfterExit=yes
+KillMode=control-group
+
+[Install]
+WantedBy=default.target
