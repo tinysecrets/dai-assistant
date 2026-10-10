@@ -2,6 +2,7 @@
 
 100% sovereign, local, lightweight, and human-sounding open-weight TTS.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -13,7 +14,9 @@ MODEL_DIR = Path.home() / ".local" / "voice-models" / "kokoro"
 MODEL_PATH = MODEL_DIR / "kokoro-v1.0.onnx"
 VOICES_PATH = MODEL_DIR / "voices-v1.0.bin"
 
-KOKORO_MODEL_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx"
+KOKORO_MODEL_URL = (
+    "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.int8.onnx"
+)
 KOKORO_VOICES_URL = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin"
 
 _kokoro_instance = None

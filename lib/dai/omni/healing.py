@@ -68,7 +68,9 @@ class OmniHealer:
 
             # 3. Plan fix
             fix_plan = self.plan_fix(diagnosis)
-            command_steps = len([c for c in fix_plan.get("commands", []) if c.strip() and not c.strip().startswith("#")])
+            command_steps = len(
+                [c for c in fix_plan.get("commands", []) if c.strip() and not c.strip().startswith("#")]
+            )
             if steps_used + command_steps > self.max_steps:
                 self._log(f"Skipping {issue_type} - circuit breaker max_steps={self.max_steps} reached")
                 continue
@@ -83,20 +85,12 @@ class OmniHealer:
             # 6. Learn from this fix
             self.learn_from_fix(issue, diagnosis, fix_plan, result, verified)
 
-            actions.append({
-                "issue": issue,
-                "diagnosis": diagnosis,
-                "fix_plan": fix_plan,
-                "result": result,
-                "verified": verified
-            })
+            actions.append(
+                {"issue": issue, "diagnosis": diagnosis, "fix_plan": fix_plan, "result": result, "verified": verified}
+            )
 
             # Record fix in history
-            self.fix_history[issue_type].append({
-                "timestamp": now,
-                "fix": fix_plan,
-                "verified": verified
-            })
+            self.fix_history[issue_type].append({"timestamp": now, "fix": fix_plan, "verified": verified})
 
         return actions
 
@@ -121,12 +115,7 @@ class OmniHealer:
 
     def check_all_services(self) -> Dict[str, Any]:
         """Check health of all dai-assistant services."""
-        health = {
-            "timestamp": time.time(),
-            "services": {},
-            "system": {},
-            "overall": "healthy"
-        }
+        health = {"timestamp": time.time(), "services": {}, "system": {}, "overall": "healthy"}
 
         # Model Router
         health["services"]["model-router"] = self._check_router()
@@ -168,6 +157,7 @@ class OmniHealer:
                 return {"status": "unhealthy", "error": f"HTTP {r.status_code}"}
             except ImportError:
                 import urllib.request
+
                 with urllib.request.urlopen(url, timeout=timeout) as resp:
                     return json.loads(resp.read().decode("utf-8", errors="replace"))
         except Exception as exc:
@@ -182,7 +172,7 @@ class OmniHealer:
             "status": "healthy" if data.get("ok") else "unhealthy",
             "ready_for_chat": data.get("ready_for_chat", False),
             "version": data.get("version"),
-            "uptime": data.get("uptime_seconds", 0)
+            "uptime": data.get("uptime_seconds", 0),
         }
 
     def _check_worker(self) -> Dict[str, Any]:
@@ -197,7 +187,7 @@ class OmniHealer:
             "live_capable": data.get("live_capable", False),
             "display_ready": data.get("display_ready", False),
             "queue_depth": data.get("queue_depth", 0),
-            "uptime": data.get("uptime_seconds", 0)
+            "uptime": data.get("uptime_seconds", 0),
         }
 
     def _check_voice(self) -> Dict[str, Any]:
@@ -209,7 +199,7 @@ class OmniHealer:
             "status": "healthy" if data.get("ok") else "unhealthy",
             "whisper_loaded": data.get("whisper_loaded", False),
             "voice_loaded": data.get("voice_loaded", False),
-            "uptime": data.get("uptime_seconds", 0)
+            "uptime": data.get("uptime_seconds", 0),
         }
 
     def _check_system(self) -> Dict[str, Any]:
@@ -228,17 +218,17 @@ class OmniHealer:
                     "memory_available_gb": 0,
                     "disk_percent": 0,
                     "disk_free_gb": 0,
-                    "cpu_percent": 0
+                    "cpu_percent": 0,
                 }
             psutil = importlib.import_module("psutil")
             mem = psutil.virtual_memory()
-            disk = psutil.disk_usage('/')
+            disk = psutil.disk_usage("/")
             return {
                 "memory_percent": mem.percent,
                 "memory_available_gb": mem.available / (1024**3),
                 "disk_percent": disk.percent,
                 "disk_free_gb": disk.free / (1024**3),
-                "cpu_percent": psutil.cpu_percent(interval=0.1)
+                "cpu_percent": psutil.cpu_percent(interval=0.1),
             }
         except Exception as e:
             return {"error": str(e)}
@@ -252,65 +242,69 @@ class OmniHealer:
         # Service unreachable
         for svc_name, svc in health["services"].items():
             if svc.get("status") == "unreachable":
-                issues.append({
-                    "type": "service_unreachable",
-                    "service": svc_name,
-                    "severity": "high",
-                    "detail": svc.get("error", "Unknown error")
-                })
+                issues.append(
+                    {
+                        "type": "service_unreachable",
+                        "service": svc_name,
+                        "severity": "high",
+                        "detail": svc.get("error", "Unknown error"),
+                    }
+                )
             elif svc.get("status") == "unhealthy":
-                issues.append({
-                    "type": "service_unhealthy",
-                    "service": svc_name,
-                    "severity": "medium",
-                    "detail": svc.get("error", "Service reported unhealthy")
-                })
+                issues.append(
+                    {
+                        "type": "service_unhealthy",
+                        "service": svc_name,
+                        "severity": "medium",
+                        "detail": svc.get("error", "Service reported unhealthy"),
+                    }
+                )
 
         # Router not ready for chat
         router = health["services"].get("model-router", {})
         if router.get("status") == "healthy" and not router.get("ready_for_chat"):
-            issues.append({
-                "type": "router_not_ready",
-                "severity": "medium",
-                "detail": "Model router is healthy but not ready for chat (no provider keys?)"
-            })
+            issues.append(
+                {
+                    "type": "router_not_ready",
+                    "severity": "medium",
+                    "detail": "Model router is healthy but not ready for chat (no provider keys?)",
+                }
+            )
 
         # Worker not enabled or not live capable
         worker = health["services"].get("agent-s-worker", {})
         if worker.get("status") == "healthy":
             if not worker.get("enabled"):
-                issues.append({
-                    "type": "worker_disabled",
-                    "severity": "medium",
-                    "detail": "Agent S worker is disabled in policy or .env"
-                })
+                issues.append(
+                    {
+                        "type": "worker_disabled",
+                        "severity": "medium",
+                        "detail": "Agent S worker is disabled in policy or .env",
+                    }
+                )
             if not worker.get("live_capable"):
-                issues.append({
-                    "type": "worker_not_live_capable",
-                    "severity": "low",
-                    "detail": "Worker reports not live capable (likely missing Xvfb or agent_s installed)"
-                })
+                issues.append(
+                    {
+                        "type": "worker_not_live_capable",
+                        "severity": "low",
+                        "detail": "Worker reports not live capable (likely missing Xvfb or agent_s installed)",
+                    }
+                )
 
         # System resource issues
         sys = health.get("system", {})
         if sys.get("memory_percent", 0) > 90:
-            issues.append({
-                "type": "high_memory_usage",
-                "severity": "high",
-                "detail": f"Memory usage at {sys['memory_percent']}%"
-            })
+            issues.append(
+                {"type": "high_memory_usage", "severity": "high", "detail": f"Memory usage at {sys['memory_percent']}%"}
+            )
         if sys.get("disk_percent", 0) > 90:
-            issues.append({
-                "type": "low_disk_space",
-                "severity": "high",
-                "detail": f"Disk usage at {sys['disk_percent']}%"
-            })
+            issues.append(
+                {"type": "low_disk_space", "severity": "high", "detail": f"Disk usage at {sys['disk_percent']}%"}
+            )
         if sys.get("cpu_percent", 0) > 95:
-            issues.append({
-                "type": "high_cpu_usage",
-                "severity": "medium",
-                "detail": f"CPU usage at {sys['cpu_percent']}%"
-            })
+            issues.append(
+                {"type": "high_cpu_usage", "severity": "medium", "detail": f"CPU usage at {sys['cpu_percent']}%"}
+            )
 
         return issues
 
@@ -327,7 +321,7 @@ class OmniHealer:
                 f"{svc} process crashed",
                 f"{svc} failed to start",
                 f"Port conflict on {svc}'s port",
-                f"Configuration error preventing {svc} from starting"
+                f"Configuration error preventing {svc} from starting",
             ]
             diagnosis["recommended_fix"] = f"restart_{svc}"
 
@@ -336,7 +330,7 @@ class OmniHealer:
             diagnosis["possible_causes"] = [
                 f"{svc} started but encountered internal error",
                 f"{svc} missing dependencies",
-                f"{svc} configuration invalid"
+                f"{svc} configuration invalid",
             ]
             diagnosis["recommended_fix"] = f"restart_{svc}_with_logs"
 
@@ -344,7 +338,7 @@ class OmniHealer:
             diagnosis["possible_causes"] = [
                 "No provider keys configured in .env",
                 "All providers have hit rate limits or are unhealthy",
-                "Local Ollama not running (if configured as fallback)"
+                "Local Ollama not running (if configured as fallback)",
             ]
             diagnosis["recommended_fix"] = "check_and_add_provider_keys"
 
@@ -352,7 +346,7 @@ class OmniHealer:
             diagnosis["possible_causes"] = [
                 "DAI_AGENT_S_ENABLED=false in .env",
                 "policy.sovereign.json agent_s.enabled = false",
-                "Worker failed to start and was auto-disabled"
+                "Worker failed to start and was auto-disabled",
             ]
             diagnosis["recommended_fix"] = "enable_worker"
 
@@ -360,7 +354,7 @@ class OmniHealer:
             diagnosis["possible_causes"] = [
                 "Xvfb not installed or not running",
                 "agent-s not installed in venv",
-                "Display :99 not ready"
+                "Display :99 not ready",
             ]
             diagnosis["recommended_fix"] = "ensure_xvfb_and_agent_s"
 
@@ -369,7 +363,7 @@ class OmniHealer:
                 "Memory leak in one of the services",
                 "Too many concurrent tasks",
                 "Large models loaded into memory",
-                "Vector store or cache not being cleared"
+                "Vector store or cache not being cleared",
             ]
             diagnosis["recommended_fix"] = "reduce_memory_usage"
 
@@ -378,7 +372,7 @@ class OmniHealer:
                 "Log files not rotated",
                 "Old sessions or snapshots not cleaned up",
                 "Vector store or cache taking too much space",
-                "Docker images or build artifacts"
+                "Docker images or build artifacts",
             ]
             diagnosis["recommended_fix"] = "cleanup_disk_space"
 
@@ -387,7 +381,7 @@ class OmniHealer:
                 "Infinite loop in a service",
                 "Too many concurrent processes",
                 "Model inference taking too long (stuck?)",
-                "Busy waiting or polling too frequently"
+                "Busy waiting or polling too frequently",
             ]
             diagnosis["recommended_fix"] = "investigate_high_cpu"
 
@@ -410,7 +404,7 @@ class OmniHealer:
             "approval_required": False,
             "dry_run_first": True,
             "commands": [],
-            "verification": []
+            "verification": [],
         }
 
         if recovery_action.startswith("restart_"):
@@ -419,37 +413,27 @@ class OmniHealer:
                 f"Stop {svc} service",
                 "Wait for clean shutdown",
                 f"Start {svc} service",
-                f"Wait for {svc} to report healthy"
+                f"Wait for {svc} to report healthy",
             ]
-            fix_plan["commands"] = [
-                f"./bin/dai-restart-service {svc}.service"
-            ]
-            fix_plan["verification"] = [
-                f"Check {svc} health endpoint",
-                f"Verify {svc} reports healthy status"
-            ]
+            fix_plan["commands"] = [f"./bin/dai-restart-service {svc}.service"]
+            fix_plan["verification"] = [f"Check {svc} health endpoint", f"Verify {svc} reports healthy status"]
 
         elif issue_type == "enable_worker":
-            fix_plan["steps"] = [
-                "Set DAI_AGENT_S_ENABLED=true in .env",
-                "Restart agent-s-worker service"
-            ]
+            fix_plan["steps"] = ["Set DAI_AGENT_S_ENABLED=true in .env", "Restart agent-s-worker service"]
             fix_plan["approval_required"] = False  # changing .env is allowed
             fix_plan["commands"] = [
                 "sed -i 's/DAI_AGENT_S_ENABLED=.*/DAI_AGENT_S_ENABLED=true/' $DAI_ROOT/.env",
                 "./bin/stop-spine.sh --quiet",
-                "./bin/start-spine.sh"
+                "./bin/start-spine.sh",
             ]
-            fix_plan["verification"] = [
-                "Check worker health endpoint shows enabled=true"
-            ]
+            fix_plan["verification"] = ["Check worker health endpoint shows enabled=true"]
 
         elif issue_type == "ensure_xvfb_and_agent_s":
             fix_plan["steps"] = [
                 "Install Xvfb if missing",
                 "Ensure agent-s is installed in venv",
                 "Start Xvfb on :99",
-                "Verify display is ready"
+                "Verify display is ready",
             ]
             fix_plan["approval_required"] = False
             fix_plan["commands"] = [
@@ -457,79 +441,69 @@ class OmniHealer:
                 "$DAI_ROOT/.local/agent-s-venv/bin/pip install gui-agents  # or however agent-s is installed",
                 "Xvfb :99 -screen 0 1280x800x24 > $DAI_ROOT/logs/xvfb.log 2>&1 &",
                 "echo $! > $DAI_ROOT/state/agent-s-tasks/xvfb.pid",
-                "sleep 2 && xset -display :99 q >/dev/null 2>&1 && echo 'Display ready' || echo 'Display not ready'"
+                "sleep 2 && xset -display :99 q >/dev/null 2>&1 && echo 'Display ready' || echo 'Display not ready'",
             ]
-            fix_plan["verification"] = [
-                "Check worker health endpoint shows live_capable=true and display_ready=true"
-            ]
+            fix_plan["verification"] = ["Check worker health endpoint shows live_capable=true and display_ready=true"]
 
         elif issue_type == "check_and_add_provider_keys":
             fix_plan["steps"] = [
                 "Check .env for provider keys",
                 "If missing, prompt user to add one (cannot auto-add for security)",
-                "Restart model-router to pick up new keys"
+                "Restart model-router to pick up new keys",
             ]
             fix_plan["approval_required"] = True  # because we might be asking user to edit .env
             fix_plan["commands"] = [
                 "grep -E '^(OPENROUTER_API_KEY|TOGETHER_API_KEY|FIREWORKS_API_KEY|XAI_API_KEY)' $DAI_ROOT/.env || echo 'No provider keys found in .env'",
                 "echo 'Please add a provider key to $DAI_ROOT/.env (see KEYS.md)'",
                 "./bin/stop-spine.sh --quiet",
-                "./bin/start-spine.sh"
+                "./bin/start-spine.sh",
             ]
-            fix_plan["verification"] = [
-                "Check router health endpoint shows ready_for_chat=true"
-            ]
+            fix_plan["verification"] = ["Check router health endpoint shows ready_for_chat=true"]
 
         elif issue_type == "reduce_memory_usage":
             fix_plan["steps"] = [
                 "Identify memory-heavy processes",
                 "Restart services to free memory (temporary fix)",
-                "Consider reducing model size or concurrency"
+                "Consider reducing model size or concurrency",
             ]
             fix_plan["approval_required"] = self.auto_restart_services
             fix_plan["commands"] = [
                 "ps aux --sort=-%mem | head -10",
                 "./bin/stop-spine.sh --quiet",
-                "./bin/start-spine.sh"
+                "./bin/start-spine.sh",
             ]
-            fix_plan["verification"] = [
-                "Check system memory usage is below 80%"
-            ]
+            fix_plan["verification"] = ["Check system memory usage is below 80%"]
 
         elif issue_type == "cleanup_disk_space":
             fix_plan["steps"] = [
                 "Rotate and compress old logs",
                 "Clean up old sessions and snapshots",
                 "Prune vector store if too large",
-                "Remove old Docker images and build cache"
+                "Remove old Docker images and build cache",
             ]
             fix_plan["approval_required"] = False
             fix_plan["commands"] = [
                 "find $DAI_ROOT/logs -name '*.log' -mtime +7 -exec gzip {} \\;",
                 "find $DAI_ROOT/state -name '*.json' -mtime +30 -delete",
                 "find $DAI_ROOT/state/omni/vectors -name '*.npy' -mtime +30 -delete",
-                "docker system prune -f  # if docker is used"
+                "docker system prune -f  # if docker is used",
             ]
-            fix_plan["verification"] = [
-                "Check disk usage is below 80%"
-            ]
+            fix_plan["verification"] = ["Check disk usage is below 80%"]
 
         elif issue_type == "investigate_high_cpu":
             fix_plan["steps"] = [
                 "Identify CPU-heavy processes",
                 "Check for infinite loops or stuck tasks",
-                "Restart services if needed"
+                "Restart services if needed",
             ]
             fix_plan["approval_required"] = self.auto_restart_services
             fix_plan["commands"] = [
                 "ps aux --sort=-%cpu | head -10",
                 "top -b -n 1",
                 "./bin/stop-spine.sh --quiet",
-                "./bin/start-spine.sh"
+                "./bin/start-spine.sh",
             ]
-            fix_plan["verification"] = [
-                "Check CPU usage is below 80%"
-            ]
+            fix_plan["verification"] = ["Check CPU usage is below 80%"]
 
         else:
             fix_plan["steps"] = ["Manual investigation required"]
@@ -552,7 +526,7 @@ class OmniHealer:
             "dry_run": True,
             "would_run": fix_plan.get("commands", []),
             "steps": fix_plan.get("steps", []),
-            "message": "This is a dry-run. No changes were made."
+            "message": "This is a dry-run. No changes were made.",
         }
 
     # ===== Fix Verification =====
@@ -607,13 +581,8 @@ class OmniHealer:
             event_type="healing_fix",
             detail=f"Fixed {issue['type']} on {issue.get('service', 'unknown')}",
             outcome="success" if verified else "failure",
-            context={
-                "issue": issue,
-                "diagnosis": diagnosis,
-                "fix_plan": fix_plan,
-                "result": result
-            },
-            tags=["healing", issue["type"], "fixed" if verified else "failed"]
+            context={"issue": issue, "diagnosis": diagnosis, "fix_plan": fix_plan, "result": result},
+            tags=["healing", issue["type"], "fixed" if verified else "failed"],
         )
 
         # If this is a successful fix, we might want to update procedural memory

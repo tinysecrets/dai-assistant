@@ -26,6 +26,7 @@ except Exception:
     np = None
     HAS_EMBEDDINGS = False
 
+
 @dataclass
 class EpisodicEvent:
     id: str
@@ -109,8 +110,14 @@ class OmniMemory:
 
     # ===== Episodic Memory (Event Log) =====
 
-    def log_event(self, event_type: str, detail: str, context: Optional[Dict[str, Any]] = None,
-                  outcome: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
+    def log_event(
+        self,
+        event_type: str,
+        detail: str,
+        context: Optional[Dict[str, Any]] = None,
+        outcome: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> str:
         """Append an event to the episodic log."""
         event = EpisodicEvent(
             id=str(uuid.uuid4())[:8],
@@ -119,7 +126,7 @@ class OmniMemory:
             detail=detail,
             context=context or {},
             outcome=outcome,
-            tags=tags or []
+            tags=tags or [],
         )
 
         with open(self.episodic_path, "a") as f:
@@ -198,7 +205,7 @@ class OmniMemory:
             "confidence": confidence,
             "source": source,
             "updated": time.time(),
-            "access_count": self._semantic_cache.get(key, {}).get("access_count", 0) + 1
+            "access_count": self._semantic_cache.get(key, {}).get("access_count", 0) + 1,
         }
         self._save_semantic()
 
@@ -244,13 +251,15 @@ class OmniMemory:
         for _, key in results:
             if key in self._semantic_cache:
                 entry = self._semantic_cache[key]
-                full_results.append({
-                    "key": key,
-                    "value": entry["value"],
-                    "confidence": entry.get("confidence", 1.0),
-                    "source": entry.get("source", "unknown"),
-                    "updated": entry.get("updated", 0)
-                })
+                full_results.append(
+                    {
+                        "key": key,
+                        "value": entry["value"],
+                        "confidence": entry.get("confidence", 1.0),
+                        "source": entry.get("source", "unknown"),
+                        "updated": entry.get("updated", 0),
+                    }
+                )
 
         return full_results
 
@@ -261,8 +270,14 @@ class OmniMemory:
 
     # ===== Procedural Memory (How-To) =====
 
-    def learn_procedure(self, name: str, steps: List[Dict], context: str = "",
-                       success_rate: float = 1.0, tags: Optional[List[str]] = None):
+    def learn_procedure(
+        self,
+        name: str,
+        steps: List[Dict],
+        context: str = "",
+        success_rate: float = 1.0,
+        tags: Optional[List[str]] = None,
+    ):
         """Store a learned procedure."""
         self._procedural_cache[name] = {
             "steps": steps,
@@ -271,7 +286,7 @@ class OmniMemory:
             "tags": tags or [],
             "created": time.time(),
             "updated": time.time(),
-            "use_count": 0
+            "use_count": 0,
         }
         self._save_procedural()
 
@@ -311,13 +326,15 @@ class OmniMemory:
         for _, name in results:
             if name in self._procedural_cache:
                 entry = self._procedural_cache[name]
-                full_results.append({
-                    "name": name,
-                    "steps": entry["steps"],
-                    "context": entry["context"],
-                    "success_rate": entry.get("success_rate", 1.0),
-                    "tags": entry.get("tags", [])
-                })
+                full_results.append(
+                    {
+                        "name": name,
+                        "steps": entry["steps"],
+                        "context": entry["context"],
+                        "success_rate": entry.get("success_rate", 1.0),
+                        "tags": entry.get("tags", []),
+                    }
+                )
 
         return full_results
 
@@ -392,5 +409,5 @@ class OmniMemory:
             "semantic_facts": len(self._semantic_cache),
             "procedural_skills": len(self._procedural_cache),
             "vector_embeddings": len(self._vector_index),
-            "state_dir_size_mb": sum(f.stat().st_size for f in self.state_dir.rglob("*")) / 1024 / 1024
+            "state_dir_size_mb": sum(f.stat().st_size for f in self.state_dir.rglob("*")) / 1024 / 1024,
         }

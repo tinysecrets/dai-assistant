@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional
 # Make lib.dai import optional for when this module is loaded outside the dai-assistant project
 try:
     from lib.dai import env as dai_env
+
     HAS_DAI_ENV = True
 except ImportError:
     HAS_DAI_ENV = False
@@ -86,6 +87,7 @@ class OmniDelegator:
     def _find_opencode(self) -> Optional[Path]:
         """Find the opencode binary in PATH."""
         import shutil
+
         opencode = shutil.which("opencode")
         if opencode:
             return Path(opencode)
@@ -119,10 +121,7 @@ class OmniDelegator:
     def add_agent_log(self, agent_id: str, message: str):
         """Add a log entry to an agent."""
         if agent_id in self._agents:
-            self._agents[agent_id]["logs"].append({
-                "timestamp": time.time(),
-                "message": message
-            })
+            self._agents[agent_id]["logs"].append({"timestamp": time.time(), "message": message})
             self._save_agents()
 
     def complete_agent(self, agent_id: str, result: Any):

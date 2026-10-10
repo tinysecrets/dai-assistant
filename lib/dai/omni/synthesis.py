@@ -41,7 +41,7 @@ class OmniSynthesizer:
         if template_path.exists():
             return template_path.read_text()
         # Fallback template
-        return '''---\nname: {{ name }}\nversion: 1.0.0\ndescription: \"{{ description }}\"\nlicense: MIT\nplatforms: [linux]\nmetadata:\n  hermes:\n    tags: [{{ tags | join(', ')}]]\n    related_skills: [{{ related_skills | join(', ')}]]\n---\n\n# {{ name }}\n\n{{ body }}\n'''
+        return """---\nname: {{ name }}\nversion: 1.0.0\ndescription: \"{{ description }}\"\nlicense: MIT\nplatforms: [linux]\nmetadata:\n  hermes:\n    tags: [{{ tags | join(', ')}]]\n    related_skills: [{{ related_skills | join(', ')}]]\n---\n\n# {{ name }}\n\n{{ body }}\n"""
 
     def synthesize(self, description: str) -> Path:
         """Generate a new skill from a description."""
@@ -69,10 +69,10 @@ class OmniSynthesizer:
     def _generate_name(self, description: str) -> str:
         """Generate a skill name from description."""
         # Take first few words, lowercase, replace non-alnum with hyphens
-        words = re.findall(r'\b\w+\b', description.lower())[:4]
-        name = '-'.join(words)
+        words = re.findall(r"\b\w+\b", description.lower())[:4]
+        name = "-".join(words)
         # Ensure it's not too long and is valid
-        name = re.sub(r'[^a-z0-9-]', '', name)
+        name = re.sub(r"[^a-z0-9-]", "", name)
         if not name:
             name = "auto-skill"
         return name[:50]  # limit length
@@ -96,11 +96,7 @@ class OmniSynthesizer:
         """Record that we've synthesized this skill."""
         self.memory.remember_fact(
             f"synthesized_skill:{name}",
-            {
-                "description": description,
-                "synthesized_at": time.time(),
-                "skill_path": f"skills/auto-{name}/SKILL.md"
-            }
+            {"description": description, "synthesized_at": time.time(), "skill_path": f"skills/auto-{name}/SKILL.md"},
         )
 
     def _render_skill(self, name: str, description: str) -> str:
@@ -115,7 +111,7 @@ class OmniSynthesizer:
             "description": description,
             "tags": ["auto-generated", "skill-synthesis"],
             "related_skills": ["hermes-agent", "opencode"],
-            "body": self._generate_skill_body(name, description)
+            "body": self._generate_skill_body(name, description),
         }
         Template = _load_jinja_template()
         if Template is not None:
