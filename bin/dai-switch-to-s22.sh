@@ -89,7 +89,7 @@ cat << 'EOF' > "$HOME/.local/share/applications/dhakidd-dictate-toggle.desktop"
 Type=Application
 Name=🎤 Dictate (Toggle)
 Comment=Toggle Whisper speech-to-text dictation into active window
-Exec=/home/justin/.local/bin/dhakidd-dictate
+Exec=sh -lc "$HOME/.local/bin/dhakidd-dictate"
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Audio;
@@ -104,7 +104,7 @@ cat << 'EOF' > "$HOME/.local/share/applications/dai-gemini.desktop"
 Type=Application
 Name=D-A-I Gemini Live
 Comment=Continuous sovereign voice assistant (Ava Neural, S22 mic)
-Exec=/home/justin/dai-assistant/bin/dai gemini
+Exec=sh -lc "$HOME/dai-assistant/bin/dai gemini"
 Icon=applications-multimedia
 Terminal=true
 Categories=Utility;Audio;AI;
