@@ -40,7 +40,7 @@
 ## Verified on commit `b90ed3c98755c559cf3193a74f3e62d4698fbb0a`
 
 - `python3 -m compileall -q lib services skills tests` — passed.
-- `python3 -m unittest discover -s tests -t . -v` — **485 tests passed**, 0 failures on the Debian checkout.
+- `python3 -m unittest discover -s tests -t . -v` — **487 tests passed**, 0 failures on the Debian checkout.
 - Ruff lint and format checks — passed.
 - Shell syntax checks (`bash -n`) — passed.
 - GitHub Actions — **passed**: Python 3.9, 3.11, and 3.12 test/smoke/clean-checkout doctor jobs; Ruff; ShellCheck; repository hygiene.
