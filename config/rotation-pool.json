@@ -15,7 +15,9 @@
     "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
     "nvidia/nemotron-3-super-120b-a12b:free",
-    "cohere/north-mini-code:free"
+    "cohere/north-mini-code:free",
+    "nousresearch/hermes-3-llama-3.1-405b:free",
+    "meta-llama/llama-3.1-405b-instruct:free"
   ],
   "openrouter_free_vision": [
     "thinkingmachines/inkling-small:free",
