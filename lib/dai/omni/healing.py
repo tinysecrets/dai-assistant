@@ -649,5 +649,3 @@ def create_healer(dai_root: Optional[Path] = None) -> OmniHealer:
     if dai_root is None:
         dai_root = Path(__file__).resolve().parents[3]
     return OmniHealer(dai_root)
-
-[executed on device: dhakidd (ddcb9545-ee9e-4325-9877-68cdc77690f4)]

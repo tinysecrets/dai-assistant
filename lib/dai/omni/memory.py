@@ -400,5 +400,3 @@ class OmniMemory:
             "vector_embeddings": len(self._vector_index),
             "state_dir_size_mb": sum(f.stat().st_size for f in self.state_dir.rglob("*")) / 1024 / 1024
         }
-
-[executed on device: dhakidd (ddcb9545-ee9e-4325-9877-68cdc77690f4)]
