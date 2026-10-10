@@ -262,6 +262,10 @@ class Handler(BaseHTTPRequestHandler):
             ok = bool(data) and (data.get("router") is not None)
             body = json.dumps({"ok": ok, "ts": data.get("ts")}).encode()
             self._send(200 if ok else 503, body, "application/json")
+        elif self.path == "/api/omni/memory":
+            from lib.dai.omni.memory import OmniMemory
+            stats = OmniMemory(ROOT).stats()
+            self._send(200, json.dumps({"ok": True, **stats}).encode(), "application/json")
         elif self.path == "/api/snapshot":
             self._send(200, json.dumps(self.state.get()).encode(), "application/json")
         else:
