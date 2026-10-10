@@ -4,10 +4,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from lib.dai.dashboard import get_omni_memory_stats
 from lib.dai.omni.delegation import OmniDelegator
 from lib.dai.omni.healing import OmniHealer
 from lib.dai.omni.memory import OmniMemory
-from lib.dai.dashboard import get_omni_memory_stats
 
 
 class TestOmniSafety(unittest.TestCase):
