@@ -7,25 +7,13 @@ import json
 import os
 import time
 import uuid
-import importlib
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, asdict
-from collections import defaultdict
 
-# sentence_transformers + numpy are optional (semantic/embedding search).
-# They are imported lazily via importlib so the spine stays stdlib-only at
-# import time and on a bare Debian python3 — the same trick the voice-bridge
-# uses for faster_whisper/piper.
-try:
-    _st = importlib.import_module("sentence_transformers")
-    _np = importlib.import_module("numpy")
-    SentenceTransformer = _st.SentenceTransformer
-    np = _np
-    HAS_EMBEDDINGS = True
-except Exception:
-    HAS_EMBEDDINGS = False
-
+# Keep the default memory backend stdlib-only; embeddings remain disabled until
+# a separately reviewed optional adapter is added.
+HAS_EMBEDDINGS = False
 
 @dataclass
 class EpisodicEvent:
@@ -67,7 +55,7 @@ class OmniMemory:
         self._semantic_cache: Dict[str, Any] = {}
         self._procedural_cache: Dict[str, Any] = {}
         self._embedding_model = None
-        self._vector_index: Dict[str, np.ndarray] = {}
+        self._vector_index: Dict[str, Any] = {}
 
         self._load_caches()
         self._load_vector_index()
