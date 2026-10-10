@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from lib.dai import env as dai_env, HttpError
-from lib.dai.autonomy import run as run_bounded, classify
+
 
 
 class OmniHealer:
