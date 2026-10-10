@@ -3,18 +3,12 @@
 
 from __future__ import annotations
 
-import json
 import importlib
-import os
-import subprocess
+import json
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-
-from lib.dai import env as dai_env, HttpError
-
-
+from typing import Any, Dict, List, Optional
 
 class OmniHealer:
     """Self-healing engine for dai-assistant spine."""
@@ -422,7 +416,7 @@ class OmniHealer:
             svc = recovery_action.replace("restart_", "").replace("_with_logs", "")
             fix_plan["steps"] = [
                 f"Stop {svc} service",
-                f"Wait for clean shutdown",
+                "Wait for clean shutdown",
                 f"Start {svc} service",
                 f"Wait for {svc} to report healthy"
             ]
@@ -628,7 +622,6 @@ class OmniHealer:
             pass
 
         # If we've seen this issue multiple times, consider synthesizing a skill
-        issue_key = f"issue_{issue['type']}"
         # We'd need to track occurrences; for now, skip
 
     # ===== Logging =====
