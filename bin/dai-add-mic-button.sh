@@ -17,7 +17,7 @@ chmod +x "$HOME/.local/bin/dhakidd-dictate"
 # 2. Register F9, Ctrl+Alt+D, and Pause in MATE Settings Daemon (Media Keys)
 if command -v gsettings >/dev/null 2>&1; then
     echo "[1/3] Binding F9 and Ctrl+Alt+D hotkeys..."
-    
+
     # Marco Window Manager fallback keys
     gsettings set org.mate.Marco.global-keybindings run-command-1 'F9' 2>/dev/null || true
     gsettings set org.mate.Marco.keybinding-commands command-1 "$HOME/.local/bin/dhakidd-dictate" 2>/dev/null || true
