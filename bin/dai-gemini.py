@@ -75,12 +75,18 @@ VOICE_RATE = os.environ.get("DAI_VOICE_RATE", "+0%")
 SAMPLE_RATE = 16000
 RMS_THRESHOLD = 80.0  # Sensitive gate: picks up conversational voice across the room
 
+_W_GREET = os.environ.get("DAI_WAKE_GREETINGS", r"(?:hey|hi|hello|yo|okay|ok|aye|heyya)")
+_W_NAMES = os.environ.get("DAI_WAKE_NAMES", r"(?:d\.?a\.?i\.?|day|dey)")
+
 WAKE_PATTERNS = [
-    r"\b(?:hey|yo|hi|ok|hello|aye)?\s*(?:d\.?a\.?i\.?|day|dey|dave|date|bae|dan|baby)\b",
-    r"\bcome\s+here\s+(?:d\.?a\.?i\.?|day|dey)\b",
-    r"\b(?:d\.?a\.?i\.?|day|dey)\s+come\s+here\b",
-    r"^\s*(?:d\.?a\.?i\.?|day)\b",
+    rf"\b{_W_GREET}\s+{_W_NAMES}\b",       # "hey day", "okay dai"
+    rf"\bcome\s+here\s+{_W_NAMES}\b",      # "come here day"
+    rf"\b{_W_NAMES}\s+come\s+here\b",      # "day come here"
 ]
+
+# The summon must lead the utterance. "we had a great day" or "save the date"
+# are ambient chatter, not commands — same rule Gemini uses.
+WAKE_MAX_LEAD_WORDS = 3
 
 _stop_event = threading.Event()
 
@@ -408,14 +414,20 @@ def transcribe_wav(wav_bytes: bytes) -> str:
 
 
 def extract_wake_and_command(text: str) -> tuple[bool, str]:
+    """Return (woke, command). Only a leading vocative summons wakes the assistant."""
     lower = text.lower().strip()
     clean = re.sub(r"[^\w\s]", " ", lower)
     clean = " ".join(clean.split())
     for pattern in WAKE_PATTERNS:
         match = re.search(pattern, clean)
-        if match:
-            after = clean[match.end():].strip()
-            return True, after or "what's up"
+        if not match:
+            continue
+        # Tolerate short lead-ins Whisper emits ("uh", "so", "okay") but reject a
+        # summon buried mid-sentence, which is ambient conversation.
+        if len(clean[: match.start()].split()) > WAKE_MAX_LEAD_WORDS:
+            continue
+        after = clean[match.end():].strip()
+        return True, after or "what's up"
     return False, lower
 
 
