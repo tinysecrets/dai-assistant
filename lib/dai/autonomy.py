@@ -1,11 +1,14 @@
 """Bounded policy engine for DAI local autonomy. Fails closed."""
 from __future__ import annotations
-import json, re, subprocess, time
+import json
+import re
+import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
-ROOT=Path(__file__).resolve().parents[2]
-POLICY=ROOT/'policy/sovereign.json'
+ROOT = Path(__file__).resolve().parents[2]
+POLICY = ROOT / 'policy/sovereign.json'
 
 READ_ONLY_PATTERNS=(
     r'^(?:/usr/bin/)?systemctl --user (?:is-active|is-enabled|status) [A-Za-z0-9_.@-]+(?: --no-pager)?$',
@@ -50,7 +53,8 @@ def classify(command: str) -> str:
 
 def allowed(command: str) -> bool:
     cfg=policy().get('autonomy',{})
-    if not cfg.get('enabled',False): return False
+    if not cfg.get('enabled', False):
+        return False
     return classify(command) in {'read_only','restart_user_service'}
 
 
