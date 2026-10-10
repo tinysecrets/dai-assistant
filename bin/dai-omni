@@ -201,7 +201,7 @@ class OmniCLI:
             return 1
         delegator = OmniDelegator(self.dai_root)
         task_id = delegator.delegate(args.role, args.goal, args.context)
-        print(f"Delegated task {task_id} to {args.role} agent")
+        print(f"Recorded {args.role} delegation intent {task_id}; no subprocess was started")
         return 0
 
     def cmd_agents(self, args) -> int:
