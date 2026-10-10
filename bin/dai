@@ -241,6 +241,18 @@ PY
     exec "$ROOT/bin/dai-do" "$@"
     ;;
 
+  gemini|live)
+    exec "$ROOT/bin/dai-gemini" "$@"
+    ;;
+
+  test-voice|test-mic)
+    exec "$ROOT/bin/dai-test-voice" "$@"
+    ;;
+
+  audition)
+    exec "$ROOT/bin/dai-audition" "$@"
+    ;;
+
   listen)
     exec "$ROOT/bin/dai-listen" "$@"
     ;;

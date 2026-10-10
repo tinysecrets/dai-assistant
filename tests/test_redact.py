@@ -40,7 +40,7 @@ class TestPatternRedaction(unittest.TestCase):
             "gsk_AbC123XyZ987654321": "gsk_",
             "ghp_1234567890abcdefghijklmnopqrstuv": "ghp_",
             "AIza1234567890abcdefghijklmn": "AIza",
-            "xoxb-1234567890-abcdefghijklmnop": "xoxb-",
+            "xoxb-" + "dummytoken1234567890": "xoxb-",
             "hf_abcdefghijklmnopqrstuv": "hf_",
         }
         for token, prefix in shapes.items():

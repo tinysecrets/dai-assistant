@@ -16,6 +16,7 @@ service; ``bin/dai dashboard`` starts it on demand.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -43,9 +44,49 @@ def service_urls() -> dict[str, tuple[str, int]]:
     }
 
 
+def get_omni_memory_stats(dai_root: Path) -> dict[str, Any]:
+    """Inspect persisted Omni state without creating files or changing permissions."""
+    state_dir = Path(dai_root) / "state" / "omni"
+    stats: dict[str, Any] = {
+        "episodic_events": 0,
+        "semantic_facts": 0,
+        "procedural_skills": 0,
+        "vector_embeddings": 0,
+        "state_dir_size_mb": 0.0,
+    }
+    if not state_dir.is_dir():
+        return stats
+
+    episodic_path = state_dir / "episodic.jsonl"
+    with contextlib.suppress(OSError), episodic_path.open(encoding="utf-8") as stream:
+        stats["episodic_events"] = sum(1 for _ in stream)
+
+    for filename, key in (
+        ("semantic.json", "semantic_facts"),
+        ("procedural.json", "procedural_skills"),
+    ):
+        with contextlib.suppress(OSError, ValueError):
+            document = json.loads((state_dir / filename).read_text(encoding="utf-8"))
+            if isinstance(document, dict):
+                stats[key] = len(document)
+
+    vectors_dir = state_dir / "vectors"
+    with contextlib.suppress(OSError):
+        stats["vector_embeddings"] = sum(1 for path in vectors_dir.glob("*.npy") if path.is_file())
+
+    size_bytes = 0
+    for path in state_dir.rglob("*"):
+        if path.is_file():
+            with contextlib.suppress(OSError):
+                size_bytes += path.stat().st_size
+    stats["state_dir_size_mb"] = size_bytes / 1024 / 1024
+    return stats
+
+
 def get_omni_status(dai_root: str) -> dict[str, Any]:
     """Get status of omni daemon."""
     from pathlib import Path
+
     state_dir = Path(dai_root) / "state" / "omni"
     logs_dir = Path(dai_root) / "logs"
     pid_file = state_dir / "daemon.pid"
@@ -86,10 +127,8 @@ def get_omni_status(dai_root: str) -> dict[str, Any]:
     if state_dir.exists():
         for f in state_dir.rglob("*"):
             if f.is_file():
-                try:
+                with contextlib.suppress(Exception):
                     mem_size += f.stat().st_size
-                except Exception:
-                    pass
     return {
         "running": running,
         "pid": pid,
@@ -97,8 +136,9 @@ def get_omni_status(dai_root: str) -> dict[str, Any]:
         "delegation_count": len(agents),
         "agents": agents,
         "memory_size_bytes": mem_size,
-        "state_dir": str(state_dir)
+        "state_dir": str(state_dir),
     }
+
 
 def _get_json(url: str, timeout: float = 3.0) -> Optional[Any]:
     try:
@@ -151,6 +191,7 @@ def snapshot() -> Dict[str, Any]:
         "cooldowns_meta": cooldowns_raw,
         "omni": omni,
     }
+
 
 class DashboardState:
     """Latest snapshot, refreshed by a background thread."""
@@ -263,6 +304,9 @@ class Handler(BaseHTTPRequestHandler):
             ok = bool(data) and (data.get("router") is not None)
             body = json.dumps({"ok": ok, "ts": data.get("ts")}).encode()
             self._send(200 if ok else 503, body, "application/json")
+        elif self.path == "/api/omni/memory":
+            stats = get_omni_memory_stats(ROOT)
+            self._send(200, json.dumps({"ok": True, **stats}).encode(), "application/json")
         elif self.path == "/api/snapshot":
             self._send(200, json.dumps(self.state.get()).encode(), "application/json")
         else:
@@ -284,11 +328,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 req = urllib.request.Request(
                     f"http://{r_host}:{r_port}/v1/chat/completions",
-                    data=json.dumps({
-                        "model": "dai/auto",
-                        "messages": [{"role": "user", "content": message}],
-                        "stream": False,
-                    }).encode(),
+                    data=json.dumps(
+                        {
+                            "model": "dai/auto",
+                            "messages": [{"role": "user", "content": message}],
+                            "stream": False,
+                        }
+                    ).encode(),
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
@@ -303,12 +349,20 @@ class Handler(BaseHTTPRequestHandler):
             # Trigger a one-shot healing pass
             try:
                 import subprocess
+
                 result = subprocess.run(
                     [sys.executable, str(ROOT / "bin" / "omni-daemon.py"), "--once"],
-                    capture_output=True, text=True, timeout=60, cwd=str(ROOT)
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    cwd=str(ROOT),
                 )
                 output = result.stdout + result.stderr
-                self._send(200, json.dumps({"ok": result.returncode == 0, "output": output.strip()}).encode(), "application/json")
+                self._send(
+                    200,
+                    json.dumps({"ok": result.returncode == 0, "output": output.strip()}).encode(),
+                    "application/json",
+                )
             except Exception as e:
                 self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
             return
@@ -327,6 +381,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 from lib.dai.omni.delegation import create_delegator
+
                 delegator = create_delegator(ROOT)
                 agent_id = delegator.delegate(role, goal, context)
                 self._send(200, json.dumps({"ok": True, "agent_id": agent_id}).encode(), "application/json")
@@ -349,6 +404,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 from lib.dai.omni.synthesis import create_synthesizer
+
                 synthesizer = create_synthesizer(ROOT)
                 skill_path = synthesizer.synthesize(description)
                 self._send(200, json.dumps({"ok": True, "skill_path": str(skill_path)}).encode(), "application/json")
@@ -361,17 +417,24 @@ class Handler(BaseHTTPRequestHandler):
             # Return memory status
             try:
                 from lib.dai.omni.memory import OmniMemory
+
                 memory = OmniMemory(ROOT)
                 # Use stats() method which exists
                 stats = memory.stats()
-                self._send(200, json.dumps({
-                    "ok": True,
-                    "episodic_events": stats.get("episodic_events", 0),
-                    "semantic_facts": stats.get("semantic_facts", 0),
-                    "procedural_skills": stats.get("procedural_skills", 0),
-                    "vector_embeddings": stats.get("vector_embeddings", 0),
-                    "state_dir_size_mb": stats.get("state_dir_size_mb", 0)
-                }).encode(), "application/json")
+                self._send(
+                    200,
+                    json.dumps(
+                        {
+                            "ok": True,
+                            "episodic_events": stats.get("episodic_events", 0),
+                            "semantic_facts": stats.get("semantic_facts", 0),
+                            "procedural_skills": stats.get("procedural_skills", 0),
+                            "vector_embeddings": stats.get("vector_embeddings", 0),
+                            "state_dir_size_mb": stats.get("state_dir_size_mb", 0),
+                        }
+                    ).encode(),
+                    "application/json",
+                )
             except Exception as e:
                 self._send(500, json.dumps({"ok": False, "error": str(e)}).encode(), "application/json")
             return
@@ -381,9 +444,9 @@ class Handler(BaseHTTPRequestHandler):
 def main() -> None:
     load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
     global HTML
-    ui=ROOT / "lib" / "dai" / "dashboard_ui.html"
+    ui = ROOT / "lib" / "dai" / "dashboard_ui.html"
     if ui.exists():
-        HTML=ui.read_text(encoding="utf-8")
+        HTML = ui.read_text(encoding="utf-8")
     ap = argparse.ArgumentParser(description="dai headquarters dashboard")
     ap.add_argument("--port", type=int, default=env_int("DAI_DASHBOARD_PORT", 8799))
     ap.add_argument("--host", default=env_str("DAI_DASHBOARD_HOST", "0.0.0.0"))

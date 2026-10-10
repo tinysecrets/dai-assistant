@@ -169,7 +169,7 @@ how to run the "I'm active" reminders.
 
 | Item | Here | On your workstation |
 | --- | --- | --- |
-| Spine, smoke, 478 tests | ✅ verified | ✅ |
+| Spine, smoke, 487 tests | ✅ verified | ✅ |
 | Voice (TTS) + heartbeat blips | ✅ working (CC0 `en_US-joe-medium`) | ✅ |
 | Chat | ❌ no key / HF blocked here | ✅ once a key is in `.env` |
 | Dry-run GUI | ✅ verified | ✅ |

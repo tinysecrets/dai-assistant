@@ -18,7 +18,9 @@ printf 'No rebuild, just the existing wiring. Each hop reports real capability.\
 printf '1) Spine health\n'
 for url in "$ROUTER/health" "$WORKER/health" "$VOICE/health" "$DASH/health"; do
   if curl -sf --max-time 2 "$url" >/dev/null; then
-    dai_ok "$(basename $(dirname $url)) up: $url"
+    url_parent="$(dirname "$url")"
+  url_name="$(basename "$url_parent")"
+  dai_ok "$url_name up: $url"
   else
     dai_warn "down: $url"
   fi
@@ -81,20 +83,22 @@ echo
 
 # 4. TTS — voice-bridge /v1/audio/speech
 printf '4) TTS (voice-bridge) — /v1/audio/speech\n'
-TTS_OUT=$(curl -s --max-time 5 -X POST "$VOICE/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello from D-A-I, wiring check","voice":"en_US-lessac-medium","response_format":"wav"}' || true)
-if echo "$TTS_OUT" | head -c 4 | grep -q "RIFF"; then
+TTS_FILE=/tmp/dai-e2e-tts.wav
+curl -s --max-time 5 -o "$TTS_FILE" -X POST "$VOICE/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello from D-A-I, wiring check","voice":"en_US-bryce-medium","response_format":"wav"}' || true
+if head -c 4 "$TTS_FILE" 2>/dev/null | grep -q "RIFF"; then
   dai_ok "TTS wiring OK — got WAV bytes"
 else
-  echo "$TTS_OUT" | python3 -m json.tool 2>/dev/null | head -n 20 || echo "$TTS_OUT" | head -n 20
-  if echo "$TTS_OUT" | grep -q "voice_download_failed\|tts_load_failed\|piper\|No module"; then
+  cat "$TTS_FILE" 2>/dev/null | python3 -m json.tool 2>/dev/null | head -n 20 || echo "TTS response was not valid JSON"
+  if grep -aEq "voice_download_failed|tts_load_failed|piper|No module" "$TTS_FILE" 2>/dev/null; then
     dai_info "TTS wiring OK — fails cleanly with voice_download_failed (piper not in venv, expected in sandbox). Install via: python3 -m venv ~/.local/voice-venv && pip install piper-tts faster-whisper"
   else
     dai_warn "TTS unexpected"
   fi
 fi
 # Via router proxy
-TTS_ROUTER=$(curl -s --max-time 5 -X POST "$ROUTER/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello via router","voice":"en_US-lessac-medium","response_format":"wav"}' || true)
-if echo "$TTS_ROUTER" | grep -q "voice_download_failed\|piper\|RIFF"; then
+TTS_ROUTER_FILE=/tmp/dai-e2e-tts-router.wav
+curl -s --max-time 5 -o "$TTS_ROUTER_FILE" -X POST "$ROUTER/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello via router","voice":"en_US-bryce-medium","response_format":"wav"}' || true
+if head -c 4 "$TTS_ROUTER_FILE" 2>/dev/null | grep -q "RIFF" || grep -aEq "voice_download_failed|piper" "$TTS_ROUTER_FILE" 2>/dev/null; then
   dai_ok "TTS via router proxy wiring OK — router forwards AUDIO_PATHS"
 fi
 echo

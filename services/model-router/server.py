@@ -157,7 +157,7 @@ class RouterRuntime:
 
     def provider_enabled(self, name: str) -> bool:
         """A provider is on unless the policy explicitly switches it off."""
-        if self.inference_policy().get("free_cloud_only") is True and name != "openrouter":
+        if self.inference_policy().get("free_cloud_only") is True and name not in ("openrouter", "ollama_local"):
             return False
         cfg = self.inference_policy().get(name)
         return not (isinstance(cfg, dict) and cfg.get("enabled") is False)

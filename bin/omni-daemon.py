@@ -9,7 +9,7 @@ import argparse
 from pathlib import Path
 
 # Add dai-assistant lib to path
-DAI_ROOT = Path(os.environ.get("DAI_ROOT", Path.home() / "workspace/projects/active/dai-assistant")).resolve()
+DAI_ROOT = Path(os.environ.get("DAI_ROOT", Path(__file__).resolve().parents[1])).resolve()
 if str(DAI_ROOT) not in sys.path:
     sys.path.insert(0, str(DAI_ROOT))
 
@@ -24,7 +24,7 @@ def main():
     args = parser.parse_args()
 
     # Write PID file for external management
-    pid_file = Path(os.environ.get("DAI_ROOT", Path.home() / "workspace/projects/active/dai-assistant")) / "state/omni" / "daemon.pid"
+    pid_file = DAI_ROOT / "state/omni" / "daemon.pid"
     pid_file.parent.mkdir(parents=True, exist_ok=True)
     pid_file.write_text(str(os.getpid()))
 
@@ -42,7 +42,7 @@ def main():
     if args.once:
         print("Running one healing pass...")
         actions = healer.run_once()
-        print(f"Completed: {len(actions)} actions taken")
+        print(f"Completed: {len(actions)} action plans reviewed (dry-run; no changes made)")
         return
 
     print(f"Starting omni daemon (healing every {args.interval}s)")
@@ -51,7 +51,7 @@ def main():
             start = time.time()
             actions = healer.run_once()
             if actions:
-                print(f"Healing pass: {len(actions)} actions taken")
+                print(f"Healing pass: {len(actions)} action plans reviewed (dry-run; no changes made)")
             else:
                 print("Healing pass: no issues detected")
             elapsed = time.time() - start

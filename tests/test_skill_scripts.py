@@ -281,6 +281,7 @@ class TestWorkerHealth(LiveWorkerCase):
 
     def test_missing_policy_file_does_not_crash(self):
         env = dict(self.env)
+        env.pop("DAI_POLICY_FILE", None)
         env["DAI_POLICY"] = str(self.spine.dir / "absent.json")
         proc = run_script(HEALTH, ["--worker", self.base], env=env)
         no_traceback(self, proc)
@@ -292,6 +293,7 @@ class TestWorkerHealth(LiveWorkerCase):
         bad = self.spine.dir / "bad.json"
         bad.write_text("{not json at all", encoding="utf-8")
         env = dict(self.env)
+        env.pop("DAI_POLICY_FILE", None)
         env["DAI_POLICY"] = str(bad)
         proc = run_script(HEALTH, ["--worker", self.base], env=env)
         no_traceback(self, proc)
@@ -302,6 +304,7 @@ class TestWorkerHealth(LiveWorkerCase):
         thin = self.spine.dir / "thin.json"
         thin.write_text('{"version": 3}', encoding="utf-8")
         env = dict(self.env)
+        env.pop("DAI_POLICY_FILE", None)
         env["DAI_POLICY"] = str(thin)
         proc = run_script(HEALTH, ["--worker", self.base], env=env)
         no_traceback(self, proc)

@@ -37,25 +37,20 @@ def web_search(query: str, max_results: int = 5) -> list[dict]:
 
     # Parse results - look for result__snippet and result__title
     results = []
-    # Pattern for result snippets
-    snippet_pattern = r'class="result__snippet">(.*?)</a>'
-    title_pattern = r'class="result__title">.*?<a[^>]*>(.*?)</a>'
-    url_pattern = r'class="result__url">.*?>(.*?)</a>'
-
     # Better: find all result blocks
     result_blocks = re.findall(r'class="result__body">(.*?)</div>\s*</div>', html, re.DOTALL)
     for block in result_blocks[:max_results]:
         # Extract title
         title_match = re.search(r'class="result__title">.*?<a[^>]*>(.*?)</a>', block, re.DOTALL)
-        title = re.sub(r'<[^>]+>', '', title_match.group(1)).strip() if title_match else ""
+        title = re.sub(r"<[^>]+>", "", title_match.group(1)).strip() if title_match else ""
 
         # Extract snippet
         snippet_match = re.search(r'class="result__snippet">(.*?)</a>', block, re.DOTALL)
-        snippet = re.sub(r'<[^>]+>', '', snippet_match.group(1)).strip() if snippet_match else ""
+        snippet = re.sub(r"<[^>]+>", "", snippet_match.group(1)).strip() if snippet_match else ""
 
         # Extract URL
         url_match = re.search(r'class="result__url">.*?>(.*?)</a>', block, re.DOTALL)
-        url = re.sub(r'<[^>]+>', '', url_match.group(1)).strip() if url_match else ""
+        url = re.sub(r"<[^>]+>", "", url_match.group(1)).strip() if url_match else ""
 
         if title or snippet:
             results.append({"title": title, "snippet": snippet, "url": url})
@@ -116,11 +111,15 @@ def main() -> int:
     # Step 2: Synthesize with router
     try:
         if search_results:
-            results_text = "\n".join([
-                f"Source {i}: {r.get('title', 'N/A')} ({r.get('url', 'N/A')})\n{r.get('snippet', 'N/A')}"
-                for i, r in enumerate(search_results, 1)
-            ])
-            prompt = f"Research goal: {goal}\n\nWeb search results:\n{results_text}\n\nSynthesize a briefing with citations."
+            results_text = "\n".join(
+                [
+                    f"Source {i}: {r.get('title', 'N/A')} ({r.get('url', 'N/A')})\n{r.get('snippet', 'N/A')}"
+                    for i, r in enumerate(search_results, 1)
+                ]
+            )
+            prompt = (
+                f"Research goal: {goal}\n\nWeb search results:\n{results_text}\n\nSynthesize a briefing with citations."
+            )
         else:
             prompt = f"Research goal: {goal}\n\n(No web search results available; use your training knowledge.)"
 
@@ -128,7 +127,7 @@ def main() -> int:
         print("[Research Agent] Findings:\n" + findings, flush=True)
         print("[Research Agent] Agent completed successfully.", flush=True)
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[Research Agent] FAILED: {exc}", flush=True)
         return 1
 

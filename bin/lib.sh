@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared helpers for bin/*.sh.  Source it; do not execute it.
 #
-#   ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+#   ROOT="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 #   source "$ROOT/bin/lib.sh"
 #
 # Nothing here prints a secret.  `.env` is parsed key-by-key instead of being
@@ -16,7 +16,7 @@ set -euo pipefail
 
 # --- paths ------------------------------------------------------------------
 
-DAI_REPO_ROOT="${DAI_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+DAI_REPO_ROOT="${DAI_REPO_ROOT:-$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 # Each path honours its own name first, then a short alias, then the default —
 # so a caller (or a test) can redirect state/logs/env without editing the repo.
 DAI_ENV_FILE="${DAI_ENV_FILE:-${DAI_ENV:-$DAI_REPO_ROOT/.env}}"

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# DAI GUI front door: start the full runtime, then open the live command center.
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+"$ROOT/bin/dai-assistant" --no-xvfb
+if command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "http://127.0.0.1:8799/" >/dev/null 2>&1 &
+fi

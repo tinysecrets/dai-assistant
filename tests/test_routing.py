@@ -104,13 +104,13 @@ class TestCandidateBuilding(unittest.TestCase):
         self.assertEqual(result.candidates, [])
         self.assertTrue(result.notes)
 
-    def test_cloud_pools_come_before_local(self) -> None:
+    def test_local_pool_comes_before_cloud_pools(self) -> None:
         env = {**KEY_ENV, "OLLAMA_API_KEY": "oll"}
         pool = {**default_pool(), "ollama_cloud_models": ["cloud-model"], "ollama_local_models": ["hermes3:8b"]}
         result = plan(env=env, pool=pool)
         order = [c.provider for c in result.candidates]
-        self.assertEqual(order[0], "openrouter")
-        self.assertEqual(order[-1], "ollama_local")
+        self.assertEqual(order[0], "ollama_local")
+        self.assertEqual(order[-1], "ollama_cloud")
         self.assertEqual(order, sorted(order, key=PROVIDER_ORDER.index))
 
     def test_local_defaults_when_pool_key_is_absent(self) -> None:
