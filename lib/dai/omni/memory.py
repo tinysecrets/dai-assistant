@@ -3,17 +3,28 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib
 import json
 import os
 import time
 import uuid
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, asdict
 
-# Keep the default memory backend stdlib-only; embeddings remain disabled until
-# a separately reviewed optional adapter is added.
-HAS_EMBEDDINGS = False
+# Optional embeddings are loaded dynamically: the core memory layer remains
+# importable in a standard-library-only install.
+try:
+    _st = importlib.import_module("sentence_transformers")
+    _np = importlib.import_module("numpy")
+    SentenceTransformer = _st.SentenceTransformer
+    np = _np
+    HAS_EMBEDDINGS = True
+except Exception:
+    SentenceTransformer = None
+    np = None
+    HAS_EMBEDDINGS = False
 
 @dataclass
 class EpisodicEvent:
@@ -23,7 +34,7 @@ class EpisodicEvent:
     detail: str
     context: Dict[str, Any]
     outcome: Optional[str] = None
-    tags: List[str] = None
+    tags: Optional[List[str]] = None
 
     def __post_init__(self):
         if self.tags is None:
@@ -47,10 +58,8 @@ class OmniMemory:
         os.chmod(self.vectors_dir, 0o700)
         for existing in self.state_dir.rglob("*"):
             if existing.is_file():
-                try:
+                with contextlib.suppress(OSError):
                     os.chmod(existing, 0o600)
-                except OSError:
-                    pass
 
         self._semantic_cache: Dict[str, Any] = {}
         self._procedural_cache: Dict[str, Any] = {}
@@ -100,8 +109,8 @@ class OmniMemory:
 
     # ===== Episodic Memory (Event Log) =====
 
-    def log_event(self, event_type: str, detail: str, context: Dict = None,
-                  outcome: str = None, tags: List[str] = None) -> str:
+    def log_event(self, event_type: str, detail: str, context: Optional[Dict[str, Any]] = None,
+                  outcome: Optional[str] = None, tags: Optional[List[str]] = None) -> str:
         """Append an event to the episodic log."""
         event = EpisodicEvent(
             id=str(uuid.uuid4())[:8],
@@ -114,6 +123,7 @@ class OmniMemory:
         )
 
         with open(self.episodic_path, "a") as f:
+            os.chmod(self.episodic_path, 0o600)
             f.write(json.dumps(asdict(event)) + "\n")
 
         # Also index in vector store for semantic search
@@ -175,10 +185,8 @@ class OmniMemory:
         if self.episodic_path.exists():
             with open(self.episodic_path) as f:
                 for line in f:
-                    try:
+                    with contextlib.suppress(Exception):
                         events.append(json.loads(line))
-                    except Exception:
-                        pass
         return events[-limit:]
 
     # ===== Semantic Memory (Facts) =====
