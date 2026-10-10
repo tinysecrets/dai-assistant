@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import time
 import uuid
-import shlex
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -171,7 +169,7 @@ class OmniDelegator:
 
 
 # Default factory function
-def create_delegator(dai_root: Path = None) -> OmniDelegator:
+def create_delegator(dai_root: Optional[Path] = None) -> OmniDelegator:
     if dai_root is None:
         dai_root = Path(__file__).resolve().parents[3]
     return OmniDelegator(dai_root)
