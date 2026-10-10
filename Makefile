@@ -31,7 +31,9 @@ help:
 check:
 	@for svc in $(SERVICES); do \
 		echo "== $$svc"; \
-		$(PYTHON) "$$svc" --check || exit 1; \
+		CHECK_PY="$(PYTHON)"; \
+		case "$svc" in *voice-bridge*) CHECK_PY="${DAI_VOICE_PY:-$HOME/.local/voice-venv/bin/python}"; test -x "$CHECK_PY" || CHECK_PY="$(PYTHON)";; esac; \
+		"$CHECK_PY" "$svc" --check || exit 1; \
 	done
 
 ## test: run the full suite (unit, HTTP integration, shell, consistency)
@@ -174,7 +176,11 @@ perf:
 	@printf '  WORKERS:    '; python3 -c 'import os; print(os.environ.get("DAI_VOICE_BRIDGE_WORKERS","4"))'
 	@printf '  venv:       '; test -x "$$HOME/.local/voice-venv/bin/python" && echo "$$HOME/.local/voice-venv/bin/python" || echo "(missing)"
 	@echo "== live services (if up)"
-	@python3 "$$(pwd)/services/voice-bridge/server.py" --check >/dev/null 2>&1 && echo "  voice-bridge --check: clean" || echo "  voice-bridge --check: not serving"
+	@VOICE_PY="${DAI_VOICE_PY:-$HOME/.local/voice-venv/bin/python}"; \
+	if test -x "$VOICE_PY"; then \
+	  HEALTH="$(curl -fsS --max-time 3 http://127.0.0.1:8766/health 2>/dev/null || true)"; \
+	  if echo "$HEALTH" | grep -Fq '"ok": true'; then echo "  voice-bridge health: clean ($VOICE_PY)"; else echo "  voice-bridge health: not serving"; fi; \
+	else echo "  voice-bridge health: voice venv missing"; fi
 
 ## tune: write recommended CPU pinning for this machine into .env
 tune:
