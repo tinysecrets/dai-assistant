@@ -14,7 +14,7 @@
 | High | The previous `SYSTEM_MAP.md` and integration registry contained stale device roles and private device/network identifiers. | Sanitized in this branch; older public commits still retain historical copies. |
 | High | Live readiness is not proven by registry entries. Phone, G8, A16, Lubuntu, PipeWire, and service health must be checked on the actual hosts. | Explicitly documented; runtime verification still pending. |
 | High | `policy/sovereign.json` keeps `dry_run_default=true` and `require_approval_token=true`, but also sets `private_data_must_stay_local=false` and `free_cloud_only=false`. Static inspection found no enforcement path for `private_data_must_stay_local`; it is currently declarative, not a privacy boundary. | Needs a real data-classification/enforcement design and tests. Do not claim private prompts stay local based on this flag. |
-| Medium | The private repository's `dai-omni` CLI appears incomplete at its current expected import paths; several commands can return “module not loaded.” | Not copied into the unified branch as a working feature. |
+| High | The prior Omni integration was tracked as absolute-path symlinks into a local `.hermes` directory, so clean clones could not load its modules. Its original healer also attempted live fixes by default and delegation could spawn OpenCode without a one-shot approval adapter. | Replaced those symlinks with packaged source. Healing is now dry-run-only, live delegation is intent-only, and daemon start/stop/upgrade commands fail closed until an approval-gated implementation exists. Regression tests added. |
 | Medium | The model pool lists a discovery timestamp and verified count that must be refreshed against the live provider catalog before treating every model as currently available or free. | Newer free-model entries merged; live provider verification still pending. |
 | Medium | The current CI workflow triggers on `main` pushes and pull requests, not on arbitrary branch pushes. | Open a PR to make the CI gate run; do not merge until checks pass. |
 
@@ -28,7 +28,7 @@
 
 ## Verification still required
 
-1. CI: compile, service config checks, shell syntax, unit/integration suite, smoke checks, doctor, ShellCheck, Ruff, and hygiene.
+1. CI: compile, service config checks, shell syntax, unit/integration suite, smoke checks, doctor, ShellCheck, Ruff, and hygiene. The first CI pass found trailing whitespace, one ShellCheck quoting warning, and Ruff issues; fixes were committed and a fresh CI result is pending.
 2. On Debian and Lubuntu: verify the installed checkout/commit, `dai doctor`, `dai unify`, service health, router readiness, and the approval-gated dry-run.
 3. Confirm live ADB discovery for the S22, G8, and A16; confirm the actual PipeWire default input and Deskflow peer.
 4. Reconcile the private `dai` repository's divergent files and unique components into this branch before declaring cross-repository unification complete.
