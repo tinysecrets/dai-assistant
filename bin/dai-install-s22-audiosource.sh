@@ -110,7 +110,7 @@ Wants=audiosource-s22.service
 
 [Service]
 Type=simple
-ExecStart=/home/justin/.local/bin/s22-mic-router
+ExecStart=%h/.local/bin/s22-mic-router
 Restart=always
 RestartSec=2
 
