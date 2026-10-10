@@ -90,7 +90,7 @@ cat << 'EOF' > "$HOME/.local/share/applications/dhakidd-dictate-toggle.desktop"
 Type=Application
 Name=🎤 Dictate (Toggle)
 Comment=Speak into S22 to paste text directly into active window
-Exec=/home/justin/.local/bin/dhakidd-dictate
+Exec=sh -lc "$HOME/.local/bin/dhakidd-dictate"
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Audio;
