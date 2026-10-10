@@ -998,3 +998,373 @@ class TestDocumentationLinks(unittest.TestCase):
                 with self.subTest(f"{doc.name} -> {rel}"):
                     self.assertTrue(
                         is_git_ignored(rel),
+                        f"{doc.name} references {rel}, which neither exists nor is "
+                        "git-ignored as a runtime artifact — the reference is stale",
+                    )
+
+    def test_runtime_artifacts_are_gitignored(self):
+        """The paths the exemption above relies on must really be ignored.
+
+        Without this, a reference to policy/approvals.json would pass merely
+        because the file happens to be missing — and if .gitignore ever lost that
+        entry, a file of live approval tokens could be committed.  Checked with
+        `git check-ignore` against the pattern rather than the working tree, so
+        it holds on a fresh clone where none of these exist yet.
+        """
+        for rel in (
+            ".env",
+            "policy/approvals.json",
+            "state/agent-s-tasks/task.json",
+            "logs/model-router.log",
+            "vendor/vellum-assistant/package.json",
+            "skills-ready/agent-s-delegate/SKILL.md",
+        ):
+            with self.subTest(rel):
+                self.assertTrue(
+                    is_git_ignored(rel),
+                    f"{rel} is a secret-bearing or generated runtime artifact and must stay git-ignored",
+                )
+
+
+class TestServiceSurface(unittest.TestCase):
+    """Routes and versions the docs and clients depend on."""
+
+    def routes(self, service: str) -> set[str]:
+        """/health and /ready are served by the shared JsonHandler in lib/dai,
+        so the base module is part of every service's surface."""
+        sources = [read(ROOT / f"services/{service}/server.py"), read(ROOT / "lib/dai/httpserver.py")]
+        out: set[str] = set()
+        for src in sources:
+            out |= set(re.findall(r'path == "(/[^"]*)"', src))
+            out |= set(re.findall(r'path\.startswith\("(/[^"]*)"\)', src))
+            # path in ("/", "/health") — the tuple form both services use.
+            for group in re.findall(r"path (?:in|not in) \(([^)]*)\)", src):
+                out |= set(re.findall(r'"(/[^"]*)"', group))
+        return out
+
+    def test_router_exposes_the_documented_routes(self):
+        routes = self.routes("model-router")
+        for expected in (
+            "/health",
+            "/ready",
+            "/version",
+            "/v1/models",
+            "/v1/chat/completions",
+            "/v1/completions",
+            "/v1/status/config",
+            "/v1/status/cooldowns",
+            "/v1/status/keys",
+            "/v1/status/plan",
+            "/v1/status/reset",
+            "/v1/status/stats",
+        ):
+            self.assertIn(expected, routes, f"model-router lost route {expected}")
+
+    def test_worker_exposes_the_documented_routes(self):
+        routes = self.routes("agent-s-worker")
+        for expected in ("/health", "/ready", "/version", "/v1/settings", "/v1/tasks"):
+            self.assertIn(expected, routes, f"agent-s-worker lost route {expected}")
+
+    def test_both_services_declare_a_version(self):
+        for service in ("model-router", "agent-s-worker"):
+            src = read(ROOT / f"services/{service}/server.py")
+            with self.subTest(service):
+                # VERSION derives from the ServiceInfo literal, so the string
+                # printed by --version and the one in /health cannot disagree.
+                self.assertRegex(src, r"(?m)^VERSION\s*=\s*SERVICE\.version$")
+                self.assertRegex(src, r'ServiceInfo\(\s*"%s"\s*,\s*"[0-9]+\.[0-9]+"' % service)
+
+    def test_services_import_from_the_shared_lib(self):
+        for service in ("model-router", "agent-s-worker"):
+            src = read(ROOT / f"services/{service}/server.py")
+            with self.subTest(service):
+                self.assertIn("from lib.dai", src)
+                self.assertIn("redact", src, "a service must redact before logging")
+
+    def test_lib_package_exports_a_version(self):
+        import lib.dai as dai
+
+        self.assertRegex(dai.__version__, r"^[0-9]+\.[0-9]+\.[0-9]+$")
+
+    def test_every_lib_module_imports_cleanly(self):
+        for path in sorted((ROOT / "lib/dai").glob("*.py")):
+            name = path.stem
+            if name == "__init__":
+                continue
+            with self.subTest(name):
+                __import__(f"lib.dai.{name}")
+
+
+def _balanced_span(src: str, start: int) -> str:
+    """Return the argument text of a call whose "(" ends at `start`.
+
+    Tracks string literals so a paren or comma inside a quoted detail cannot
+    end the span early.
+    """
+    depth, i, quote = 1, start, ""
+    while i < len(src):
+        ch = src[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+            if depth == 0:
+                return src[start:i]
+        i += 1
+    return src[start:]
+
+
+def _top_level_args(span: str) -> list[str]:
+    """Split a call's argument text on commas that are not nested or quoted."""
+    args, depth, quote, current = [], 0, "", []
+    i = 0
+    while i < len(span):
+        ch = span[i]
+        if quote:
+            current.append(ch)
+            if ch == "\\":
+                if i + 1 < len(span):
+                    current.append(span[i + 1])
+                    i += 2
+                    continue
+            elif ch == quote:
+                quote = ""
+        elif ch in "\"'":
+            quote = ch
+            current.append(ch)
+        elif ch in "([{":
+            depth += 1
+            current.append(ch)
+        elif ch in ")]}":
+            depth -= 1
+            current.append(ch)
+        elif ch == "," and depth == 0:
+            args.append("".join(current))
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    args.append("".join(current))
+    return args
+
+
+def http_error_codes(path: Path) -> set[str]:
+    """Every error code a file can raise through HttpError.
+
+    Only the *code* argument (position 2) is read, so kwargs like
+    ``extra={...}`` and ``headers={"Connection": "close"}`` cannot contribute
+    payload keys or header values.  Taking the whole argument rather than a
+    single literal is what catches conditional codes:
+
+        HttpError(503, "no_providers_ready" if not any_key
+                       else "requested_model_unavailable", ...)
+    """
+    src = read(path)
+    codes: set[str] = set()
+    for match in re.finditer(r"HttpError\(", src):
+        args = _top_level_args(_balanced_span(src, match.end()))
+        if len(args) < 2:
+            continue
+        codes |= set(re.findall(r'"([a-z][a-z0-9_]{2,})"', args[1]))
+    return codes
+
+
+def approval_codes() -> set[str]:
+    """Codes the approval store returns; services re-raise them verbatim.
+
+    ``\\(?`` matters: two of the returns are parenthesised multi-line tuples,
+    so a pattern anchored directly on the quote silently misses them.
+    """
+    src = read(ROOT / "lib/dai/approvals.py")
+    return set(re.findall(r'return\s*\(?\s*"([a-z_]{4,})"\s*,', src))
+
+
+def task_result_codes() -> set[str]:
+    """Codes recorded in ``result.error`` on a finished task."""
+    src = read(ROOT / "services/agent-s-worker/server.py")
+    return set(re.findall(r'"error":\s*"([a-z_]{4,})"', src))
+
+
+def documented_error_codes() -> set[str]:
+    """Codes docs/API.md claims exist.
+
+    Deliberately narrow. Backticked identifiers appear all over the doc
+    (``dry_run``, ``ready_for_chat``, ``task_timeout_seconds``), so only three
+    shapes count as a documented error code:
+
+    1. a table whose header column is ``Code`` -> that column
+    2. a table whose header has an ``error`` column (``| Status | error | ...``)
+       -> that column
+    3. the ``**Label:**`` code lists in the "Error codes" section, including
+       their wrapped continuation lines
+    """
+    lines = read(ROOT / "docs/API.md").splitlines()
+    codes: set[str] = set()
+
+    def cells(line: str) -> list[str]:
+        return [c.strip() for c in line.strip().strip("|").split("|")]
+
+    code_column: int | None = None
+    in_error_section = False
+    in_labelled_list = False
+
+    for line in lines:
+        if line.startswith("## "):
+            in_error_section = line.strip() == "## Error codes"
+            code_column = None
+            in_labelled_list = False
+            continue
+
+        if line.startswith("|"):
+            body = cells(line)
+            if all(re.fullmatch(r":?-{3,}:?", c) for c in body if c):
+                continue  # separator row
+            lowered = [re.sub(r"[`*]", "", c).lower() for c in body]
+            if code_column is None and any(c in ("code", "error") for c in lowered):
+                # Header row: remember which column carries the code.
+                code_column = next(i for i, c in enumerate(lowered) if c in ("code", "error"))
+                continue
+            if code_column is not None and len(body) > code_column:
+                codes |= set(re.findall(r"`([a-z][a-z0-9_]{2,})`", body[code_column]))
+            continue
+
+        code_column = None
+
+        if in_error_section and re.match(r"^\*\*[^*]+:\*\*", line):
+            in_labelled_list = True
+        elif in_labelled_list and not line.strip():
+            in_labelled_list = False
+
+        if in_labelled_list:
+            codes |= set(re.findall(r"`([a-z][a-z0-9_]{2,})`", line))
+
+    return codes
+
+
+class TestErrorCodeDocumentation(unittest.TestCase):
+    """docs/API.md is what clients code against; it must not drift.
+
+    Writing this doc from memory produced codes that do not exist
+    (`no_candidates`, `approval_wrong_action`) and omitted ten that do. Both
+    directions are checked.
+    """
+
+    def setUp(self):
+        self.real = (
+            http_error_codes(ROOT / "services/model-router/server.py")
+            | http_error_codes(ROOT / "services/agent-s-worker/server.py")
+            | http_error_codes(ROOT / "lib/dai/httpserver.py")
+            | approval_codes()
+            | task_result_codes()
+        )
+        self.documented = documented_error_codes()
+
+    def test_extraction_finds_the_codes_we_know_exist(self):
+        """Guard the extractor itself: a regex that matches nothing would make
+        every other assertion here vacuously pass."""
+        for known in (
+            "all_candidates_failed",
+            "invalid_json",
+            "queue_full",
+            "no_providers_ready",
+            "requested_model_unavailable",
+            "missing_approval_token",
+            "agent_s_not_installed",
+        ):
+            self.assertIn(known, self.real, f"extractor missed {known}")
+
+    def test_every_real_code_is_documented(self):
+        missing = sorted(self.real - self.documented)
+        self.assertEqual(missing, [], f"codes exist in the services but not in docs/API.md: {missing}")
+
+    def test_no_documented_code_is_invented(self):
+        invented = sorted(self.documented - self.real)
+        self.assertEqual(invented, [], f"docs/API.md documents codes no service can emit: {invented}")
+
+    def test_approval_codes_are_documented_as_shared(self):
+        for code in approval_codes():
+            with self.subTest(code):
+                self.assertIn(code, self.documented)
+
+    def test_api_doc_is_the_one_services_advertise(self):
+        for service in ("model-router", "agent-s-worker"):
+            src = read(ROOT / f"services/{service}/server.py")
+            with self.subTest(service):
+                self.assertIn('"docs/API.md"', src)
+        self.assertTrue((ROOT / "docs/API.md").is_file(), "services advertise docs/API.md, so it must exist")
+
+
+class TestBinScriptsReferenceRealThings(unittest.TestCase):
+    """Scripts must not call helpers or paths that do not exist."""
+
+    def helpers_defined_in_lib(self) -> set[str]:
+        return set(re.findall(r"^(dai_[a-z_]+)\(\)", read(ROOT / "bin/lib.sh"), re.M))
+
+    def test_every_dai_helper_called_is_defined(self):
+        defined = self.helpers_defined_in_lib()
+        self.assertTrue(defined, "no helpers found in bin/lib.sh")
+        # Only names in *command position* are calls: `dai_routed` appears as a
+        # JSON field name in prose and must not be mistaken for a helper.
+        call = re.compile(r"""(?:^|&&|\|\||[;|])\s*(dai_[a-z_]+)\b""")
+        for path in sorted((ROOT / "bin").iterdir()):
+            if not path.is_file() or path.name == "lib.sh":
+                continue
+            for name in set(call.findall(read(path))):
+                with self.subTest(f"{path.name}: {name}"):
+                    self.assertIn(name, defined, f"{path.name} calls undefined helper {name}")
+
+    def test_scripts_reference_existing_repo_paths(self):
+        # Paths that are optional or created at runtime: doctor.sh checks for
+        # them precisely because they may be absent on a fresh clone.
+        optional = ("vendor", "skills-ready", "state", "logs", ".env")
+        for path in sorted((ROOT / "bin").iterdir()):
+            if not path.is_file():
+                continue
+            for rel in set(re.findall(r'"\$ROOT/([A-Za-z0-9_./-]+)"', read(path))):
+                if any(ch in rel for ch in "*<>$"):
+                    continue
+                # Optional or created-at-runtime paths (compare without any
+                # trailing slash, since scripts reference both forms).
+                if rel.rstrip("/").split("/")[0] in optional:
+                    continue
+                with self.subTest(f"{path.name} -> {rel}"):
+                    self.assertTrue((ROOT / rel).exists(), f"{path.name} references $ROOT/{rel}, which does not exist")
+
+    def test_optional_paths_are_actually_treated_as_optional(self):
+        """doctor.sh must not FAIL on vendor/ being absent — that broke fresh clones."""
+        src = read(ROOT / "bin/doctor.sh")
+        for rel in ("vendor/vellum-assistant", "vendor/Agent-S"):
+            self.assertIn(rel, src, f"doctor.sh no longer checks {rel}")
+        # Find the block that mentions the vendor path and confirm it warns.
+        window = src[src.index("vendor/vellum-assistant") :]
+        head = window[:600]
+        self.assertIn("dai_warn", head, "a missing vendor/ checkout must be a warning, not a failure")
+
+    def test_bin_dai_dispatches_to_real_scripts(self):
+        src = read(ROOT / "bin/dai")
+        for rel in set(re.findall(r'"\$ROOT/bin/([A-Za-z0-9_.-]+)"', src)):
+            with self.subTest(rel):
+                self.assertTrue((ROOT / "bin" / rel).is_file())
+
+    def test_no_script_uses_bashisms_under_sh(self):
+        """All scripts declare bash; make sure none claims /bin/sh."""
+        for path in sorted((ROOT / "bin").iterdir()):
+            if not path.is_file():
+                continue
+            first = read(path).splitlines()[0]
+            if "python" in first:
+                continue
+            with self.subTest(path.name):
+                self.assertIn("bash", first, f"{path.name} should use a bash shebang")
+
+
+if __name__ == "__main__":
+    unittest.main()

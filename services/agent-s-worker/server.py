@@ -998,3 +998,156 @@ class WorkerHandler(JsonHandler):
                 "detail": f"Task queue is at capacity ({rt.max_queue}); wait for running tasks to finish.",
                 "actions": [],
                 "artifacts": [],
+            }
+            rt.save_task(task)
+            raise HttpError(429, "queue_full", "Too many pending tasks; retry shortly.", extra={"id": task["id"]})
+
+        self.send_json(202, {"id": task["id"], "status": task["status"], "dry_run": dry_run})
+
+    def cancel_task(self, task_id: str) -> None:
+        rt = self.rt
+        task = rt.load_task(task_id)
+        if not task:
+            raise HttpError(404, "not_found", f"No task {task_id}")
+        if task.get("status") in TERMINAL:
+            self.send_json(
+                200, {"id": task_id, "status": task.get("status"), "cancelled": False, "detail": "already finished"}
+            )
+            return
+        info = rt.running_info(task_id)
+        if info is None:
+            task["status"] = CANCELLED
+            task["result"] = {
+                "status": CANCELLED,
+                "error": "cancelled_before_start",
+                "actions": [],
+                "artifacts": [],
+            }
+            task["finished_at"] = time.time()
+            rt.save_task(task)
+            self.send_json(200, {"id": task_id, "status": CANCELLED, "cancelled": True})
+            return
+        event = info.get("cancel_event")
+        if isinstance(event, threading.Event):
+            event.set()
+        self.send_json(202, {"id": task_id, "status": task.get("status"), "cancelling": True})
+
+
+def runtime_display_probe(rt: WorkerRuntime, settings: Mapping[str, Any]) -> bool:
+    """Cheap display check for ``/health`` (never starts Xvfb)."""
+    return rt.display_ready(str(settings["display"]))
+
+
+def summary(task: Mapping[str, Any]) -> Dict[str, Any]:
+    result = task.get("result") if isinstance(task.get("result"), dict) else {}
+    return {
+        "id": task.get("id"),
+        "instruction": task.get("instruction"),
+        "status": task.get("status"),
+        "dry_run": task.get("dry_run"),
+        "created_at": task.get("created_at"),
+        "started_at": task.get("started_at"),
+        "finished_at": task.get("finished_at"),
+        "error": result.get("error"),
+        "summary": result.get("summary"),
+        "artifacts": len(result.get("artifacts") or []),
+    }
+
+
+def check_configuration(runtime: WorkerRuntime) -> Dict[str, Any]:
+    """Validate configuration without serving.  Used by ``--check`` and doctor.
+
+    Two categories, deliberately kept apart:
+
+    * ``problems`` — configuration or safety faults.  ``--check`` exits 1.
+    * ``warnings`` — optional runtime dependencies that are absent.
+
+    A fresh clone legitimately has no ``agent_s`` binary and no X display, and
+    dry-run still works, so those must never fail a configuration check (or
+    CI).  Reporting them as problems forced every caller to re-classify the
+    strings afterwards.
+    """
+    problems: List[str] = []
+    warnings: List[str] = []
+    settings = runtime.settings()
+    policy = runtime.policy()
+    if not policy:
+        problems.append(f"policy empty or unreadable: {runtime.policy_file.path}")
+    if not isinstance(policy.get("agent_s"), dict):
+        problems.append("policy has no 'agent_s' object; built-in defaults are in use")
+    if settings["bind_owner_live_desktop"]:
+        problems.append("agent_s.bind_owner_live_desktop is true — live desktop control is forbidden by design")
+    if not settings["dry_run_default"]:
+        problems.append("agent_s.dry_run_default is false: tasks are LIVE unless they ask for a dry run")
+    problems.extend(runtime.config_errors())
+
+    if not runtime.agent_s_binary():
+        warnings.append(
+            f"agent_s binary not found (venv: {settings['venv']}) — live GUI tasks will be "
+            "refused with a reason; dry-run still works"
+        )
+    if not runtime.display_ready(str(settings["display"])):
+        warnings.append(f"display {settings['display']} is not answering (start-spine.sh runs Xvfb when installed)")
+
+    return {
+        "ok": not problems,
+        "problems": problems,
+        "warnings": warnings,
+        "settings": settings,
+        "approvals_file": str(runtime.approvals.path),
+        "approvals_present": runtime.approvals.path.exists(),
+        "state_dir": str(runtime.state_dir),
+        "queued_tasks": len(runtime.list_tasks(limit=500, status=QUEUED)),
+    }
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(prog="agent-s-worker", description=__doc__.splitlines()[0])
+    parser.add_argument("--check", action="store_true", help="validate configuration and exit")
+    parser.add_argument("--print-config", action="store_true", help="print resolved (secret-free) config and exit")
+    parser.add_argument("--version", action="store_true", help="print version and exit")
+    args = parser.parse_args(argv)
+
+    if args.version:
+        print(f"{SERVICE.name} {VERSION}")
+        return 0
+
+    load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
+    runtime = build_runtime()
+    config = build_config(runtime)
+
+    if args.check:
+        report = check_configuration(runtime)
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+    if args.print_config:
+        print(json.dumps({"config": config.public_dict(), **runtime.settings()}, indent=2, default=str))
+        return 0
+
+    httpd = create_server(
+        config,
+        WorkerHandler,
+        service=SERVICE,
+        redactor=runtime.redactor,
+        bind={"runtime": runtime, "timeout": config.extra.get("client_timeout", 180)},
+    )
+    start_workers(runtime)
+    settings = runtime.settings()
+    banner = "\n".join(
+        [
+            f"agent-s-worker {VERSION} listening on http://{config.host}:{config.port}",
+            f"enabled={settings['enabled']} dry_run_default={settings['dry_run_default']} display={settings['display']}",
+            f"agent_s={runtime.agent_s_binary() or 'NOT INSTALLED'} queue_max={runtime.max_queue} concurrency={runtime.concurrency}",
+        ]
+    )
+    report = check_configuration(runtime)
+    for problem in report["problems"]:
+        banner += f"\nPROBLEM: {problem}"
+    for warning in report["warnings"]:
+        banner += f"\nWARNING: {warning}"
+    serve_forever(httpd, on_shutdown=runtime.stop, banner=banner)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
