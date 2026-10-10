@@ -58,9 +58,8 @@ def get_omni_memory_stats(dai_root: Path) -> dict[str, Any]:
         return stats
 
     episodic_path = state_dir / "episodic.jsonl"
-    with contextlib.suppress(OSError):
-        with episodic_path.open(encoding="utf-8") as stream:
-            stats["episodic_events"] = sum(1 for _ in stream)
+    with contextlib.suppress(OSError), episodic_path.open(encoding="utf-8") as stream:
+        stats["episodic_events"] = sum(1 for _ in stream)
 
     for filename, key in (
         ("semantic.json", "semantic_facts"),
