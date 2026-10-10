@@ -113,7 +113,7 @@ class OmniHealer:
                 start = time.time()
                 actions = self.run_once()
                 if actions:
-                    print(f"Healing pass: {len(actions)} actions taken")
+                    print(f"Healing pass: {len(actions)} action plans reviewed (dry-run; no changes made)")
                 else:
                     print("Healing pass: no issues detected")
                 elapsed = time.time() - start
