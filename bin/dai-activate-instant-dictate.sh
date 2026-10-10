@@ -25,11 +25,11 @@ fi
 
 cat << 'EOF' > "$HOME/.xbindkeysrc"
 # Dedicated F9 Instant Dictation Key
-"/home/justin/.local/bin/dhakidd-dictate"
+"$HOME/.local/bin/dhakidd-dictate"
     F9
 
 # Dedicated Pause Key
-"/home/justin/.local/bin/dhakidd-dictate"
+"$HOME/.local/bin/dhakidd-dictate"
     Pause
 EOF
 
@@ -44,7 +44,7 @@ cat << 'EOF' > "$LAUNCHER_PATH"
 Type=Application
 Name=🎤 Instant Dictate
 Comment=Tap F9 or click here, speak into S22, and it pastes automatically
-Exec=/home/justin/.local/bin/dhakidd-dictate
+Exec=sh -lc "$HOME/.local/bin/dhakidd-dictate"
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Audio;
