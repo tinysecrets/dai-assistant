@@ -37,11 +37,6 @@ def web_search(query: str, max_results: int = 5) -> list[dict]:
 
     # Parse results - look for result__snippet and result__title
     results = []
-    # Pattern for result snippets
-    snippet_pattern = r'class="result__snippet">(.*?)</a>'
-    title_pattern = r'class="result__title">.*?<a[^>]*>(.*?)</a>'
-    url_pattern = r'class="result__url">.*?>(.*?)</a>'
-
     # Better: find all result blocks
     result_blocks = re.findall(r'class="result__body">(.*?)</div>\s*</div>', html, re.DOTALL)
     for block in result_blocks[:max_results]:
@@ -128,7 +123,7 @@ def main() -> int:
         print("[Research Agent] Findings:\n" + findings, flush=True)
         print("[Research Agent] Agent completed successfully.", flush=True)
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[Research Agent] FAILED: {exc}", flush=True)
         return 1
 
