@@ -1,1 +1,267 @@
-/home/justin/.hermes/skills/autonomous-ai-agents/dai-omni/bin/dai-omni
+#!/usr/bin/env python3
+"""dai-omni main CLI entry point."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import subprocess
+from pathlib import Path
+from typing import Optional
+
+# Add dai-assistant lib to path
+DAI_ROOT = Path(os.environ.get("DAI_ROOT", Path.home() / "dai-assistant")).resolve()
+if str(DAI_ROOT) not in sys.path:
+    sys.path.insert(0, str(DAI_ROOT))
+
+try:
+    from lib.dai.omni.memory import OmniMemory
+    from lib.dai.omni.healing import OmniHealer
+    from lib.dai.omni.synthesis import OmniSynthesizer
+    from lib.dai.omni.delegation import OmniDelegator
+except ImportError:
+    # Fallback if modules not yet linked
+    OmniMemory = None
+    OmniHealer = None
+    OmniSynthesizer = None
+    OmniDelegator = None
+
+
+class OmniCLI:
+    def __init__(self):
+        self.dai_root = DAI_ROOT
+        self.config_path = self.dai_root / "config/omni.yaml"
+        self.state_dir = self.dai_root / "state/omni"
+        self.logs_dir = self.dai_root / "logs"
+
+    def run(self, args: list[str]) -> int:
+        parser = argparse.ArgumentParser(prog="dai-omni", description="Self-healing omni-assistant for dai-assistant")
+        sub = parser.add_subparsers(dest="cmd", required=True)
+
+        # Daemon commands
+        sub.add_parser("start", help="Start omni daemon")
+        sub.add_parser("stop", help="Stop omni daemon")
+        sub.add_parser("restart", help="Restart omni daemon")
+        sub.add_parser("status", help="Show daemon status")
+        sub.add_parser("logs", help="Show daemon logs")
+
+        # Memory commands
+        p_remember = sub.add_parser("remember", help="Semantic search memory")
+        p_remember.add_argument("query", nargs="+")
+
+        p_recall = sub.add_parser("recall", help="Episodic search memory")
+        p_recall.add_argument("query", nargs="+")
+
+        p_forget = sub.add_parser("forget", help="Delete memory entries")
+        p_forget.add_argument("pattern")
+
+        sub.add_parser("consolidate", help="Compress and deduplicate memory")
+
+        # Healing commands
+        p_heal = sub.add_parser("heal", help="Run healing pass")
+        p_heal.add_argument("--continuous", action="store_true", help="Run continuous loop")
+        p_heal.add_argument("--dry-run", action="store_true", help="Show what would be fixed")
+
+        # Skill commands
+        p_synth = sub.add_parser("synthesize", help="Create skill from pattern")
+        p_synth.add_argument("description")
+
+        p_skills = sub.add_parser("skills", help="List skills")
+        p_skills.add_argument("--list", action="store_true", help="List all skills")
+        p_skills.add_argument("--auto", action="store_true", help="List auto-generated skills")
+        p_skills.add_argument("--install", help="Install skill to Vellum")
+
+        # Delegation commands
+        p_delegate = sub.add_parser("delegate", help="Spawn sub-agent")
+        p_delegate.add_argument("--role", choices=["code", "research", "debug", "plan", "review"], required=True)
+        p_delegate.add_argument("--goal", required=True)
+        p_delegate.add_argument("--context", default="")
+
+        sub.add_parser("agents", help="List running sub-agents")
+
+        # System commands
+        sub.add_parser("upgrade", help="Upgrade dai-omni and dai-assistant")
+        sub.add_parser("doctor", help="Full health check")
+        sub.add_parser("export", help="Backup memory and config")
+
+        parsed = parser.parse_args(args)
+
+        # Dispatch
+        method = getattr(self, f"cmd_{parsed.cmd.replace('-', '_')}", None)
+        if method:
+            return method(parsed)
+        else:
+            parser.print_help()
+            return 1
+
+    def cmd_start(self, args) -> int:
+        print("dai-omni daemon start is not implemented; refusing to claim success.", file=sys.stderr)
+        return 2
+
+    def cmd_stop(self, args) -> int:
+        print("dai-omni daemon stop is not implemented; no service was changed.", file=sys.stderr)
+        return 2
+
+    def cmd_restart(self, args) -> int:
+        print("dai-omni daemon restart is not implemented; no service was changed.", file=sys.stderr)
+        return 2
+
+    def cmd_logs(self, args) -> int:
+        log_file = self.logs_dir / "omni.log"
+        if log_file.exists():
+            subprocess.run(["tail", "-100", str(log_file)])
+        else:
+            print("No logs yet")
+        return 0
+
+    def cmd_remember(self, args) -> int:
+        if OmniMemory is None:
+            print("Memory module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        query = " ".join(args.query)
+        memory = OmniMemory(self.dai_root)
+        results = memory.semantic_search(query)
+        for r in results:
+            print(f"  {r['score']:.3f} {r['key']}: {r['value'][:100]}")
+        return 0
+
+    def cmd_recall(self, args) -> int:
+        if OmniMemory is None:
+            print("Memory module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        query = " ".join(args.query)
+        memory = OmniMemory(self.dai_root)
+        results = memory.episodic_search(query)
+        for r in results:
+            print(f"  [{r['timestamp']}] {r['event']}: {r['detail'][:100]}")
+        return 0
+
+    def cmd_forget(self, args) -> int:
+        if OmniMemory is None:
+            print("Memory module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        memory = OmniMemory(self.dai_root)
+        memory.forget(args.pattern)
+        return 0
+
+    def cmd_consolidate(self, args) -> int:
+        if OmniMemory is None:
+            print("Memory module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        memory = OmniMemory(self.dai_root)
+        memory.consolidate()
+        print("Memory consolidated")
+        return 0
+
+    def cmd_heal(self, args) -> int:
+        if OmniHealer is None:
+            print("Healing module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        healer = OmniHealer(self.dai_root)
+        if args.dry_run:
+            issues = healer.detect_issues()
+            for issue in issues:
+                print(f"Would fix: {issue}")
+        elif args.continuous:
+            healer.run_continuous()
+        else:
+            healer.run_once()
+        return 0
+
+    def cmd_synthesize(self, args) -> int:
+        if OmniSynthesizer is None:
+            print("Synthesis module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        synthesizer = OmniSynthesizer(self.dai_root)
+        skill_path = synthesizer.synthesize(args.description)
+        print(f"Created skill: {skill_path}")
+        return 0
+
+    def cmd_skills(self, args) -> int:
+        if OmniSynthesizer is None:
+            print("Synthesis module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        synthesizer = OmniSynthesizer(self.dai_root)
+        if args.auto:
+            skills = synthesizer.list_auto_skills()
+        elif args.install:
+            synthesizer.install_skill(args.install)
+            return 0
+        else:
+            skills = synthesizer.list_all_skills()
+        for s in skills:
+            print(f"  {s}")
+        return 0
+
+    def cmd_delegate(self, args) -> int:
+        if OmniDelegator is None:
+            print("Delegation module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        delegator = OmniDelegator(self.dai_root)
+        task_id = delegator.delegate(args.role, args.goal, args.context)
+        print(f"Delegated task {task_id} to {args.role} agent")
+        return 0
+
+    def cmd_agents(self, args) -> int:
+        if OmniDelegator is None:
+            print("Delegation module not loaded. Run install.sh first.", file=sys.stderr)
+            return 1
+        delegator = OmniDelegator(self.dai_root)
+        agents = delegator.list_agents()
+        for a in agents:
+            print(f"  {a['id']} {a['role']} {a['status']} {a['goal'][:60]}")
+        return 0
+
+    def cmd_upgrade(self, args) -> int:
+        print("Automatic Omni upgrades are disabled until a reviewed, approval-gated updater exists.", file=sys.stderr)
+        return 2
+
+    def cmd_doctor(self, args) -> int:
+        print("dai-omni health check")
+        print(f"  Root: {self.dai_root} {'✓' if self.dai_root.exists() else '✗'}")
+        print(f"  Config: {self.config_path} {'✓' if self.config_path.exists() else '✗'}")
+        print(f"  State dir: {self.state_dir} {'✓' if self.state_dir.exists() else '✗'}")
+        print(f"  Logs dir: {self.logs_dir} {'✓' if self.logs_dir.exists() else '✗'}")
+
+        # Check memory stores
+        for store in ["episodic.jsonl", "semantic.json", "procedural.json"]:
+            path = self.state_dir / store
+            print(f"  {store}: {'✓' if path.exists() else '✗'}")
+
+        # Check dai-assistant spine
+        try:
+            import requests
+            r = requests.get("http://127.0.0.1:11435/health", timeout=2)
+            print(f"  model-router: {'✓' if r.ok else '✗'}")
+        except Exception:
+            print("  model-router: ✗ (not running)")
+
+        return 0
+
+    def cmd_export(self, args) -> int:
+        import tarfile
+        from datetime import datetime
+        backup_dir = Path.home() / "dai-backups" / "omni"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        archive = backup_dir / f"omni-backup-{timestamp}.tar.gz"
+
+        with tarfile.open(archive, "w:gz") as tar:
+            tar.add(self.state_dir, arcname="state/omni")
+            tar.add(self.config_path, arcname="config/omni.yaml")
+
+        print(f"Exported to {archive}")
+        return 0
+
+
+def main():
+    cli = OmniCLI()
+    sys.exit(cli.run(sys.argv[1:]))
+
+
+if __name__ == "__main__":
+    main()
+
+[executed on device: dhakidd (ddcb9545-ee9e-4325-9877-68cdc77690f4)]
