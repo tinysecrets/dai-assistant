@@ -48,9 +48,8 @@ def get_kokoro():
     """Lazy-load the Kokoro ONNX model instance."""
     global _kokoro_instance
     if _kokoro_instance is None:
-        if not is_kokoro_available():
-            if not ensure_kokoro_installed():
-                return None
+        if not is_kokoro_available() and not ensure_kokoro_installed():
+            return None
         try:
             from kokoro_onnx import Kokoro
             _kokoro_instance = Kokoro(str(MODEL_PATH), str(VOICES_PATH))
