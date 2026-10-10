@@ -72,9 +72,7 @@ def get_omni_memory_stats(dai_root: Path) -> dict[str, Any]:
 
     vectors_dir = state_dir / "vectors"
     with contextlib.suppress(OSError):
-        stats["vector_embeddings"] = sum(
-            1 for path in vectors_dir.glob("*.npy") if path.is_file()
-        )
+        stats["vector_embeddings"] = sum(1 for path in vectors_dir.glob("*.npy") if path.is_file())
 
     size_bytes = 0
     for path in state_dir.rglob("*"):
