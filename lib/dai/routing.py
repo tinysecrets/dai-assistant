@@ -155,8 +155,8 @@ PROVIDERS: Dict[str, ProviderSpec] = {
     ),
 }
 
-# Order used when rotating: cloud free pools first, local last.
-PROVIDER_ORDER: Tuple[str, ...] = ("openrouter", "groq", "cerebras", "ollama_cloud", "ollama_local")
+# Order used when rotating: local free inference first, then cloud free pools.
+PROVIDER_ORDER: Tuple[str, ...] = ("ollama_local", "openrouter", "groq", "cerebras", "ollama_cloud")
 
 # ``provider/`` prefixes a caller may use to pin a model to a backend.
 PREFIX_TO_PROVIDER: Dict[str, str] = {
@@ -463,7 +463,10 @@ def plan_candidates(
 
     def make(provider_name: str, model: str, *, origin: str, free: Optional[bool] = None) -> Optional[Candidate]:
         spec = PROVIDERS[provider_name]
-        if free_cloud_only and (provider_name != "openrouter" or not model.endswith(":free")):
+        if free_cloud_only and (
+            provider_name not in ("openrouter", "ollama_local")
+            or (provider_name == "openrouter" and not model.endswith(":free"))
+        ):
             return None
         if provider_name not in allowed:
             return None
