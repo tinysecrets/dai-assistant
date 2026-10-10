@@ -55,7 +55,7 @@ cat << 'EOF' > "$LAUNCHER_PATH"
 Type=Application
 Name=🎤 Mic Dictate
 Comment=Toggle speech-to-text dictation into active window
-Exec=/home/justin/.local/bin/dhakidd-dictate
+Exec=sh -lc "$HOME/.local/bin/dhakidd-dictate"
 Icon=audio-input-microphone
 Terminal=false
 Categories=Utility;Audio;
