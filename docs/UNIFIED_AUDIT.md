@@ -5,7 +5,7 @@
 - **Consolidation branch:** `audit/dai-unified`
 - **Pull request:** [#5 — DAI unified branch: consolidate work and audit safety](https://github.com/tinysecrets/dai-assistant/pull/5)
 - **Base:** `main`; branch is ahead and not behind it. No merge to `main` has been made.
-- **Second source reviewed:** private `tinysecrets/dai`, main at `eb2b5d2`; unified branch code at audit commit `b90ed3c98755c559cf3193a74f3e62d4698fbb0a`.
+- **Second source reviewed:** private `tinysecrets/dai`, main at `eb2b5d2`; unified code/test state verified at audit commit `1237bc0a3cc828206768b06826ea2cf6a5545f89`.
 - The repositories' tracked-file inventories were compared. The private repository's only private-only tracked path is `speak`, a two-line output note, which was not imported as executable code. The unified branch adds eleven files for system mapping, mobile/voice support, Omni roles, tests, and this audit.
 - Shared file differences are intentional in many cases: the unified branch retains current Agent-S APIs, system policy, G8/S22 integration, and path-hardening rather than blindly overwriting them with another checkout's versions. It is **consolidated for review, not a byte-for-byte mirror** of both Git repositories.
 
@@ -17,7 +17,7 @@
 - Makefile checks use the optional voice virtual environment when available and check the live health endpoint for the running voice bridge.
 - DAI paths resolve through physical paths for symlinked checkouts; policy-path precedence is covered by tests.
 - Omni modules that used to be absolute-path symlinks into a local `.hermes` directory are now ordinary repository source files. Memory state directories/files are owner-only.
-- A read-only Omni memory statistics endpoint is exposed by the dashboard.
+- A read-only Omni memory statistics endpoint is exposed by the dashboard. Its stats reader does not instantiate the mutating memory-store constructor, create missing state, or change file permissions; regression tests cover those behaviors.
 
 ## Safety and policy findings
 
@@ -37,7 +37,7 @@
 - The private helper's implicit fallback to a generated runtime policy was not imported. `policy/sovereign.json` remains the tracked policy source of truth; alternate paths must be explicit rather than silently switching policy files.
 - The unified Gemini microphone mapping retains the G8/S22 integration but has not yet been made fully dynamic. This is a documented follow-up, not a verified working device connection.
 
-## Verified on commit `b90ed3c98755c559cf3193a74f3e62d4698fbb0a`
+## Verification — tested code/tree commit `1237bc0a3cc828206768b06826ea2cf6a5545f89`
 
 - `python3 -m compileall -q lib services skills tests` — passed.
 - `python3 -m unittest discover -s tests -t . -v` — **487 tests passed**, 0 failures on the Debian checkout.
@@ -55,4 +55,4 @@ These checks run against a clean clone; they do **not** prove that the currently
 4. Refresh provider catalog evidence before asserting every model in the rotation pool is currently available and free.
 5. Removing old device identifiers from earlier Git history, if desired, requires a separate planned history rewrite; sanitizing present-day files does not erase old commits.
 
-**Audit status: tests and CI passed on the verified code commit; production readiness is still conditional on the release-gate items above.**
+**Audit status: 487 tests and the full CI matrix passed on the verified code/test tree. This report correction is documentation-only. Production readiness is still conditional on the release-gate items above.**
