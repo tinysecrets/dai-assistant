@@ -557,6 +557,12 @@ class TestStdlibOnly(unittest.TestCase):
         offenders = []
         for path in python_sources():
             tree = ast.parse(read(path))
+            parents = {
+                child: parent
+                for parent in ast.walk(tree)
+                for child in ast.iter_child_nodes(parent)
+            }
+            relative_path = path.relative_to(ROOT).as_posix()
             for node in ast.walk(tree):
                 if isinstance(node, ast.Import):
                     names = [a.name.split(".")[0] for a in node.names]
@@ -571,6 +577,19 @@ class TestStdlibOnly(unittest.TestCase):
                         continue
                     if is_stdlib_module(name) or name in self.LOCAL_OK:
                         continue
+                    # Kokoro is an optional TTS backend. Its third-party engines
+                    # must stay lazy so a bare Python install can import the DAI
+                    # service core without those packages installed.
+                    if relative_path == "lib/dai/kokoro_engine.py" and name in {"soundfile", "kokoro_onnx"}:
+                        ancestor = parents.get(node)
+                        lazy_import = False
+                        while ancestor is not None:
+                            if isinstance(ancestor, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                                lazy_import = True
+                                break
+                            ancestor = parents.get(ancestor)
+                        if lazy_import:
+                            continue
                     offenders.append(f"{path.relative_to(ROOT)}: {name}")
         self.assertEqual(offenders, [], f"third-party imports found: {offenders}")
 
