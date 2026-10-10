@@ -44,6 +44,48 @@ def service_urls() -> dict[str, tuple[str, int]]:
     }
 
 
+def get_omni_memory_stats(dai_root: Path) -> dict[str, Any]:
+    """Inspect persisted Omni state without creating files or changing permissions."""
+    state_dir = Path(dai_root) / "state" / "omni"
+    stats: dict[str, Any] = {
+        "episodic_events": 0,
+        "semantic_facts": 0,
+        "procedural_skills": 0,
+        "vector_embeddings": 0,
+        "state_dir_size_mb": 0.0,
+    }
+    if not state_dir.is_dir():
+        return stats
+
+    episodic_path = state_dir / "episodic.jsonl"
+    with contextlib.suppress(OSError):
+        with episodic_path.open(encoding="utf-8") as stream:
+            stats["episodic_events"] = sum(1 for _ in stream)
+
+    for filename, key in (
+        ("semantic.json", "semantic_facts"),
+        ("procedural.json", "procedural_skills"),
+    ):
+        with contextlib.suppress(OSError, ValueError):
+            document = json.loads((state_dir / filename).read_text(encoding="utf-8"))
+            if isinstance(document, dict):
+                stats[key] = len(document)
+
+    vectors_dir = state_dir / "vectors"
+    with contextlib.suppress(OSError):
+        stats["vector_embeddings"] = sum(
+            1 for path in vectors_dir.glob("*.npy") if path.is_file()
+        )
+
+    size_bytes = 0
+    for path in state_dir.rglob("*"):
+        if path.is_file():
+            with contextlib.suppress(OSError):
+                size_bytes += path.stat().st_size
+    stats["state_dir_size_mb"] = size_bytes / 1024 / 1024
+    return stats
+
+
 def get_omni_status(dai_root: str) -> dict[str, Any]:
     """Get status of omni daemon."""
     from pathlib import Path
@@ -266,9 +308,7 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"ok": ok, "ts": data.get("ts")}).encode()
             self._send(200 if ok else 503, body, "application/json")
         elif self.path == "/api/omni/memory":
-            from lib.dai.omni.memory import OmniMemory
-
-            stats = OmniMemory(ROOT).stats()
+            stats = get_omni_memory_stats(ROOT)
             self._send(200, json.dumps({"ok": True, **stats}).encode(), "application/json")
         elif self.path == "/api/snapshot":
             self._send(200, json.dumps(self.state.get()).encode(), "application/json")
