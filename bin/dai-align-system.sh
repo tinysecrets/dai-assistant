@@ -83,7 +83,7 @@ cat << 'EOF' > "$HOME/.local/share/applications/dai-gemini.desktop"
 Type=Application
 Name=D-A-I Gemini Live
 Comment=Continuous sovereign voice assistant (Ava Neural, zero-interception)
-Exec=/home/justin/dai-assistant/bin/dai gemini
+Exec=sh -lc "$HOME/dai-assistant/bin/dai gemini"
 Icon=audio-input-microphone
 Terminal=true
 Categories=Utility;Audio;AI;
