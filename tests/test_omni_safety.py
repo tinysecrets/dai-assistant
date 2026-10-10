@@ -45,7 +45,7 @@ class TestOmniSafety(unittest.TestCase):
             root = Path(tmp)
             state = root / "state" / "omni"
             (state / "vectors").mkdir(parents=True)
-            (state / "episodic.jsonl").write_text('{"id":"a"}\\n{"id":"b"}\\n', encoding="utf-8")
+            (state / "episodic.jsonl").write_text("\n".join(['{"id":"a"}', '{"id":"b"}']) + "\n", encoding="utf-8")
             (state / "semantic.json").write_text('{"fact":{}}', encoding="utf-8")
             (state / "procedural.json").write_text('{"skill":{}}', encoding="utf-8")
             (state / "vectors" / "a.npy").write_bytes(b"vector")
