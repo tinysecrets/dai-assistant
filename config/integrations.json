@@ -145,28 +145,34 @@
   ],
   "devices": [
     {
-      "name": "S22 Ultra",
-      "transport": "adb+scrcpy",
-      "address": "100.104.165.28:5555",
-      "role": "phone"
-    },
-    {
-      "name": "Fire 7",
-      "transport": "adb",
-      "serial": "G0W0X8089425F6QV",
-      "role": "tablet"
+      "name": "Debian host",
+      "role": "primary brain",
+      "transport": "local+tailscale",
+      "endpoint_source": "local runtime config / live discovery"
     },
     {
       "name": "Lubuntu peer",
+      "role": "secondary workstation",
       "transport": "ssh+deskflow",
-      "address": "100.94.224.16",
-      "role": "desktop"
+      "endpoint_source": "local runtime config / live discovery"
     },
     {
-      "name": "Debian host",
-      "transport": "local+tailscale",
-      "address": "100.105.171.108",
-      "role": "primary"
+      "name": "S22 Ultra",
+      "role": "primary mobile interface; optional hot-plug",
+      "transport": "adb+scrcpy",
+      "endpoint_source": "local runtime config / live discovery"
+    },
+    {
+      "name": "LG G8",
+      "role": "permanent edge node",
+      "transport": "adb / local edge services",
+      "endpoint_source": "local runtime config / live discovery"
+    },
+    {
+      "name": "Samsung A16",
+      "role": "worker node",
+      "transport": "adb / worker services",
+      "endpoint_source": "local runtime config / live discovery"
     }
   ],
   "excluded": [
