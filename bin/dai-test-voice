@@ -86,7 +86,7 @@ fi
 printf "\n4. Voice Bridge Server (Port 8766):\n"
 if curl -sf --max-time 3 http://127.0.0.1:8766/health >/dev/null 2>&1; then
   printf "   - Health Check: ${GREEN}ONLINE${NC}\n"
-  
+
   if [[ -s "$TMP_WAV" ]]; then
     printf "   - Transcribing your test recording with Whisper... "
     TRANS="$(curl -sf --max-time 15 -X POST http://127.0.0.1:8766/v1/audio/transcriptions -F file=@"$TMP_WAV" -F model=whisper-1 2>/dev/null || echo "")"
