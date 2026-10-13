@@ -60,7 +60,7 @@ def load_private_env() -> None:
     )
     for path in candidates:
         try:
-            if path.name == ".env" and path.stat().st_mode & 0o077:
+            if path.stat().st_mode & 0o077:
                 continue
             for line in path.read_text(encoding="utf-8").splitlines():
                 line = line.strip()
@@ -180,7 +180,23 @@ def call_agent(role: str, prompt: str, root: Path, timeout: int) -> Tuple[int, s
     command, cwd = agent_command(role, prompt, root)
     if not command:
         return 127, f"DELEGATE_UNAVAILABLE:{role}"
-    return run_capture(command, cwd, timeout)
+    rc, output = run_capture(command, cwd, timeout)
+    if role != "code" or rc == 0:
+        return rc, output
+
+    # A failed/unresponsive OpenCode invocation gets one independent coding-client
+    # fallback through the same DAI auto route; it never falls back to a paid model.
+    codex = shutil.which("codex")
+    if not codex:
+        candidate = Path.home() / ".local" / "bin" / "codex"
+        if candidate.is_file():
+            codex = str(candidate)
+    if not codex:
+        return rc, "PRIMARY_CODE_AGENT=opencode failed:\\n" + output[-2500:] + "\\nCODEX_FALLBACK=unavailable"
+    rc2, output2 = run_capture([codex, "exec", "--model", "auto", prompt], cwd, timeout)
+    combined = "PRIMARY_CODE_AGENT=opencode exit=" + str(rc) + "\\n" + output[-2500:]
+    combined += "\\nCODEX_AUTO_ROUTE_FALLBACK exit=" + str(rc2) + "\\n" + output2
+    return rc2, combined
 
 
 def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str]:
@@ -306,10 +322,17 @@ def main() -> int:
 
     # Work artefacts and summaries are private by default.
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
-    run_dir = TEAM / "runs" / run_id
-    run_dir.mkdir(parents=True, exist_ok=False)
+    team_dir = TEAM
+    team_dir.mkdir(parents=True, exist_ok=True)
+    team_dir.chmod(0o700)
+    runs_dir = TEAM / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    runs_dir.chmod(0o700)
+    run_dir = runs_dir / run_id
+    run_dir.mkdir(exist_ok=False)
     run_dir.chmod(0o700)
     context = shared_context(ROOT)
+    task_for_agents = redact(task)
     plan_prompt = (
         WORK_FIRST + "\n\nCreate a plan for this owner-directed task. Include: goal, specialist roles, "
         "dependencies, completion tests and rollback. Do not execute the task in the plan stage.\n\n"
@@ -331,7 +354,7 @@ def main() -> int:
     if selected == "plan":
         work_rc, work_out = 0, plan_out
     else:
-        prompt = build_work_prompt(task, mode, plan_out, context)
+        prompt = build_work_prompt(task_for_agents, mode, plan_out, context)
         work_role = selected
         # One correction loop may use reviewer and deterministic test feedback.
         work_rc, work_out = call_agent(work_role, prompt, project, args.timeout)
@@ -361,7 +384,7 @@ def main() -> int:
             f"Previous worker exit: {work_rc}\nVerification passed: {verification_ok}\n"
             f"Verification report:\n{verification_text}\nIndependent review:\n{review_out}"
         )
-        prompt = build_work_prompt(task, mode, plan_out, context, correction)
+        prompt = build_work_prompt(task_for_agents, mode, plan_out, context, correction)
         if mode == "plan":
             work_rc, work_out = call_agent("plan", prompt, project, args.timeout)
         else:
@@ -397,7 +420,7 @@ def main() -> int:
         status=state,
         verification=("passed" if verification_ok else "failed") + f"; retries={attempts}",
         failure_class=("" if success else f"work_exit={work_rc}; review_exit={review_rc}; verification_ok={verification_ok}"),
-        artifacts=[str(run_dir / x) for x in ("plan.txt", "work.txt", "verification.txt", "review.txt") if (run_dir / x).exists()],
+        artifacts=[str(p) for p in sorted(run_dir.iterdir()) if p.is_file()],
     )
     record["elapsed_seconds"] = elapsed
     record["review_status"] = "pass" if review_pass else ("needs-fix" if is_review_needs_fix(review_out) else "unconfirmed")
