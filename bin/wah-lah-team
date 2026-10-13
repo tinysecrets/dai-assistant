@@ -23,6 +23,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 TEAM = ROOT / "state" / "omni" / "team"
 RUNS = TEAM / "runs.jsonl"
 LESSONS = TEAM / "owner-notes.md"
@@ -295,7 +297,7 @@ def main() -> int:
     print(f"PROJECT={project}")
     print(f"MODE={mode}")
     print("DELEGATION=" + " -> ".join(team))
-    print("MAX_PARALLEL=4 (configurable in policy/omni)")
+    print("EXECUTION=staged; Omni supports parallel subagent tasks; this correction loop stays sequential so each result is checked before the next")
     if missing:
         print("UNAVAILABLE_ROLES=" + ",".join(missing))
     if args.dry_run:
@@ -311,7 +313,7 @@ def main() -> int:
     plan_prompt = (
         WORK_FIRST + "\n\nCreate a plan for this owner-directed task. Include: goal, specialist roles, "
         "dependencies, completion tests and rollback. Do not execute the task in the plan stage.\n\n"
-        "OWNER TASK:\n" + task + "\n\nSHARED OPERATIONAL MEMORY:\n" + context[-3600:]
+        "OWNER TASK:\n" + redact(task) + "\n\nSHARED OPERATIONAL MEMORY:\n" + context[-3600:]
     )
     t0 = time.monotonic()
     plan_rc, plan_out = call_agent("plan", plan_prompt, project, args.timeout)
