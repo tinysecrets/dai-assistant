@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "owner": "Wah-Lah Industries",
+  "overseer": {
+    "application": "DAI",
+    "model": "dai/auto",
+    "responsibilities": [
+      "plan the task",
+      "select the appropriate specialist",
+      "provide shared context",
+      "verify execution",
+      "run bounded corrections",
+      "commission an independent review",
+      "record outcome and artifacts"
+    ]
+  },
+  "delegation": {
+    "required_for_nontrivial_tasks": true,
+    "workflow": ["plan", "specialist", "verify", "correct_if_needed", "independent_review", "record_learning"],
+    "max_correction_iterations": 2,
+    "current_default_correction_iterations": 1,
+    "parallelism_for_omni_tasks": 4,
+    "specialist_selection": "capability_first",
+    "report_missing_capabilities": true
+  },
+  "shared_operational_memory": {
+    "directory": "state/omni/team",
+    "run_log": "state/omni/team/runs.jsonl",
+    "owner_notes": "state/omni/team/owner-notes.md",
+    "artifacts": "state/omni/team/runs/<run-id>",
+    "store_raw_prompts": false,
+    "store_credentials": false,
+    "share_verified_outcomes": true,
+    "model_weight_training": false
+  },
+  "self_healing": {
+    "existing_omni_cycle_seconds": 60,
+    "failure_handling": "diagnose -> minimal reversible repair -> verify -> record",
+    "unbounded_retry": false,
+    "report_unresolved_loop": true
+  },
+  "owner_authority": {
+    "owner_controls_model_roster": true,
+    "owner_controls_provider_order": true,
+    "owner_controls_project_priority": true,
+    "preserve_existing_approval_policy": true,
+    "paid_inference_default": false,
+    "google_gemini_in_host_fallbacks": false
+  },
+  "routes": {
+    "freellmapi": "http://127.0.0.1:3001/v1",
+    "dai": "http://127.0.0.1:11435/v1",
+    "agent_s_worker": "http://127.0.0.1:8765",
+    "voice_bridge": "http://127.0.0.1:8766",
+    "dashboard": "http://127.0.0.1:8799"
+  }
+}

@@ -341,6 +341,31 @@ class TestPolicyFile(unittest.TestCase):
         self.assertEqual(agent_s["grounding_model"], "dai/vision-auto")
         self.assertEqual(self.policy["inference"]["default_model"], "dai/auto")
 
+    def test_omni_declares_owner_overseer_and_mandatory_delegation(self):
+        omni = self.policy["omni"]
+        overseer = omni["overseer"]
+        self.assertEqual(overseer["model"], self.policy["inference"]["default_model"])
+        self.assertTrue(overseer["mandatory_delegation"])
+        self.assertEqual(overseer["delegation_mode"], "capability_routed")
+        self.assertTrue(overseer["verify_worker_results"])
+        self.assertTrue(overseer["report_unavailable_workers"])
+        self.assertTrue(omni["delegation"]["required_for_nontrivial_tasks"])
+        self.assertTrue(omni["delegation"]["final_review_required"])
+        self.assertGreaterEqual(overseer["max_parallel"], 1)
+
+    def test_wah_lah_team_charter_keeps_owner_in_control_and_free_only_default(self):
+        charter = json.loads(read(ROOT / "config/wah-lah-team.json"))
+        self.assertEqual(charter["overseer"]["application"], "DAI")
+        self.assertEqual(charter["overseer"]["model"], self.policy["inference"]["default_model"])
+        self.assertTrue(charter["delegation"]["required_for_nontrivial_tasks"])
+        self.assertEqual(charter["delegation"]["max_correction_iterations"], 2)
+        self.assertFalse(charter["shared_operational_memory"]["store_raw_prompts"])
+        self.assertFalse(charter["shared_operational_memory"]["store_credentials"])
+        self.assertTrue(charter["owner_authority"]["owner_controls_model_roster"])
+        self.assertTrue(charter["owner_authority"]["preserve_existing_approval_policy"])
+        self.assertTrue(self.policy["inference"]["free_cloud_only"])
+        self.assertEqual(self.policy["inference"]["freellmapi"]["base_url"], "http://127.0.0.1:3001/v1")
+
     def test_every_enabled_provider_is_known(self):
         inference = self.policy["inference"]
         for name in PROVIDERS:
@@ -390,6 +415,7 @@ class TestPolicyFile(unittest.TestCase):
             "policy/approvals.example.json",
             "config/rotation-pool.json",
             "config/free-models.json",
+            "config/wah-lah-team.json",
         ):
             with self.subTest(rel):
                 json.loads(read(ROOT / rel))
@@ -492,7 +518,7 @@ class TestSkills(unittest.TestCase):
 
     def test_the_shipped_skills_exist(self):
         names = {p.name for p in self.skills()}
-        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code"})
+        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code", "wah-lah-overseer"})
 
     def test_frontmatter_is_valid_yaml_with_required_fields(self):
         for skill in self.skills():

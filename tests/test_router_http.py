@@ -53,6 +53,53 @@ class RouterCase(unittest.TestCase):
 
 
 class TestHealthAndDiscovery(RouterCase):
+    def test_freellmapi_is_first_enabled_backend_even_in_free_cloud_only_mode(self) -> None:
+        policy = {
+            "version": 3,
+            "inference": {
+                "default_model": "dai/auto",
+                "free_cloud_only": True,
+                "freellmapi": {"enabled": True},
+                "openrouter": {"enabled": True, "paid_enabled": False},
+                "groq": {"enabled": True},
+                "cerebras": {"enabled": True},
+                "ollama_cloud": {"enabled": True},
+                "ollama_local": {"enabled": True},
+            },
+        }
+        spine = TempSpine(policy=policy)
+        upstream = StubUpstream().start()
+        self.addCleanup(upstream.stop)
+        self.addCleanup(spine.cleanup)
+        service, _runtime = start_router(
+            spine,
+            upstream,
+            env={
+                "FREELLMAPI_API_KEY": "freellmapi-test-key",
+                "DAI_FREELLMAPI_BASE_URL": upstream.base_url,
+                "OPENROUTER_API_KEY": TEST_KEY,
+                "GROQ_API_KEY": GROQ_KEY,
+            },
+        )
+        self.addCleanup(service.stop)
+
+        status, health, _headers, _raw = service.get("/health")
+        self.assertEqual(status, 200)
+        self.assertIn("freellmapi", health["providers_enabled"])
+        self.assertIn("openrouter", health["providers_enabled"])
+        self.assertIn("ollama_local", health["providers_enabled"])
+        self.assertNotIn("groq", health["providers_enabled"])
+        self.assertNotIn("cerebras", health["providers_enabled"])
+        self.assertNotIn("ollama_cloud", health["providers_enabled"])
+
+        status, body, _headers, _raw = service.post(
+            "/v1/chat/completions",
+            {"model": "dai/auto", "messages": [{"role": "user", "content": "test"}]},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["dai_routed"]["provider"], "freellmapi")
+        self.assertEqual(body["dai_routed"]["model"], "auto")
+
     def test_health_reports_shape_and_readiness(self) -> None:
         status, body, _headers, _raw = self.service.get("/health")
         self.assertEqual(status, 200)

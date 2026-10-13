@@ -109,6 +109,14 @@ class ProviderSpec:
 
 
 PROVIDERS: Dict[str, ProviderSpec] = {
+    "freellmapi": ProviderSpec(
+        name="freellmapi",
+        key_env="FREELLMAPI_API_KEY",
+        default_base_url="http://127.0.0.1:3001/v1",
+        base_url_env="DAI_FREELLMAPI_BASE_URL",
+        pool_key=None,
+        default_models=("auto",),
+    ),
     "openrouter": ProviderSpec(
         name="openrouter",
         key_env="OPENROUTER_API_KEY",
@@ -156,10 +164,11 @@ PROVIDERS: Dict[str, ProviderSpec] = {
 }
 
 # Order used when rotating: cloud free pools first, local last.
-PROVIDER_ORDER: Tuple[str, ...] = ("openrouter", "groq", "cerebras", "ollama_cloud", "ollama_local")
+PROVIDER_ORDER: Tuple[str, ...] = ("freellmapi", "openrouter", "groq", "cerebras", "ollama_cloud", "ollama_local")
 
 # ``provider/`` prefixes a caller may use to pin a model to a backend.
 PREFIX_TO_PROVIDER: Dict[str, str] = {
+    "freellmapi": "freellmapi",
     "groq": "groq",
     "cerebras": "cerebras",
     "ollama-cloud": "ollama_cloud",
@@ -463,7 +472,7 @@ def plan_candidates(
 
     def make(provider_name: str, model: str, *, origin: str, free: Optional[bool] = None) -> Optional[Candidate]:
         spec = PROVIDERS[provider_name]
-        if free_cloud_only and (provider_name != "openrouter" or not model.endswith(":free")):
+        if free_cloud_only and not (provider_name == "ollama_local" or (provider_name == "freellmapi" and model == "auto") or (provider_name == "openrouter" and model.endswith(":free"))):
             return None
         if provider_name not in allowed:
             return None

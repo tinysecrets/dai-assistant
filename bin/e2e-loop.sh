@@ -18,7 +18,7 @@ printf 'No rebuild, just the existing wiring. Each hop reports real capability.\
 printf '1) Spine health\n'
 for url in "$ROUTER/health" "$WORKER/health" "$VOICE/health" "$DASH/health"; do
   if curl -sf --max-time 2 "$url" >/dev/null; then
-    dai_ok "$(basename $(dirname $url)) up: $url"
+    dai_ok "$(basename "$(dirname "$url")") up: $url"
   else
     dai_warn "down: $url"
   fi

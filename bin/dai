@@ -24,6 +24,7 @@
 #   dai heartbeat   say (and with --speak, speak) a free-form status line;
 #                   --every N loops so it keeps reminding you it's active
 #   dai plan [id]   show what the router would try, without calling anything
+#   dai team "..." DAI overseer plan -> specialist -> verify/correct -> review workflow
 #   dai tasks       list worker tasks (dry-run + live)
 #   dai cooldowns   show router cooldowns
 #   dai presets     list Agent-S presets
@@ -148,6 +149,10 @@ for model in doc.get("data", []):
     suffix = ("  [" + ", ".join(tags) + "]") if tags else ""
     print("  %-52s %s%s" % (model["id"], model.get("owned_by", ""), suffix))
 '
+    ;;
+
+  team|oversee)
+    exec "$ROOT/bin/wah-lah-team" "$@"
     ;;
 
   plan)
