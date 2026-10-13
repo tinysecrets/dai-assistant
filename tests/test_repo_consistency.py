@@ -341,6 +341,18 @@ class TestPolicyFile(unittest.TestCase):
         self.assertEqual(agent_s["grounding_model"], "dai/vision-auto")
         self.assertEqual(self.policy["inference"]["default_model"], "dai/auto")
 
+    def test_omni_declares_owner_overseer_and_mandatory_delegation(self):
+        omni = self.policy["omni"]
+        overseer = omni["overseer"]
+        self.assertEqual(overseer["model"], self.policy["inference"]["default_model"])
+        self.assertTrue(overseer["mandatory_delegation"])
+        self.assertEqual(overseer["delegation_mode"], "capability_routed")
+        self.assertTrue(overseer["verify_worker_results"])
+        self.assertTrue(overseer["report_unavailable_workers"])
+        self.assertTrue(omni["delegation"]["required_for_nontrivial_tasks"])
+        self.assertTrue(omni["delegation"]["final_review_required"])
+        self.assertGreaterEqual(overseer["max_parallel"], 1)
+
     def test_every_enabled_provider_is_known(self):
         inference = self.policy["inference"]
         for name in PROVIDERS:
