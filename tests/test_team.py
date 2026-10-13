@@ -11,6 +11,7 @@ from lib.dai.team import (
     OVERSEER_MODEL,
     append_jsonl,
     build_shared_context,
+    capability_status,
     classify_task,
     load_jsonl,
     make_run_record,
@@ -38,6 +39,18 @@ class TestTaskSelection(unittest.TestCase):
     def test_bad_mode_is_rejected(self):
         with self.assertRaises(ValueError):
             select_team("build", "unapproved")
+
+    def test_capability_catalog_covers_the_wah_lah_projects(self):
+        rows = capability_status(Path(__file__).resolve().parents[1])
+        names = {row["name"] for row in rows}
+        self.assertTrue({
+            "plan", "code", "research", "debug", "review", "gui",
+            "repair", "voice", "codex", "openclaw", "hermes",
+            "continue", "nova", "genie", "omni", "zero-gravity",
+        }.issubset(names))
+        cloud = next(row for row in rows if row["name"] == "zero-gravity")
+        self.assertIsNone(cloud["available"], "external app availability must be checked remotely")
+
 
 
 class TestSharedOperationalMemory(unittest.TestCase):
