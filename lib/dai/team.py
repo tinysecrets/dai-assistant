@@ -140,10 +140,10 @@ def classify_task(task: str) -> str:
         r"visible interface|gui automation)\b"
     )
     voice = re.compile(
-        r"\b(speak aloud|say aloud|read aloud|voice round.trip|push.to.talk|"
+        r"\b(speak aloud|say aloud|read(?: this response)? aloud|voice round.trip|push.to.talk|"
         r"transcribe|record audio|listen and respond|text.to.speech|speech.to.text)\b"
     )
-    code = re.compile(
+        code = re.compile(
         r"\b(implement|build|create|write code|code|refactor|add (?:a|an|the|new)|"
         r"edit|patch|test suite|endpoint|script|automation|integrate|wire up|"
         r"deploy|website|application|repository|repo)\b"
