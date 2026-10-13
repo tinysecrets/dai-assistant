@@ -298,7 +298,7 @@ def main() -> int:
             print(json.dumps(row, ensure_ascii=False))
         return 0
     if not args.task:
-        print("Usage: wah-lah-team [--mode auto|plan|code|research|debug] [--dry-run] TASK")
+        print("Usage: wah-lah-team [--mode auto|plan|code|research|debug|gui|voice] [--dry-run] [--live-gui] TASK")
         print("Commands: --status, --list-capabilities; mandatory stages for non-trivial work: plan, specialist, verify/retry, review.")
         return 2
 
@@ -313,6 +313,17 @@ def main() -> int:
     from lib.dai.team import append_jsonl, load_jsonl, make_run_record, select_team
     mode = discover_mode(task, args.mode, args.no_web)
     team = select_team(task, mode)
+    if args.live_gui and mode != "gui":
+        print("BLOCKED: --live-gui is only valid for a GUI task (use --mode gui).")
+        return 2
+    if args.live_gui:
+        if not os.environ.get("DAI_APPROVAL_TOKEN", "").strip():
+            print("BLOCKED: live GUI requires a fresh owner-issued DAI_APPROVAL_TOKEN in the environment.")
+            print("Issue a one-use token scoped to this exact instruction with the existing DAI approval command.")
+            return 2
+        os.environ["DAI_TEAM_LIVE_GUI"] = "1"
+    else:
+        os.environ.pop("DAI_TEAM_LIVE_GUI", None)
     rows = capability_rows()
     availability = {row["name"]: row["available"] for row in rows}
     project = project_root()
@@ -359,17 +370,68 @@ def main() -> int:
         return 1
 
     selected = mode
+    work_role = selected
     if selected == "plan":
         work_rc, work_out = 0, plan_out
+    elif selected == "gui":
+        # The GUI worker receives one bounded instruction only. By default the
+        # delegate script validates the instruction and produces a dry-run.
+        work_rc, work_out = call_agent("gui", task_for_agents, project, args.timeout)
+    elif selected == "voice":
+        work_rc, work_out = call_agent("voice", task_for_agents, project, args.timeout)
+    elif selected == "debug" and re.search(r"\\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\\b", task, re.I):
+        # Keep diagnosis and modification as separate delegated phases.
+        debug_rc, debug_out = call_agent("debug", build_work_prompt(task_for_agents, "debug", plan_out, context), project, args.timeout)
+        write_report(run_dir / "diagnosis.txt", debug_out)
+        correction_context = "Diagnostic worker exit=" + str(debug_rc) + "\\nDIAGNOSTIC EVIDENCE:\\n" + debug_out[-6000:]
+        prompt = build_work_prompt(task_for_agents, "code", plan_out, context, correction_context)
+        work_role = "code"
+        work_rc, code_out = call_agent("code", prompt, project, args.timeout)
+        work_out = "=== DIAGNOSTIC PHASE ===\\n" + debug_out + "\\n=== IMPLEMENTATION PHASE ===\\n" + code_out
+        if debug_rc != 0 and work_rc == 0:
+            work_out = "DIAGNOSTICS_RETURNED_ERROR; implementation attempted against available evidence.\\n" + work_out
     else:
         prompt = build_work_prompt(task_for_agents, mode, plan_out, context)
-        work_role = selected
-        # One correction loop may use reviewer and deterministic test feedback.
         work_rc, work_out = call_agent(work_role, prompt, project, args.timeout)
     write_report(run_dir / "work.txt", work_out)
 
-    verification_ok, verification_text = verify_project(project, mode == "code", args.timeout)
+    verification_ok, verification_text = verify_project(project, work_role == "code", args.timeout)
+    if selected == "gui" and not args.live_gui:
+        verification_ok = work_rc == 0 and ("dry_run_complete" in work_out or "would_run" in work_out)
+        verification_text = (
+            "GUI DRY-RUN ONLY: " + ("PASS; instruction validated; no UI actions were performed." if verification_ok
+            else "FAIL; dry-run worker did not confirm an instruction preview.")
+        )
+    elif selected == "gui" and args.live_gui:
+        verification_ok = False
+        verification_text = "LIVE GUI action requested with owner-issued approval. Visual postcondition has not been independently verified by this runner; inspect the dedicated display and task record."
+    elif selected == "voice":
+        verification_ok = work_rc == 0
+        verification_text = "VOICE ROUND-TRIP=" + ("command completed; listen/capture output was generated." if verification_ok else "command failed; inspect work.txt.")
     write_report(run_dir / "verification.txt", verification_text)
+
+    if selected == "gui" and not args.live_gui:
+        # GUI planning should not be confused with a live desktop task.
+        state = "dry-run-only" if verification_ok else "blocked"
+        record = make_run_record(task=task, project=str(project), mode=mode, team=team,
+                    status=state, verification=verification_text,
+                    failure_class="" if verification_ok else "gui-dry-run-failed",
+                    artifacts=[str(p) for p in sorted(run_dir.iterdir()) if p.is_file()])
+        append_jsonl(RUNS, record)
+        report = (
+            f"# Wah-Lah Team Run {run_id}\\n\\n"
+            f"- Overseer: DAI / {record['overseer_model']}\\n"
+            f"- Delegation: {' -> '.join(team)}\\n"
+            f"- Result: {state}\\n"
+            "- Live UI action: NOT PERFORMED (dry-run default)\\n"
+            f"- Preview artifacts: {run_dir}\\n"
+        )
+        write_report(run_dir / "report.md", report)
+        print(report)
+        return 0 if verification_ok else 1
+
+    review_prompt = (
+        WORK_FIRST + "\\n\\nReview as an independent delegated reviewer. Start your response with exactly "
     review_prompt = (
         WORK_FIRST + "\n\nReview as an independent delegated reviewer. Start your response with exactly "
         "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Use NEEDS_FIX only for a concrete correctness, "
