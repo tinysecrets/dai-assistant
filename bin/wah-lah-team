@@ -365,7 +365,7 @@ def main() -> int:
         WORK_FIRST + "\n\nReview as an independent delegated reviewer. Start your response with exactly "
         "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Use NEEDS_FIX only for a concrete correctness, "
         "test, or scope blocker; otherwise PASS. Then list evidence, gaps and the smallest correction if needed."
-        "\nOWNER TASK:\n" + task +
+        "\nOWNER TASK:\n" + task_for_agents +
         "\nPLAN (excerpt):\n" + plan_out[-3500:] +
         "\nWORKER OUTPUT (excerpt):\n" + work_out[-5000:] +
         "\nDETERMINISTIC VERIFICATION:\n" + verification_text[-3000:] +
@@ -393,7 +393,7 @@ def main() -> int:
         write_report(run_dir / f"verification-retry-{attempts}.txt", verification_text)
         review_prompt = (
             WORK_FIRST + "\n\nIndependently re-review the corrected result. Start with "
-            "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX.\nOWNER TASK:\n" + task +
+            "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX.\nOWNER TASK:\n" + task_for_agents +
             "\nPLAN:\n" + plan_out[-2500:] + "\nLATEST WORK:\n" + work_out[-4500:] +
             "\nVERIFICATION:\n" + verification_text[-2500:] +
             "\nPREVIOUS REVIEW:\n" + review_out[-2500:]
