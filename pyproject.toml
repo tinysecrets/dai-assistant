@@ -47,7 +47,19 @@ target-version = "py39"
 line-length = 120
 # Services live in directories that are not importable package names
 # (services/model-router), so they are linted as files, not modules.
-extend-exclude = [".venv", "vendor", "state", "logs", "skills-ready"]
+# These are intentional absolute links into the owner’s local Hermes skill tree.
+# Their targets are not part of a clean Git checkout, so linting them in CI is invalid.
+extend-exclude = [
+    ".venv",
+    "vendor",
+    "state",
+    "logs",
+    "skills-ready",
+    "lib/dai/omni/delegation.py",
+    "lib/dai/omni/healing.py",
+    "lib/dai/omni/memory.py",
+    "lib/dai/omni/synthesis.py",
+]
 
 [tool.ruff.lint]
 select = [
