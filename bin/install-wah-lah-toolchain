@@ -106,8 +106,16 @@ def main() -> int:
 
     # Keep the project repository as the source of truth; the organized folder
     # exposes labelled links rather than duplicate copies of active executables.
-    for name in ("dai", "dai-team", "wah-lah-team"):
+    for name in ("dai-team", "wah-lah-team"):
         link_source(DEST / "bin" / name, ROOT / "bin" / name)
+    # The convenience-folder dai shim must call the canonical script path:
+    # a symlink would make bin/dai infer the convenience folder as its own root.
+    dai_wrapper = """#!/usr/bin/env bash
+set -euo pipefail
+ROOT=@DAI_ROOT@
+exec "$ROOT/bin/dai" "$@"
+""".replace("@DAI_ROOT@", shlex.quote(str(ROOT)))
+    private_write(DEST / "bin" / "dai", dai_wrapper, mode=0o700)
     for source, relative in (
         (ROOT / "docs" / "WAH-LAH-TEAM.md", "docs/WAH-LAH-TEAM.md"),
         (ROOT / "skills" / "wah-lah-overseer" / "SKILL.md", "skills/wah-lah-overseer.md"),
