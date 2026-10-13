@@ -187,24 +187,24 @@ def agent_command(role: str, prompt: str, root: Path) -> Tuple[List[str], Path]:
 
 def call_agent(role: str, prompt: str, root: Path, timeout: int) -> Tuple[int, str]:
     command, cwd = agent_command(role, prompt, root)
-    if not command:
-        return 127, f"DELEGATE_UNAVAILABLE:{role}"
-    rc, output = run_capture(command, cwd, timeout)
-    if role != "code" or rc == 0:
+    rc, output = (127, f"DELEGATE_UNAVAILABLE:{role}") if not command else run_capture(command, cwd, timeout)
+    if role != "code" or (command and rc == 0):
         return rc, output
 
-    # An unresponsive OpenCode call gets one independent Codex attempt, also via
-    # the DAI auto route. It never changes to a paid or Google/Gemini model.
+    # Codex provides a second coding client on the same DAI auto route. This
+    # also works when OpenCode is absent, not just when its call fails.
     codex = shutil.which("codex")
     if not codex:
         candidate = Path.home() / ".local" / "bin" / "codex"
         if candidate.is_file():
             codex = str(candidate)
     if not codex:
-        return rc, "PRIMARY_CODE_AGENT=opencode failed:\n" + output[-2500:] + "\nCODEX_FALLBACK=unavailable"
+        if command:
+            return rc, "PRIMARY_CODE_AGENT=opencode failed:\n" + output[-2500:] + "\nCODEX_FALLBACK=unavailable"
+        return rc, "CODE_DELEGATION_UNAVAILABLE: OpenCode and Codex are not installed."
     rc2, output2 = run_capture([codex, "exec", "--model", "auto", prompt], cwd, timeout)
-    combined = "PRIMARY_CODE_AGENT=opencode exit=" + str(rc) + "\n" + output[-2500:]
-    combined += "\nCODEX_AUTO_ROUTE_FALLBACK exit=" + str(rc2) + "\n" + output2
+    primary = "PRIMARY_CODE_AGENT=opencode exit=" + str(rc) + "\n" + output[-2500:] if command else "PRIMARY_CODE_AGENT=opencode unavailable\n"
+    combined = primary + "\nCODEX_AUTO_ROUTE_FALLBACK exit=" + str(rc2) + "\n" + output2
     return rc2, combined
 
 def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str]:
