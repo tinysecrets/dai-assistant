@@ -25,9 +25,18 @@ from lib.dai.team import (
 class TestTaskSelection(unittest.TestCase):
     def test_executable_sources_parse_and_cli_runs_from_another_directory(self):
         root = Path(__file__).resolve().parents[1]
-        for rel in ("bin/wah-lah-team", "bin/install-wah-lah-toolchain", "bin/dai-team"):
+        for rel in ("bin/wah-lah-team", "bin/install-wah-lah-toolchain"):
             source = (root / rel).read_text(encoding="utf-8")
             compile(source, str(root / rel), "exec")
+        shell_check = subprocess.run(
+            ["bash", "-n", str(root / "bin/dai-team")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+        self.assertEqual(shell_check.returncode, 0, shell_check.stdout)
         with tempfile.TemporaryDirectory() as other_dir:
             result = subprocess.run(
                 [sys.executable, str(root / "bin/wah-lah-team"), "--dry-run", "Fix the broken model router loop"],
