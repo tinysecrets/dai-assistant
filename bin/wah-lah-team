@@ -273,7 +273,7 @@ def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str
             npm = shutil.which("npm")
             if not npm:
                 return False, "\n".join(checks) + "\nJS_TESTS_NOT_RUN: npm unavailable"
-            rc, out = run_capture([npm, "test", "--", "--run"], root, timeout)
+            rc, out = run_capture([npm, "test"], root, timeout)
             checks.append(out[-5000:])
             if rc != 0:
                 return False, "\n".join(checks) + f"\nJS_TESTS_FAILED exit={rc}"
@@ -331,7 +331,11 @@ def status() -> int:
             print(f"{label}: DOWN/NOT-RESPONDING")
     print("Team roles:")
     for row in capability_rows():
-        print(f"  {row['name']}: {'available' if row['available'] else 'missing'} — {row['role']}")
+        if row["available"] is None:
+            state = "external-check-required"
+        else:
+            state = "available" if row["available"] else "missing"
+        print(f"  {row['name']}: {state} — {row['role']}")
     return 0 if good >= 2 else 1
 
 
