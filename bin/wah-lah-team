@@ -436,7 +436,10 @@ def main() -> int:
     review_prompt = (
         WORK_FIRST + "\n\nReview as an independent delegated reviewer. Start your response with exactly "
         "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Use NEEDS_FIX only for a concrete correctness, "
-        "test, or scope blocker; otherwise PASS. Then list evidence, gaps and the smallest correction if needed."
+        "test, or scope blocker; otherwise PASS. Then list evidence, gaps and the smallest correction if needed. "
+        "Also end with one line beginning LESSON: describing only a reusable fact supported by plan/work/verification "
+        "evidence, or LESSON: NONE when nothing is safely reusable. Never put credentials, private customer details, "
+        "or unverified guesses in the lesson."
         "\nOWNER TASK:\n" + task_for_agents +
         "\nPLAN (excerpt):\n" + plan_out[-3500:] +
         "\nWORKER OUTPUT (excerpt):\n" + work_out[-5000:] +
@@ -474,7 +477,8 @@ def main() -> int:
         write_report(run_dir / f"verification-retry-{attempts}.txt", verification_text)
         review_prompt = (
             WORK_FIRST + "\n\nIndependently re-review the corrected result. Start with "
-            "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX.\nOWNER TASK:\n" + task_for_agents +
+            "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Also end with LESSON: <evidence-backed reusable fact> "
+            "or LESSON: NONE; never include secrets, private customer details, or guesses.\nOWNER TASK:\n" + task_for_agents +
             "\nPLAN:\n" + plan_out[-2500:] + "\nLATEST WORK:\n" + work_out[-4500:] +
             "\nVERIFICATION:\n" + verification_text[-2500:] +
             "\nPREVIOUS REVIEW:\n" + review_out[-2500:]
@@ -494,6 +498,14 @@ def main() -> int:
         state = "review-incomplete"
 
     elapsed = round(time.monotonic() - t0, 1)
+    verified_lesson = ""
+    if success:
+        for line in review_out.splitlines():
+            if line.strip().upper().startswith("LESSON:"):
+                candidate_lesson = line.split(":", 1)[1].strip()
+                if candidate_lesson and candidate_lesson.upper() != "NONE":
+                    verified_lesson = redact(candidate_lesson)[:240]
+                break
     record = make_run_record(
         task=task,
         project=str(project),
@@ -503,6 +515,7 @@ def main() -> int:
         verification=("passed" if verification_ok else "failed") + f"; retries={attempts}",
         failure_class=("" if success else f"work_exit={work_rc}; review_exit={review_rc}; verification_ok={verification_ok}"),
         artifacts=[str(p) for p in sorted(run_dir.iterdir()) if p.is_file()],
+        verified_lesson=verified_lesson,
     )
     record["elapsed_seconds"] = elapsed
     record["review_status"] = "pass" if review_pass else ("needs-fix" if is_review_needs_fix(review_out) else "unconfirmed")
