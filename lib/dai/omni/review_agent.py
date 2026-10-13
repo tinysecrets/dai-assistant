@@ -3,11 +3,11 @@
 Review agent for omni-assistant - reviews code, configs, or plans for issues.
 """
 
-import sys
-import os
 import json
-import urllib.request
+import os
+import sys
 import urllib.error
+import urllib.request
 
 
 def router_base() -> str:
@@ -60,7 +60,7 @@ def main() -> int:
         print("[Review Agent] Review:\n" + review, flush=True)
         print("[Review Agent] Agent completed successfully.", flush=True)
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[Review Agent] FAILED: {exc}", flush=True)
         return 1
 
