@@ -35,6 +35,9 @@ cd dai-assistant
 ./bin/import-keys.sh     # or: cp .env.example .env && nano .env
 ./bin/start-spine.sh     # router (:11435) + worker (:8765) + voice bridge (:8766)
 ./bin/smoke.sh           # end-to-end self-test
+./bin/dai team --status     # overseer, specialist, and service status
+./bin/dai team --dry-run "Fix a router failure"  # preview mandatory delegation
+./bin/install-wah-lah-toolchain # organized AI Lab folder + local command aliases
 ./bin/dai chat "Say hi"  # once ready_for_chat is true
 ```
 
@@ -73,6 +76,25 @@ On rotation:
   half-delivered answer.
 * Every response carries `dai_routed` telling you which provider and model
   actually answered, and how many attempts it took.
+
+FreeLLMAPI can sit first in the provider chain through its `auto` route. The
+owner-controlled free-only policy restricts automatic routing to the active
+FreeLLMAPI free profile, OpenRouter `:free` models, and local Ollama; there is
+no unknown-priced paid fallback.
+
+### Wah-Lah team / overseer
+
+`./bin/dai team "task"` plans work, delegates it to the selected specialist,
+runs verification, attempts a bounded correction when required, and commissions
+an independent review. Operational outcomes are stored under
+`state/omni/team`; raw task prompts and credentials are not intended to enter
+the learning log. This is shared operational memory, not model-weight training.
+
+`./bin/install-wah-lah-toolchain` creates the labelled
+`Desktop/00_DAI_LAUNCHPAD/02 AI LAB/AI_TOOLCHAIN` folder, local launchers, and a
+desktop workbench shortcut. The repository is the source of truth for the
+executable scripts; the installer backs up replaced settings before changing
+the existing AI Lab UI and only patches it when its expected source anchors match.
 
 Paid OpenRouter models are refused unless you opt in via policy or supply a
 one-shot approval token.
@@ -145,6 +167,7 @@ dai test        unit + integration suite
 dai keys        import keys into .env
 dai models      what the router can serve right now
 dai plan [id]   what it would try, without calling anything
+dai team TASK   overseer: plan -> specialist -> verify/correct -> independent review
 dai config      resolved configuration, secrets removed
 dai chat "..."  one-shot chat through the rotator
 dai say "..."   speak text through the voice-bridge (saves + plays audio)
