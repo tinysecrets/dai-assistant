@@ -46,13 +46,15 @@
       "password_dumps",
       "browser_cookies"
     ],
-    "free_cloud_only": false,
+    "free_cloud_only": true,
     "freellmapi": {
       "enabled": true,
       "free_only_default": true,
       "base_url": "http://127.0.0.1:3001/v1",
       "note": "Primary shared model gateway. The owner-selected Free-Only Free-First profile is active in FreeLLMAPI; provider order and model roster remain owner-controlled."
-    }
+    },
+    "fallback_scope": "FreeLLMAPI auto profile -> explicit OpenRouter :free models -> local Ollama; no unknown-priced provider fallback",
+    "owner_authority": "Owner controls model selection and workload priorities; DAI coordinates execution and verification."
   },
   "agent_s": {
     "enabled": true,
