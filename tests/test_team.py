@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +23,26 @@ from lib.dai.team import (
 
 
 class TestTaskSelection(unittest.TestCase):
+    def test_executable_sources_parse_and_cli_runs_from_another_directory(self):
+        root = Path(__file__).resolve().parents[1]
+        for rel in ("bin/wah-lah-team", "bin/install-wah-lah-toolchain", "bin/dai-team"):
+            source = (root / rel).read_text(encoding="utf-8")
+            compile(source, str(root / rel), "exec")
+        with tempfile.TemporaryDirectory() as other_dir:
+            result = subprocess.run(
+                [sys.executable, str(root / "bin/wah-lah-team"), "--dry-run", "Fix the broken model router loop"],
+                cwd=other_dir,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=10,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("OVERSEER=DAI model=dai/auto", result.stdout)
+        self.assertIn("DELEGATION=plan -> debug -> review", result.stdout)
+        self.assertIn("no models called", result.stdout.lower())
+
     def test_debug_task_delegates_to_debug_specialist(self):
         self.assertEqual(classify_task("Fix the broken microphone and repair the router loop"), "debug")
 
