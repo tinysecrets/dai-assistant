@@ -203,12 +203,12 @@ def build_shared_context(
     owner_notes: str = "",
     max_chars: int = 4800,
 ) -> str:
-    """Share compact, outcome-based history across specialists without replaying prompts."""
+    """Share compact, evidence-qualified outcomes and lessons without replaying prompts."""
     sections: List[str] = []
     if owner_notes.strip():
         sections.append("OWNER-MAINTAINED SHARED NOTES:\n" + redact_sensitive(owner_notes.strip())[:1800])
     if records:
-        lines = ["RECENT VERIFIED TEAM OUTCOMES (operational memory, not model training):"]
+        lines = ["RECENT TEAM OUTCOMES (operational memory, not model training):"]
         for row in records[-MAX_SHARED_RUNS:]:
             project = redact_sensitive(str(row.get("project", "unknown")))[:100]
             mode = str(row.get("mode", "unknown"))[:30]
@@ -218,11 +218,13 @@ def build_shared_context(
             line = f"- project={project}; mode={mode}; outcome={status}; verification={verification}"
             if issue:
                 line += f"; last_blocker={issue}"
+            lesson = row.get("verified_lesson")
+            if status == "verified" and isinstance(lesson, str) and lesson.strip():
+                line += "; verified_lesson=" + redact_sensitive(lesson.strip())[:240]
             lines.append(line)
         sections.append("\n".join(lines))
     context = "\n\n".join(sections)
     return context[-max_chars:]
-
 
 def append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
     """Append one redacted record under a private directory."""
@@ -275,6 +277,7 @@ def make_run_record(
     verification: str,
     failure_class: str = "",
     artifacts: Optional[Sequence[str]] = None,
+    verified_lesson: str = "",
 ) -> Dict[str, Any]:
     return {
         "ts": int(time.time()),
@@ -286,5 +289,6 @@ def make_run_record(
         "status": status,
         "verification": verification,
         "failure_class": redact_sensitive(failure_class)[:220],
+        "verified_lesson": redact_sensitive(verified_lesson.strip())[:240] if verified_lesson.strip() and status == "verified" else "",
         "artifacts": list(artifacts or []),
     }
