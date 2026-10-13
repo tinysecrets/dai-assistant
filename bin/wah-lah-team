@@ -184,20 +184,19 @@ def call_agent(role: str, prompt: str, root: Path, timeout: int) -> Tuple[int, s
     if role != "code" or rc == 0:
         return rc, output
 
-    # A failed/unresponsive OpenCode invocation gets one independent coding-client
-    # fallback through the same DAI auto route; it never falls back to a paid model.
+    # An unresponsive OpenCode call gets one independent Codex attempt, also via
+    # the DAI auto route. It never changes to a paid or Google/Gemini model.
     codex = shutil.which("codex")
     if not codex:
         candidate = Path.home() / ".local" / "bin" / "codex"
         if candidate.is_file():
             codex = str(candidate)
     if not codex:
-        return rc, "PRIMARY_CODE_AGENT=opencode failed:\\n" + output[-2500:] + "\\nCODEX_FALLBACK=unavailable"
+        return rc, "PRIMARY_CODE_AGENT=opencode failed:\n" + output[-2500:] + "\nCODEX_FALLBACK=unavailable"
     rc2, output2 = run_capture([codex, "exec", "--model", "auto", prompt], cwd, timeout)
-    combined = "PRIMARY_CODE_AGENT=opencode exit=" + str(rc) + "\\n" + output[-2500:]
-    combined += "\\nCODEX_AUTO_ROUTE_FALLBACK exit=" + str(rc2) + "\\n" + output2
+    combined = "PRIMARY_CODE_AGENT=opencode exit=" + str(rc) + "\n" + output[-2500:]
+    combined += "\nCODEX_AUTO_ROUTE_FALLBACK exit=" + str(rc2) + "\n" + output2
     return rc2, combined
-
 
 def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str]:
     if not code_mode:
