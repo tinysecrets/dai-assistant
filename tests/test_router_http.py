@@ -76,6 +76,7 @@ class TestHealthAndDiscovery(RouterCase):
             upstream,
             env={
                 "FREELLMAPI_API_KEY": "freellmapi-test-key",
+                "DAI_FREELLMAPI_BASE_URL": upstream.base_url,
                 "OPENROUTER_API_KEY": TEST_KEY,
                 "GROQ_API_KEY": GROQ_KEY,
             },
