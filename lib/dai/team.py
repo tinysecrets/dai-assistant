@@ -169,6 +169,10 @@ def select_team(task: str, requested_mode: str = "auto") -> List[str]:
     team = ["plan"]
     if primary != "plan":
         team.append(primary)
+    # A diagnostic request becomes diagnose -> execute when the owner explicitly
+    # asks for a repair/fix. Pure diagnosis remains read-only.
+    if primary == "debug" and re.search(r"\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\b", task, re.I):
+        team.append("code")
     team.append("review")
     return team
 
