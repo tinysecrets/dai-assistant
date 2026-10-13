@@ -219,19 +219,67 @@ def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str
     if rc != 0:
         return False, "git diff --check failed:\n" + out[-3000:]
     checks = ["git diff --check: PASS"]
-    # Run the known DAI regression suite when the task targets this repository.
-    if root.resolve() == ROOT.resolve() and (root / "tests").is_dir():
+
+    # This repo has a known complete regression suite; run it explicitly.
+    if (root / "tests").is_dir() and (root / "services/model-router/server.py").is_file():
         rc, out = run_capture(
             [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
             root,
             timeout,
         )
-        checks.append(out[-4000:])
-        if rc != 0:
-            return False, "\n".join(checks) + f"\nDAI_TEST_SUITE_EXIT={rc}"
+        checks.append(out[-5000:])
+        if rc != 0 or not re.search(r"Ran\s+[1-9][0-9]*\s+tests?", out):
+            return False, "\n".join(checks) + f"\nDAI_TEST_SUITE_FAILED_OR_EMPTY exit={rc}"
         return True, "\n".join(checks) + "\nDAI_TEST_SUITE=PASS"
-    return True, "\n".join(checks) + "\nProject-specific tests should be run by the code agent and reviewed."
 
+    # Prefer an installed pytest suite (also discovers unittest tests) when
+    # present, without installing anything or changing the environment.
+    tests_dir = root / "tests"
+    python_tests = tests_dir.is_dir() and any(t.suffix == ".py" for t in tests_dir.rglob("test_*.py"))
+    if python_tests:
+        pytest_ok, _ = run_capture(
+            [sys.executable, "-c", "import pytest"],
+            root,
+            8,
+        )
+        if pytest_ok == 0:
+            rc, out = run_capture([sys.executable, "-m", "pytest", "-q"], root, timeout)
+            checks.append(out[-5000:])
+            if rc != 0:
+                return False, "\n".join(checks) + f"\nPYTEST_FAILED exit={rc}"
+            return True, "\n".join(checks) + "\nPYTEST=PASS"
+        rc, out = run_capture(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            root,
+            timeout,
+        )
+        checks.append(out[-5000:])
+        if rc != 0 or not re.search(r"Ran\s+[1-9][0-9]*\s+tests?", out):
+            return False, "\n".join(checks) + f"\nPYTHON_TESTS_FAILED_OR_EMPTY exit={rc}"
+        return True, "\n".join(checks) + "\nPYTHON_TESTS=PASS"
+
+    # Run a project's declared JavaScript test script when dependencies already
+    # exist. Never install packages implicitly just to make verification green.
+    package_file = root / "package.json"
+    if package_file.is_file():
+        try:
+            package = json.loads(package_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return False, "\n".join(checks) + "\nPACKAGE_JSON_INVALID"
+        test_script = (package.get("scripts") or {}).get("test")
+        if isinstance(test_script, str) and test_script.strip():
+            if not (root / "node_modules").is_dir():
+                return False, "\n".join(checks) + "\nJS_TESTS_NOT_RUN: node_modules missing; no packages were installed"
+            npm = shutil.which("npm")
+            if not npm:
+                return False, "\n".join(checks) + "\nJS_TESTS_NOT_RUN: npm unavailable"
+            rc, out = run_capture([npm, "test", "--", "--run"], root, timeout)
+            checks.append(out[-5000:])
+            if rc != 0:
+                return False, "\n".join(checks) + f"\nJS_TESTS_FAILED exit={rc}"
+            return True, "\n".join(checks) + "\nJS_TESTS=PASS"
+
+    return False, "\n".join(checks) + "\nNO_PROJECT_TEST_SUITE: add/run a deterministic project-specific check before marking code work verified."
 
 def is_review_needs_fix(output: str) -> bool:
     head = "\n".join(output.strip().splitlines()[:4]).upper()
