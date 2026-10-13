@@ -133,6 +133,15 @@ def classify_task(task: str) -> str:
         r"health check|troubleshoot|why (?:is|does|did)|diagnose|regression|"
         r"mic|audio|connection|service down|self.heal|loop)\b"
     )
+    gui = re.compile(
+        r"\b(open (?:the )?(?:browser|chromium|firefox|window)|click|mouse|keyboard|"
+        r"desktop task|screen interaction|take a screenshot|navigate (?:to|through)|"
+        r"visible interface|gui automation)\b"
+    )
+    voice = re.compile(
+        r"\b(speak aloud|say aloud|read aloud|voice round.trip|push.to.talk|"
+        r"transcribe|record audio|listen and respond|text.to.speech|speech.to.text)\b"
+    )
     code = re.compile(
         r"\b(implement|build|create|write code|code|refactor|add (?:a|an|the|new)|"
         r"edit|patch|test suite|endpoint|script|automation|integrate|wire up|"
@@ -140,6 +149,10 @@ def classify_task(task: str) -> str:
     )
     if debug.search(text):
         return "debug"
+    if gui.search(text):
+        return "gui"
+    if voice.search(text):
+        return "voice"
     if research.search(text):
         return "research"
     if code.search(text):
@@ -150,7 +163,7 @@ def classify_task(task: str) -> str:
 def select_team(task: str, requested_mode: str = "auto") -> List[str]:
     """A non-trivial task always gets an overseer plan and an independent review."""
     mode = classify_task(task) if requested_mode == "auto" else requested_mode
-    if mode not in {"auto", "plan", "code", "research", "debug"}:
+    if mode not in {"auto", "plan", "code", "research", "debug", "gui", "voice"}:
         raise ValueError(f"unsupported task mode: {requested_mode}")
     primary = classify_task(task) if mode == "auto" else mode
     team = ["plan"]
