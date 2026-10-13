@@ -96,6 +96,9 @@ def main() -> int:
         return 2
 
     private_dir(LAB)
+    private_dir(DEST)
+    os.chmod(ROOT / "bin" / "wah-lah-team", 0o700)
+    os.chmod(ROOT / "bin" / "dai-team", 0o700)
     for name in ("bin", "docs", "config", "skills", "state", "reports", "logs", "backups", "archive"):
         private_dir(DEST / name)
     archive = DEST / "archive" / ("install-" + STAMP)
@@ -201,11 +204,15 @@ case "$CMD" in
     echo "Continue config path: $HOME/.continue/config.yaml"
     echo "Configured model: FreeLLMAPI auto; confirm chat/edit/autocomplete in the editor UI."
     ;;
-  open|workbench|lab)
+  open|lab)
     load_gateway_env
     if [ -f "$HOME/AI-LAB/ai-lab-ui.py" ]; then
       exec python3 "$HOME/AI-LAB/ai-lab-ui.py"
     fi
+    exec "$HOME/.npm-global/bin/openclaw" tui --local
+    ;;
+  workbench)
+    load_gateway_env
     exec "$HOME/.npm-global/bin/openclaw" tui --local
     ;;
   report)
@@ -235,7 +242,7 @@ esac
         HOME / ".local/bin/ai-toolchain": wrapper,
         HOME / ".local/bin/ai-toolchain-status": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" status "$@"\n',
         HOME / ".local/bin/ai-toolchain-smoke": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" smoke "$@"\n',
-        HOME / ".local/bin/ai-toolchain-open": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" open "$@"\n',
+        HOME / ".local/bin/ai-toolchain-open": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" workbench "$@"\n',
     }
     for path, text in aliases.items():
         install_launcher(path, text)
