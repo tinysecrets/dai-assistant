@@ -1,0 +1,94 @@
+"""Wah-Lah team supervisor: routing and shared operational memory tests."""
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+from lib.dai.team import (
+    OVERSEER_MODEL,
+    append_jsonl,
+    build_shared_context,
+    classify_task,
+    load_jsonl,
+    make_run_record,
+    redact_sensitive,
+    select_team,
+)
+
+
+class TestTaskSelection(unittest.TestCase):
+    def test_debug_task_delegates_to_debug_specialist(self):
+        self.assertEqual(classify_task("Fix the broken microphone and repair the router loop"), "debug")
+
+    def test_market_research_delegates_to_research_specialist(self):
+        self.assertEqual(classify_task("Research prospects and market pricing for local service companies"), "research")
+
+    def test_implementation_delegates_to_code_specialist(self):
+        self.assertEqual(classify_task("Implement an endpoint and add a regression test"), "code")
+
+    def test_generic_goal_still_has_a_plan(self):
+        self.assertEqual(select_team("Help organize the next phase", "plan"), ["plan", "review"])
+
+    def test_nontrivial_code_requires_plan_work_and_independent_review(self):
+        self.assertEqual(select_team("Build an app", "code"), ["plan", "code", "review"])
+
+    def test_bad_mode_is_rejected(self):
+        with self.assertRaises(ValueError):
+            select_team("build", "unapproved")
+
+
+class TestSharedOperationalMemory(unittest.TestCase):
+    def test_context_shares_outcomes_not_original_prompts(self):
+        context = build_shared_context([
+            {"project": "/work/dai", "mode": "code", "status": "verified", "verification": "passed"},
+            {"project": "/work/nova", "mode": "debug", "status": "needs-correction", "verification": "failed", "failure_class": "router timeout"},
+        ])
+        self.assertIn("verified", context)
+        self.assertIn("router timeout", context)
+        self.assertNotIn("original prompt", context.lower())
+        self.assertIn("operational memory, not model training", context.lower())
+
+    def test_owner_notes_are_shared_with_specialists(self):
+        context = build_shared_context([], "Owner preference: retain current model roster.")
+        self.assertIn("retain current model roster", context)
+
+    def test_credentials_are_redacted(self):
+        value = "Authorization: Bearer abcdef123456; OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop123456"
+        safe = redact_sensitive(value)
+        self.assertNotIn("abcdef123456", safe)
+        self.assertNotIn("abcdefghijklmnop123456", safe)
+        self.assertIn("[REDACTED]", safe)
+
+    def test_run_record_hashes_task_instead_of_storing_task_body(self):
+        task = "private customer details should not enter the learning log"
+        row = make_run_record(
+            task=task,
+            project="/work/example",
+            mode="code",
+            team=["plan", "code", "review"],
+            status="verified",
+            verification="passed",
+        )
+        self.assertEqual(row["overseer_model"], OVERSEER_MODEL)
+        self.assertNotIn(task, json.dumps(row))
+        self.assertEqual(len(row["task_sha256"]), 64)
+
+    def test_jsonl_learning_log_is_private_and_skips_corrupt_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "state" / "omni" / "team" / "runs.jsonl"
+            append_jsonl(path, {"project": "/work/dai", "status": "verified", "key": "freellmapi-" + "a" * 48})
+            with path.open("a", encoding="utf-8") as f:
+                f.write("{truncated row\n")
+            rows = load_jsonl(path)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["status"], "verified")
+            self.assertIn("[REDACTED]", json.dumps(rows[0]))
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+
+
+if __name__ == "__main__":
+    unittest.main()
