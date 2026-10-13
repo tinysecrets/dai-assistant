@@ -49,7 +49,7 @@ class TestTaskSelection(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("OVERSEER=DAI model=dai/auto", result.stdout)
-        self.assertIn("DELEGATION=plan -> debug -> review", result.stdout)
+        self.assertIn("DELEGATION=plan -> debug -> code -> review", result.stdout)
         self.assertIn("no models called", result.stdout.lower())
 
     def test_debug_task_delegates_to_debug_specialist(self):
@@ -66,6 +66,24 @@ class TestTaskSelection(unittest.TestCase):
 
     def test_nontrivial_code_requires_plan_work_and_independent_review(self):
         self.assertEqual(select_team("Build an app", "code"), ["plan", "code", "review"])
+
+    def test_debug_fix_routes_diagnosis_then_code_then_review(self):
+        self.assertEqual(
+            select_team("Fix the broken model router loop", "auto"),
+            ["plan", "debug", "code", "review"],
+        )
+
+    def test_diagnostic_only_task_does_not_delegate_mutation(self):
+        self.assertEqual(
+            select_team("Diagnose why the model router is failing", "auto"),
+            ["plan", "debug", "review"],
+        )
+
+    def test_gui_and_voice_route_to_their_capabilities(self):
+        self.assertEqual(classify_task("Open Chromium and click the settings icon"), "gui")
+        self.assertEqual(select_team("Open Chromium and click the settings icon", "auto"), ["plan", "gui", "review"])
+        self.assertEqual(classify_task("Read this response aloud through the voice bridge"), "voice")
+        self.assertEqual(select_team("Read this response aloud through the voice bridge", "auto"), ["plan", "voice", "review"])
 
     def test_bad_mode_is_rejected(self):
         with self.assertRaises(ValueError):
