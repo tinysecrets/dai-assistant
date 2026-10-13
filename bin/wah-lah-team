@@ -42,8 +42,9 @@ WORK_FIRST = (
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="DAI overseer and delegated specialist team")
     parser.add_argument("task", nargs="*", help="Task for the Wah-Lah AI team")
-    parser.add_argument("--mode", choices=("auto", "plan", "code", "research", "debug"), default="auto")
+    parser.add_argument("--mode", choices=("auto", "plan", "code", "research", "debug", "gui", "voice"), default="auto")
     parser.add_argument("--dry-run", action="store_true", help="Show assignment and available roles without calling models")
+    parser.add_argument("--live-gui", action="store_true", help="Run the exact GUI instruction live; requires a valid owner-issued DAI_APPROVAL_TOKEN in the environment")
     parser.add_argument("--list-capabilities", action="store_true", help="List available roles and entry points")
     parser.add_argument("--status", action="store_true", help="Read-only status of router, worker, voice and gateway")
     parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout per delegated worker in seconds")
@@ -173,6 +174,14 @@ def agent_command(role: str, prompt: str, root: Path) -> Tuple[List[str], Path]:
         if role == "review":
             entry = ROOT / "lib" / "dai" / "omni" / "review_agent.py"
         return [sys.executable, str(entry), prompt], root
+    if role == "gui":
+        script = ROOT / "skills" / "agent-s-delegate" / "scripts" / "delegate_task.py"
+        args = [sys.executable, str(script), "--instruction", prompt]
+        if os.environ.get("DAI_TEAM_LIVE_GUI") == "1":
+            args.append("--live")
+        return args, root
+    if role == "voice":
+        return [str(ROOT / "bin" / "dai-voice"), prompt], root
     return [], root
 
 
