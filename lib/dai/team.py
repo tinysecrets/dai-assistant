@@ -131,7 +131,7 @@ def classify_task(task: str) -> str:
     )
     debug = re.compile(
         r"\b(debug|fix|repair|broken|error|crash|failed|not working|"
-        r"health check|troubleshoot|why (?:is|does|did)|diagnose|regression|"
+        r"health check|troubleshoot|why (?:is|does|did)|diagnose|"
         r"mic|audio|connection|service down|self.heal|loop)\b"
     )
     gui = re.compile(
