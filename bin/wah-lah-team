@@ -538,6 +538,14 @@ def main() -> int:
         review_rc, review_out = call_agent("review", review_prompt, project, args.timeout)
         write_report(run_dir / f"review-retry-{attempts}.txt", review_out)
 
+    # If the reviewer service itself failed, retry only the review—not the work.
+    # This prevents unnecessary duplicate edits, GUI actions, or voice runs.
+    review_retries = 0
+    while review_rc != 0 and review_retries < 1:
+        review_retries += 1
+        review_rc, review_out = call_agent("review", review_prompt, project, args.timeout)
+        write_report(run_dir / f"review-connection-retry-{review_retries}.txt", review_out)
+
     review_pass = review_rc == 0 and not is_review_needs_fix(review_out) and "REVIEW_STATUS: PASS" in "\n".join(review_out.splitlines()[:4]).upper()
     success = work_rc == 0 and verification_ok and review_pass
     if selected == "gui" and args.live_gui and work_rc == 0:
@@ -570,6 +578,7 @@ def main() -> int:
         verified_lesson=verified_lesson,
     )
     record["elapsed_seconds"] = elapsed
+    record["review_retries"] = review_retries
     record["review_status"] = "pass" if review_pass else ("needs-fix" if is_review_needs_fix(review_out) else "unconfirmed")
     append_jsonl(RUNS, record)
 
