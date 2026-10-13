@@ -3,11 +3,11 @@
 Plan agent for omni-assistant - generates structured plans for complex goals.
 """
 
-import sys
-import os
 import json
-import urllib.request
+import os
+import sys
 import urllib.error
+import urllib.request
 
 
 def router_base() -> str:
@@ -59,7 +59,7 @@ def main() -> int:
         print("[Plan Agent] Plan:\n" + plan, flush=True)
         print("[Plan Agent] Agent completed successfully.", flush=True)
         return 0
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"[Plan Agent] FAILED: {exc}", flush=True)
         return 1
 
