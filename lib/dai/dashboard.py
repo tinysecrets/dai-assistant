@@ -16,6 +16,7 @@ service; ``bin/dai dashboard`` starts it on demand.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import sys
@@ -86,10 +87,8 @@ def get_omni_status(dai_root: str) -> dict[str, Any]:
     if state_dir.exists():
         for f in state_dir.rglob("*"):
             if f.is_file():
-                try:
+                with contextlib.suppress(Exception):
                     mem_size += f.stat().st_size
-                except Exception:
-                    pass
     return {
         "running": running,
         "pid": pid,
