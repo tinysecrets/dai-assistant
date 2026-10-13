@@ -22,6 +22,8 @@ From the DAI repository:
 ./bin/dai team --mode code "Implement the requested change with tests"
 ./bin/dai team --mode research "Research verified prospects in the selected market"
 ./bin/dai team --mode debug "Diagnose why a service is failing"
+./bin/dai team --mode gui --dry-run "Open Chromium and inspect the current page"
+./bin/dai team --mode voice "Read the latest system status aloud"
 ./bin/dai team --timeout 900 --max-retries 2 "Task description"
 ```
 
@@ -35,8 +37,28 @@ Use `--dry-run` first to inspect the assignment without calling a model. `--max-
 - Research and debugging use the corresponding DAI specialist agents.
 - The review agent is called after the latest correction, not just before it.
 - DAI’s known regression suite is run for code work performed inside this repository.
-- Other repositories receive at least `git diff --check`; project-specific test output must be examined in the saved artifacts.
+- For other code repositories, the runner requires a detected Python or JavaScript test suite. If it cannot run a deterministic project test, the run is marked unverified and the blocker is recorded; it does not call `git diff --check` alone a successful test.
 - If a worker or reviewer is unavailable, the run is marked incomplete instead of being reported as a success.
+
+## GUI and voice capabilities
+
+GUI tasks default to a dry-run, so the worker reports the proposed action without touching a display:
+
+```bash
+./bin/dai team --mode gui --dry-run "Open Chromium and go to example.com"
+```
+
+Live control requires a fresh, single-use approval token scoped to the exact instruction and passed through the environment, never command arguments:
+
+```bash
+export DAI_APPROVAL_TOKEN="$(./bin/issue-approval.sh agent_s_gui_task "Open Chromium and go to example.com" | tail -n 1)"
+./bin/dai team --mode gui --live-gui "Open Chromium and go to example.com"
+unset DAI_APPROVAL_TOKEN
+```
+
+Verify the exact output format of `issue-approval.sh` for your current install before using the example pipeline. The worker itself enforces token scope. Live GUI operations are not automatically replayed when they fail, and the team result remains `executed-unverified` until a human or deterministic screen/task check confirms the postcondition.
+
+Voice tasks route to `bin/dai-voice`. They are not automatically replayed during correction because that might duplicate audio or external actions.
 
 ## Shared learning
 
