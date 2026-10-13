@@ -52,6 +52,26 @@ class TestTaskSelection(unittest.TestCase):
         self.assertIn("DELEGATION=plan -> debug -> code -> review", result.stdout)
         self.assertIn("no models called", result.stdout.lower())
 
+    def test_live_gui_requires_owner_token_before_any_model_or_worker_call(self):
+        root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env.pop("DAI_APPROVAL_TOKEN", None)
+        env.pop("DAI_TEAM_LIVE_GUI", None)
+        with tempfile.TemporaryDirectory() as other_dir:
+            result = subprocess.run(
+                [sys.executable, str(root / "bin/wah-lah-team"), "--mode", "gui", "--live-gui", "open Chromium"],
+                cwd=other_dir,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=10,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 2, result.stdout)
+        self.assertIn("fresh owner-issued DAI_APPROVAL_TOKEN", result.stdout)
+        self.assertNotIn("run_id", result.stdout)
+
     def test_debug_task_delegates_to_debug_specialist(self):
         self.assertEqual(classify_task("Fix the broken microphone and repair the router loop"), "debug")
 
