@@ -6,6 +6,7 @@ outcomes; it does not change model weights or replace the owner's model roster.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -13,7 +14,7 @@ import re
 import shutil
 import time
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 OVERSEER_MODEL = "dai/auto"
 DEFAULT_PARALLELISM = 4
@@ -229,10 +230,8 @@ def build_shared_context(
 def append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
     """Append one redacted record under a private directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    try:
+    with contextlib.suppress(OSError):
         path.parent.chmod(0o700)
-    except OSError:
-        pass
     clean = redact_sensitive(json.dumps(dict(row), ensure_ascii=False, sort_keys=True))
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
