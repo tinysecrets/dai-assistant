@@ -518,7 +518,7 @@ class TestSkills(unittest.TestCase):
 
     def test_the_shipped_skills_exist(self):
         names = {p.name for p in self.skills()}
-        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code"})
+        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code", "wah-lah-overseer"})
 
     def test_frontmatter_is_valid_yaml_with_required_fields(self):
         for skill in self.skills():
