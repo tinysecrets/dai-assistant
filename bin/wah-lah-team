@@ -379,17 +379,17 @@ def main() -> int:
         work_rc, work_out = call_agent("gui", task_for_agents, project, args.timeout)
     elif selected == "voice":
         work_rc, work_out = call_agent("voice", task_for_agents, project, args.timeout)
-    elif selected == "debug" and re.search(r"\\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\\b", task, re.I):
+    elif selected == "debug" and re.search(r"\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\b", task, re.I):
         # Keep diagnosis and modification as separate delegated phases.
         debug_rc, debug_out = call_agent("debug", build_work_prompt(task_for_agents, "debug", plan_out, context), project, args.timeout)
         write_report(run_dir / "diagnosis.txt", debug_out)
-        correction_context = "Diagnostic worker exit=" + str(debug_rc) + "\\nDIAGNOSTIC EVIDENCE:\\n" + debug_out[-6000:]
+        correction_context = "Diagnostic worker exit=" + str(debug_rc) + "\nDIAGNOSTIC EVIDENCE:\n" + debug_out[-6000:]
         prompt = build_work_prompt(task_for_agents, "code", plan_out, context, correction_context)
         work_role = "code"
         work_rc, code_out = call_agent("code", prompt, project, args.timeout)
-        work_out = "=== DIAGNOSTIC PHASE ===\\n" + debug_out + "\\n=== IMPLEMENTATION PHASE ===\\n" + code_out
+        work_out = "=== DIAGNOSTIC PHASE ===\n" + debug_out + "\n=== IMPLEMENTATION PHASE ===\n" + code_out
         if debug_rc != 0 and work_rc == 0:
-            work_out = "DIAGNOSTICS_RETURNED_ERROR; implementation attempted against available evidence.\\n" + work_out
+            work_out = "DIAGNOSTICS_RETURNED_ERROR; implementation attempted against available evidence.\n" + work_out
     else:
         prompt = build_work_prompt(task_for_agents, mode, plan_out, context)
         work_rc, work_out = call_agent(work_role, prompt, project, args.timeout)
@@ -419,7 +419,7 @@ def main() -> int:
                     artifacts=[str(p) for p in sorted(run_dir.iterdir()) if p.is_file()])
         append_jsonl(RUNS, record)
         report = (
-            f"# Wah-Lah Team Run {run_id}\\n\\n"
+            f"# Wah-Lah Team Run {run_id}\n\n"
             f"- Overseer: DAI / {record['overseer_model']}\\n"
             f"- Delegation: {' -> '.join(team)}\\n"
             f"- Result: {state}\\n"
