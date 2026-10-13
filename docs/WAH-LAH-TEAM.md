@@ -51,9 +51,11 @@ GUI tasks default to a dry-run, so the worker reports the proposed action withou
 Live control requires a fresh, single-use approval token scoped to the exact instruction and passed through the environment, never command arguments:
 
 ```bash
-export DAI_APPROVAL_TOKEN="$(./bin/issue-approval.sh agent_s_gui_task "Open Chromium and go to example.com" | tail -n 1)"
+TOKEN="$(./bin/issue-approval.sh agent_s_gui_task "Open Chromium and go to example.com" 2>/dev/null | grep -v '^\\[' | tail -n 1 | xargs)"
+test -n "$TOKEN" || { echo "Approval token was not issued"; exit 1; }
+export DAI_APPROVAL_TOKEN="$TOKEN"
 ./bin/dai team --mode gui --live-gui "Open Chromium and go to example.com"
-unset DAI_APPROVAL_TOKEN
+unset DAI_APPROVAL_TOKEN TOKEN
 ```
 
 Verify the exact output format of `issue-approval.sh` for your current install before using the example pipeline. The worker itself enforces token scope. Live GUI operations are not automatically replayed when they fail, and the team result remains `executed-unverified` until a human or deterministic screen/task check confirms the postcondition.
