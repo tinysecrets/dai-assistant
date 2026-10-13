@@ -113,6 +113,36 @@ class TestSharedOperationalMemory(unittest.TestCase):
         self.assertNotIn("original prompt", context.lower())
         self.assertIn("operational memory, not model training", context.lower())
 
+    def test_verified_lesson_is_shared_but_failed_lesson_is_not(self):
+        context = build_shared_context([
+            {"project": "/work/dai", "mode": "code", "status": "verified", "verification": "passed", "verified_lesson": "The router returns 503 when no providers are ready."},
+            {"project": "/work/nova", "mode": "debug", "status": "needs-correction", "verification": "failed", "verified_lesson": "Do not share this unverified claim."},
+        ])
+        self.assertIn("The router returns 503 when no providers are ready.", context)
+        self.assertNotIn("Do not share this unverified claim.", context)
+
+    def test_record_accepts_lessons_only_when_run_is_verified(self):
+        verified = make_run_record(
+            task="diagnose and fix router",
+            project="/work/dai",
+            mode="code",
+            team=["plan", "debug", "code", "review"],
+            status="verified",
+            verification="passed",
+            verified_lesson="The health endpoint reports configured keys without showing values.",
+        )
+        failed = make_run_record(
+            task="diagnose and fix router",
+            project="/work/dai",
+            mode="code",
+            team=["plan", "debug", "code", "review"],
+            status="needs-correction",
+            verification="failed",
+            verified_lesson="Unverified data",
+        )
+        self.assertEqual(verified["verified_lesson"], "The health endpoint reports configured keys without showing values.")
+        self.assertEqual(failed["verified_lesson"], "")
+
     def test_owner_notes_are_shared_with_specialists(self):
         context = build_shared_context([], "Owner preference: retain current model roster.")
         self.assertIn("retain current model roster", context)
