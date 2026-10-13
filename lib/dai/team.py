@@ -147,12 +147,12 @@ def classify_task(task: str) -> str:
         r"edit|patch|test suite|endpoint|script|automation|integrate|wire up|"
         r"deploy|website|application|repository|repo)\b"
     )
-    if debug.search(text):
-        return "debug"
     if gui.search(text):
         return "gui"
     if voice.search(text):
         return "voice"
+    if debug.search(text):
+        return "debug"
     if research.search(text):
         return "research"
     if code.search(text):
