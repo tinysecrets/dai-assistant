@@ -434,8 +434,6 @@ def main() -> int:
         return 0 if verification_ok else 1
 
     review_prompt = (
-        WORK_FIRST + "\\n\\nReview as an independent delegated reviewer. Start your response with exactly "
-    review_prompt = (
         WORK_FIRST + "\n\nReview as an independent delegated reviewer. Start your response with exactly "
         "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Use NEEDS_FIX only for a concrete correctness, "
         "test, or scope blocker; otherwise PASS. Then list evidence, gaps and the smallest correction if needed."
