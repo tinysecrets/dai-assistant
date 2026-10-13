@@ -313,6 +313,9 @@ def main() -> int:
     from lib.dai.team import append_jsonl, load_jsonl, make_run_record, select_team
     mode = discover_mode(task, args.mode, args.no_web)
     team = select_team(task, mode)
+    if args.live_gui and args.dry_run:
+        print("BLOCKED: choose either --dry-run or --live-gui, not both.")
+        return 2
     if args.live_gui and mode != "gui":
         print("BLOCKED: --live-gui is only valid for a GUI task (use --mode gui).")
         return 2
@@ -446,7 +449,11 @@ def main() -> int:
     write_report(run_dir / "review.txt", review_out)
 
     attempts = 0
-    while attempts < args.max_retries and (
+    retry_limit = args.max_retries
+    if selected in ("gui", "voice") or args.live_gui:
+        # Never replay desktop input or voice tasks as an automatic correction.
+        retry_limit = 0
+    while attempts < retry_limit and (
         work_rc != 0 or not verification_ok or (review_rc == 0 and is_review_needs_fix(review_out))
     ):
         attempts += 1
@@ -454,13 +461,18 @@ def main() -> int:
             f"Previous worker exit: {work_rc}\nVerification passed: {verification_ok}\n"
             f"Verification report:\n{verification_text}\nIndependent review:\n{review_out}"
         )
-        prompt = build_work_prompt(task_for_agents, mode, plan_out, context, correction)
-        if mode == "plan":
+        prompt = build_work_prompt(task_for_agents, "code" if work_role == "code" else mode, plan_out, context, correction)
+        if work_role == "code":
+            work_rc, work_out = call_agent("code", prompt, project, args.timeout)
+        elif work_role == "plan":
             work_rc, work_out = call_agent("plan", prompt, project, args.timeout)
         else:
-            work_rc, work_out = call_agent(mode, prompt, project, args.timeout)
+            work_rc, work_out = call_agent(work_role, prompt, project, args.timeout)
         write_report(run_dir / f"work-retry-{attempts}.txt", work_out)
-        verification_ok, verification_text = verify_project(project, mode == "code", args.timeout)
+        verification_ok, verification_text = verify_project(project, work_role == "code", args.timeout)
+        if selected == "voice":
+            verification_ok = work_rc == 0
+            verification_text = "VOICE ROUND-TRIP=" + ("command completed; listen/capture output was generated." if verification_ok else "command failed; inspect work.txt.")
         write_report(run_dir / f"verification-retry-{attempts}.txt", verification_text)
         review_prompt = (
             WORK_FIRST + "\n\nIndependently re-review the corrected result. Start with "
@@ -474,7 +486,9 @@ def main() -> int:
 
     review_pass = review_rc == 0 and not is_review_needs_fix(review_out) and "REVIEW_STATUS: PASS" in "\n".join(review_out.splitlines()[:4]).upper()
     success = work_rc == 0 and verification_ok and review_pass
-    if success:
+    if selected == "gui" and args.live_gui and work_rc == 0:
+        state = "executed-unverified"
+    elif success:
         state = "verified"
     elif work_rc != 0 or not verification_ok:
         state = "needs-correction"
