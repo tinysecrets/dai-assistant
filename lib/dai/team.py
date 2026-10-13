@@ -62,6 +62,46 @@ CAPABILITIES: Dict[str, Dict[str, str]] = {
         "entry": "bin/dai-voice",
         "kind": "voice-runbook",
     },
+    "codex": {
+        "role": "code, patch and repository execution client",
+        "entry": "~/.local/bin/codex",
+        "kind": "local-cli",
+    },
+    "openclaw": {
+        "role": "interactive owner workbench and tool agent",
+        "entry": "~/.npm-global/bin/openclaw",
+        "kind": "local-cli",
+    },
+    "hermes": {
+        "role": "alternate agent runtime and tool workflow",
+        "entry": "~/.local/bin/hermes",
+        "kind": "local-cli",
+    },
+    "continue": {
+        "role": "editor chat, edit and autocomplete integration",
+        "entry": "~/.continue/config.yaml",
+        "kind": "local-config",
+    },
+    "nova": {
+        "role": "owner-facing assistant with shared gateway and local fallback",
+        "entry": "~/nova-2.0/nova/agents/core/nova_mind.py",
+        "kind": "local-file",
+    },
+    "genie": {
+        "role": "desktop assistant and command center interface",
+        "entry": "~/.config/genie/genie.py",
+        "kind": "local-file",
+    },
+    "omni": {
+        "role": "periodic health healing, memory and sub-agent coordination",
+        "entry": "bin/omni-daemon.py",
+        "kind": "local-script",
+    },
+    "zero-gravity": {
+        "role": "cloud revenue-problem discovery and advisor application",
+        "entry": "tinysecrets/zero-gravity on Vercel",
+        "kind": "external-check",
+    },
 }
 
 
@@ -188,9 +228,14 @@ def capability_status(root: Path) -> List[Dict[str, Any]]:
     output: List[Dict[str, Any]] = []
     for name, item in CAPABILITIES.items():
         entry = item["entry"]
-        if item["kind"] == "tool-agent":
+        kind = item["kind"]
+        if kind == "external-check":
+            available = None  # Cloud status needs the appropriate Vercel/GitHub connector.
+        elif kind == "tool-agent":
             path = shutil.which(entry) or str(Path.home() / ".npm-global" / "bin" / entry)
             available = bool(shutil.which(entry) or Path(path).is_file())
+        elif kind in {"local-cli", "local-config", "local-file"}:
+            available = Path(entry).expanduser().exists()
         else:
             available = (root / entry).exists()
         output.append({
