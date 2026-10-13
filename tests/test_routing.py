@@ -41,6 +41,7 @@ def plan(
     preferred: Optional[str] = None,
     strict: bool = False,
     enabled: Optional[List[str]] = None,
+    free_cloud_only: bool = False,
 ) -> Any:
     return plan_candidates(
         pool=pool if pool is not None else default_pool(),
@@ -53,6 +54,7 @@ def plan(
         preferred=preferred,
         strict_models=strict,
         enabled_providers=enabled,
+        free_cloud_only=free_cloud_only,
     )
 
 
@@ -76,6 +78,7 @@ class TestResolveExplicit(unittest.TestCase):
             "local/hermes3:8b": ("ollama_local", "hermes3:8b"),
             "cerebras/llama-3.3-70b": ("cerebras", "llama-3.3-70b"),
             "openrouter/z-ai/glm-5.2:free": ("openrouter", "z-ai/glm-5.2:free"),
+            "freellmapi/auto": ("freellmapi", "auto"),
         }
         for requested, (provider, model) in cases.items():
             with self.subTest(requested=requested):
@@ -94,6 +97,28 @@ class TestResolveExplicit(unittest.TestCase):
 
 
 class TestCandidateBuilding(unittest.TestCase):
+    def test_freellmapi_auto_is_primary_when_configured(self) -> None:
+        env = {**KEY_ENV, "FREELLMAPI_API_KEY": "freellmapi-test-secret"}
+        result = plan(env=env, preferred="freellmapi/auto")
+        self.assertEqual(models(result)[0], "freellmapi/auto")
+        self.assertEqual(result.candidates[0].base_url, "http://127.0.0.1:3001/v1")
+        self.assertEqual(result.candidates[0].headers["Authorization"], "Bearer freellmapi-test-secret")
+
+    def test_freellmapi_is_absent_when_key_is_missing(self) -> None:
+        result = plan(env=KEY_ENV)
+        self.assertNotIn("freellmapi/auto", models(result))
+
+    def test_free_cloud_only_accepts_gateway_auto_and_free_router_models(self) -> None:
+        env = {**KEY_ENV, "FREELLMAPI_API_KEY": "freellmapi-test-secret"}
+        pool = {**default_pool(), "ollama_local_models": ["hermes3:8b"]}
+        result = plan(env=env, pool=pool, free_cloud_only=True)
+        candidates = models(result)
+        self.assertIn("freellmapi/auto", candidates)
+        self.assertTrue(any(m.startswith("openrouter/") and m.endswith(":free") for m in candidates))
+        self.assertIn("ollama_local/hermes3:8b", candidates)
+        self.assertFalse(any(m.startswith(("groq/", "cerebras/", "ollama_cloud/")) for m in candidates))
+        self.assertFalse(any(m.startswith("openrouter/") and not m.endswith(":free") for m in candidates))
+
     def test_no_keys_leaves_only_local(self) -> None:
         result = plan(env={}, pool={**default_pool(), "ollama_local_models": ["hermes3:8b"]})
         self.assertEqual(models(result), ["ollama_local/hermes3:8b"])
