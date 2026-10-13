@@ -353,6 +353,19 @@ class TestPolicyFile(unittest.TestCase):
         self.assertTrue(omni["delegation"]["final_review_required"])
         self.assertGreaterEqual(overseer["max_parallel"], 1)
 
+    def test_wah_lah_team_charter_keeps_owner_in_control_and_free_only_default(self):
+        charter = json.loads(read(ROOT / "config/wah-lah-team.json"))
+        self.assertEqual(charter["overseer"]["application"], "DAI")
+        self.assertEqual(charter["overseer"]["model"], self.policy["inference"]["default_model"])
+        self.assertTrue(charter["delegation"]["required_for_nontrivial_tasks"])
+        self.assertEqual(charter["delegation"]["max_correction_iterations"], 2)
+        self.assertFalse(charter["shared_operational_memory"]["store_raw_prompts"])
+        self.assertFalse(charter["shared_operational_memory"]["store_credentials"])
+        self.assertTrue(charter["owner_authority"]["owner_controls_model_roster"])
+        self.assertTrue(charter["owner_authority"]["preserve_existing_approval_policy"])
+        self.assertTrue(self.policy["inference"]["free_cloud_only"])
+        self.assertEqual(self.policy["inference"]["freellmapi"]["base_url"], "http://127.0.0.1:3001/v1")
+
     def test_every_enabled_provider_is_known(self):
         inference = self.policy["inference"]
         for name in PROVIDERS:
@@ -402,6 +415,7 @@ class TestPolicyFile(unittest.TestCase):
             "policy/approvals.example.json",
             "config/rotation-pool.json",
             "config/free-models.json",
+            "config/wah-lah-team.json",
         ):
             with self.subTest(rel):
                 json.loads(read(ROOT / rel))
