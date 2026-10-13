@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""Install the organized Wah-Lah AI Toolchain folder and local workbench launchers."""
+from __future__ import annotations
+
+import datetime
+import json
+import os
+import shutil
+import shlex
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+HOME = Path.home()
+LAB = HOME / "Desktop" / "00_DAI_LAUNCHPAD" / "02 AI LAB"
+DEST = LAB / "AI_TOOLCHAIN"
+STAMP = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def private_dir(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    path.chmod(0o700)
+
+
+def private_write(path: Path, value: str, mode: int = 0o600) -> None:
+    private_dir(path.parent)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(value.rstrip() + "\n", encoding="utf-8")
+    tmp.chmod(mode)
+    tmp.replace(path)
+
+
+def backup_file(path: Path, label: str) -> Path:
+    target = DEST / "backups" / STAMP / label
+    private_dir(target.parent)
+    if path.is_symlink():
+        private_write(target.with_suffix(target.suffix + ".symlink"), os.readlink(path))
+    elif path.is_file():
+        shutil.copy2(path, target)
+        target.chmod(0o600)
+    return target
+
+
+def install_launcher(path: Path, content: str) -> None:
+    if path.exists() or path.is_symlink():
+        backup_file(path, path.name + ".pre-toolchain")
+        if path.is_dir() and not path.is_symlink():
+            raise RuntimeError(f"refusing to replace directory: {path}")
+        path.unlink()
+    private_write(path, content, mode=0o700)
+
+
+def link_source(target: Path, source: Path) -> None:
+    if target.exists() or target.is_symlink():
+        if target.is_symlink() and target.resolve() == source.resolve():
+            return
+        if target.is_file() and not target.is_symlink():
+            backup_file(target, target.name + ".pre-toolchain")
+        elif target.is_symlink():
+            backup_file(target, target.name + ".pre-toolchain")
+        else:
+            raise RuntimeError(f"refusing to replace directory: {target}")
+        target.unlink()
+    target.symlink_to(source)
+
+
+def merge_instruction(path: Path, block: str, label: str) -> bool:
+    marker = f"<!-- WAH-LAH OWNER WORK-FIRST {label} START -->"
+    section = marker + "\n" + block.strip() + f"\n<!-- WAH-LAH OWNER WORK-FIRST {label} END -->"
+    if path.exists():
+        existing = path.read_text(encoding="utf-8")
+        if marker in existing:
+            return False
+        backup_file(path, path.name + ".pre-work-first")
+        content = existing.rstrip() + "\n\n" + section + "\n"
+    else:
+        content = "# Owner workspace instructions\n\n" + section + "\n"
+    private_write(path, content)
+    return True
+
+
+def main() -> int:
+    required = (
+        ROOT / "bin" / "dai",
+        ROOT / "bin" / "wah-lah-team",
+        ROOT / "lib" / "dai" / "team.py",
+        ROOT / "config" / "wah-lah-team.json",
+        ROOT / "docs" / "WAH-LAH-TEAM.md",
+        ROOT / "skills" / "wah-lah-overseer" / "SKILL.md",
+    )
+    missing = [str(p) for p in required if not p.exists()]
+    if missing:
+        print("STOP: required DAI files are missing:")
+        print("\n".join(missing))
+        return 2
+
+    private_dir(LAB)
+    for name in ("bin", "docs", "config", "skills", "state", "reports", "logs", "backups", "archive"):
+        private_dir(DEST / name)
+    archive = DEST / "archive" / ("install-" + STAMP)
+    private_dir(archive)
+
+    # Keep the project repository as the source of truth; the organized folder
+    # exposes labelled links rather than duplicate copies of active executables.
+    for name in ("dai", "dai-team", "wah-lah-team"):
+        link_source(DEST / "bin" / name, ROOT / "bin" / name)
+    for source, relative in (
+        (ROOT / "docs" / "WAH-LAH-TEAM.md", "docs/WAH-LAH-TEAM.md"),
+        (ROOT / "skills" / "wah-lah-overseer" / "SKILL.md", "skills/wah-lah-overseer.md"),
+        (ROOT / "config" / "wah-lah-team.json", "config/wah-lah-team.json"),
+    ):
+        dest = DEST / relative
+        if dest.exists():
+            backup_file(dest, relative.replace("/", "_") + ".pre-toolchain")
+        private_write(dest, source.read_text(encoding="utf-8"))
+
+    private_write(DEST / "config" / "entrypoints.json", json.dumps({
+        "owner": "Wah-Lah Industries",
+        "sourceOfTruth": str(ROOT),
+        "overseer": {"application": "DAI", "model": "dai/auto"},
+        "gateway": {"baseUrl": "http://127.0.0.1:3001/v1", "model": "auto"},
+        "daiRouter": {"baseUrl": "http://127.0.0.1:11435/v1", "model": "dai/auto"},
+        "commands": {
+            "status": "ai-toolchain status",
+            "capabilities": "ai-toolchain capabilities",
+            "team": "ai-toolchain team TASK",
+            "dryRun": "ai-toolchain team --dry-run TASK",
+            "smoke": "ai-toolchain smoke",
+            "tests": "ai-toolchain test",
+            "workbench": "ai-toolchain open"
+        },
+        "sharedMemory": str(ROOT / "state" / "omni" / "team"),
+        "secrets": "Remain in ~/.config/freellmapi and ignored local .env files; never store them in this folder."
+    }, indent=2))
+
+    private_dir(ROOT / "state" / "omni" / "team")
+    owner_notes = ROOT / "state" / "omni" / "team" / "owner-notes.md"
+    if not owner_notes.exists():
+        private_write(owner_notes, """# Owner-maintained Wah-Lah knowledge
+
+Add confirmed project-specific facts, names, decisions, and fixes here. Use this to share verified context across delegated agents. Do not put API keys, passwords, customer secrets, or raw private prompts here.
+
+## Architecture
+
+- DAI is the overseer; default orchestrator model is dai/auto.
+- FreeLLMAPI is the first shared gateway using the owner-approved free-only profile.
+- Genie uses the DAI router.
+- DAI Omni supplies the configured health/healing and agent coordination cycle.
+- Nova uses the gateway before its local fallback.
+- Zero Gravity is a Vercel-hosted project and must be checked using the connected GitHub/Vercel tools.
+""")
+    shared_link = DEST / "state" / "team-memory"
+    if shared_link.exists() or shared_link.is_symlink():
+        if shared_link.is_symlink():
+            shared_link.unlink()
+    shared_link.symlink_to(ROOT / "state" / "omni" / "team")
+
+    wrapper_template = r'''#!/usr/bin/env bash
+set -euo pipefail
+ROOT=@DAI_ROOT@
+HOME="${HOME:-/home/justin}"
+CMD="open"
+if [ "$#" -gt 0 ]; then CMD="$1"; shift; fi
+load_gateway_env() {
+  local file="$HOME/.config/freellmapi/agent-env.conf"
+  if [ -r "$file" ]; then set -a; . "$file"; set +a; fi
+}
+case "$CMD" in
+  status|doctor) exec "$ROOT/bin/wah-lah-team" --status ;;
+  capabilities|agents) exec "$ROOT/bin/wah-lah-team" --list-capabilities ;;
+  team|oversee) exec "$ROOT/bin/wah-lah-team" "$@" ;;
+  smoke) exec "$ROOT/bin/dai" smoke ;;
+  test|tests) exec "$ROOT/bin/dai" test ;;
+  dai) exec "$ROOT/bin/dai" "$@" ;;
+  codex)
+    load_gateway_env
+    if [ "$#" -gt 0 ]; then exec "$HOME/.local/bin/codex" exec --model auto "$@"; fi
+    exec "$HOME/.local/bin/codex"
+    ;;
+  opencode)
+    load_gateway_env
+    if [ "$#" -gt 0 ]; then exec "$HOME/.npm-global/bin/opencode" run --model freellmapi/auto "$@"; fi
+    exec "$HOME/.npm-global/bin/opencode"
+    ;;
+  openclaw)
+    load_gateway_env
+    if [ "$#" -gt 0 ]; then exec "$HOME/.npm-global/bin/openclaw" "$@"; fi
+    exec "$HOME/.npm-global/bin/openclaw" tui --local
+    ;;
+  hermes)
+    load_gateway_env
+    if [ "$#" -gt 0 ]; then exec "$HOME/.local/bin/hermes" "$@"; fi
+    exec "$HOME/.local/bin/hermes"
+    ;;
+  nova)
+    if [ "$#" -gt 0 ]; then exec "$HOME/.local/bin/nova" "$@"; fi
+    exec "$HOME/.local/bin/nova"
+    ;;
+  continue)
+    echo "Continue config path: $HOME/.continue/config.yaml"
+    echo "Configured model: FreeLLMAPI auto; confirm chat/edit/autocomplete in the editor UI."
+    ;;
+  open|workbench|lab)
+    load_gateway_env
+    if [ -f "$HOME/AI-LAB/ai-lab-ui.py" ]; then
+      exec python3 "$HOME/AI-LAB/ai-lab-ui.py"
+    fi
+    exec "$HOME/.npm-global/bin/openclaw" tui --local
+    ;;
+  report)
+    "$ROOT/bin/wah-lah-team" --status
+    "$ROOT/bin/dai" config
+    ;;
+  help|-h|--help)
+    cat <<'HELP'
+Wah-Lah AI Toolchain
+  ai-toolchain open                 Open the local AI Lab UI/workbench
+  ai-toolchain status               Show gateway, DAI and agent capability status
+  ai-toolchain capabilities         List integrated agents and external projects
+  ai-toolchain team TASK            Plan -> specialist -> verify/correct -> review
+  ai-toolchain team --dry-run TASK  Preview assignment without calling a model
+  ai-toolchain smoke                Run existing DAI integration smoke checks
+  ai-toolchain test                 Run the DAI regression suite
+  ai-toolchain codex|opencode|openclaw|hermes|nova [ARGS...]
+  ai-toolchain continue             Show Continue integration status
+  ai-toolchain dai COMMAND          Any existing DAI command/flag
+HELP
+    ;;
+  *) echo "Unknown command: $CMD" >&2; exit 2 ;;
+esac
+'''
+    wrapper = wrapper_template.replace("@DAI_ROOT@", shlex.quote(str(ROOT)))
+    aliases = {
+        HOME / ".local/bin/ai-toolchain": wrapper,
+        HOME / ".local/bin/ai-toolchain-status": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" status "$@"\n',
+        HOME / ".local/bin/ai-toolchain-smoke": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" smoke "$@"\n',
+        HOME / ".local/bin/ai-toolchain-open": '#!/usr/bin/env bash\nexec "$HOME/.local/bin/ai-toolchain" open "$@"\n',
+    }
+    for path, text in aliases.items():
+        install_launcher(path, text)
+
+    # A local desktop/app-menu shortcut gives the owner a visible entry point.
+    desktop = """[Desktop Entry]
+Type=Application
+Name=Wah-Lah AI Workbench
+Comment=DAI overseer, delegated AI agents and shared operational memory
+Exec=/home/justin/.local/bin/ai-toolchain-open
+Icon=utilities-terminal
+Terminal=true
+StartupNotify=true
+Categories=Development;Utility;
+"""
+    for path in (
+        LAB / "Wah-Lah AI Workbench.desktop",
+        HOME / ".local/share/applications/wah-lah-ai-workbench.desktop",
+    ):
+        private_dir(path.parent)
+        path.write_text(desktop, encoding="utf-8")
+        path.chmod(0o755)
+
+    work_first = """For ordinary authorized tasks, act as the owner's work-first assistant: plan, use the appropriate tools, execute, verify, and report outcomes. Avoid generic refusal/lecture text; when an approach fails, state the concrete blocker and try a useful alternative. Preserve owner-selected models, provider priority, architecture and project priorities. Share verified results through DAI team memory; do not share raw credentials or private files. Use the existing owner approval process for destructive, irreversible, paid, externally consequential or live-desktop actions. Do not claim completion without test or system evidence."""
+    additions = []
+    for path, label in (
+        (HOME / ".openclaw/workspace/AGENTS.md", "OPENCLAW"),
+        (HOME / "nova-2.0/AGENTS.md", "NOVA"),
+        (ROOT / "AGENTS.md", "DAI"),
+    ):
+        try:
+            if merge_instruction(path, work_first, label):
+                additions.append(str(path))
+        except OSError:
+            pass
+
+    # Patch the optional old AI Lab Tk window only when its source anchors match;
+    # create a backup and compile-test a temp copy before replacing it.
+    ui = HOME / "AI-LAB/ai-lab-ui.py"
+    ui_button = "not-present (desktop launcher installed)"
+    if ui.is_file():
+        original = ui.read_text(encoding="utf-8")
+        if "OPEN WAH-LAH MODEL WORKBENCH" in original:
+            ui_button = "already-present"
+        else:
+            function_anchor = 'def open_genie():\n    subprocess.Popen(["bash","-lc","genie"], start_new_session=True)\n'
+            button_anchors = (
+                'button(row,"OPEN FOLDER",open_folder).pack(side="left",fill="x",expand=True,padx=(5,0))\n',
+                'button(row, "OPEN FOLDER", open_folder).pack(side="left",fill="x",expand=True,padx=(5,0))\n',
+            )
+            if function_anchor in original and any(a in original for a in button_anchors):
+                backup_file(ui, "ai-lab-ui.py.pre-toolchain")
+                changed = original.replace('root.geometry("470x470")', 'root.geometry("470x510")', 1)
+                changed = changed.replace(
+                    function_anchor,
+                    function_anchor + '\ndef open_model_workbench():\n    subprocess.Popen(["/home/justin/.local/bin/ai-toolchain-open"], start_new_session=True)\n',
+                    1,
+                )
+                for anchor in button_anchors:
+                    if anchor in changed:
+                        changed = changed.replace(
+                            anchor,
+                            anchor + '\nbutton(outer,"OPEN WAH-LAH MODEL WORKBENCH",open_model_workbench).pack(fill="x",pady=4)\n',
+                            1,
+                        )
+                        break
+                temp = ui.with_suffix(".py.toolchain.tmp")
+                temp.write_text(changed, encoding="utf-8")
+                temp.chmod(0o600)
+                check = subprocess.run([sys.executable, "-m", "py_compile", str(temp)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                if check.returncode == 0:
+                    shutil.copy2(temp, ui)
+                    ui.chmod(0o600)
+                    ui_button = "added-with-backup"
+                else:
+                    ui_button = "not-added (syntax check failed; original preserved)"
+                try:
+                    temp.unlink()
+                except OSError:
+                    pass
+
+    print("WAH_LAH_TOOLCHAIN_INSTALL=OK")
+    print("TOOLCHAIN_FOLDER=" + str(DEST))
+    print("DAI_SOURCE_OF_TRUTH=" + str(ROOT))
+    print("ALIASES=ai-toolchain, ai-toolchain-status, ai-toolchain-smoke, ai-toolchain-open")
+    print("DESKTOP_ENTRY=" + str(LAB / "Wah-Lah AI Workbench.desktop"))
+    print("AI_LAB_BUTTON=" + ui_button)
+    print("WORK_FIRST_NOTES_UPDATED=" + (", ".join(additions) if additions else "already-present-or-target-missing"))
+    print("OWNER_NOTES=" + str(owner_notes))
+    print("BACKUPS=" + str(DEST / "backups"))
+    print("NEXT: ai-toolchain status; ai-toolchain capabilities; ai-toolchain team --dry-run \"smoke test the stack\"")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except Exception as exc:
+        print("INSTALL_FAILED=" + type(exc).__name__ + ": " + str(exc)[:250], file=sys.stderr)
+        raise SystemExit(1)
