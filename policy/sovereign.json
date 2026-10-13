@@ -46,7 +46,13 @@
       "password_dumps",
       "browser_cookies"
     ],
-    "free_cloud_only": false
+    "free_cloud_only": false,
+    "freellmapi": {
+      "enabled": true,
+      "free_only_default": true,
+      "base_url": "http://127.0.0.1:3001/v1",
+      "note": "Primary shared model gateway. The owner-selected Free-Only Free-First profile is active in FreeLLMAPI; provider order and model roster remain owner-controlled."
+    }
   },
   "agent_s": {
     "enabled": true,
@@ -69,7 +75,7 @@
     "notes": [
       "dry_run_default=true is the safe shipped state: tasks are validated and the exact command is recorded, but no input device is touched.",
       "Keep dry_run_default=true: the live gate is --live plus a single-use token for the exact instruction (bin/issue-approval.sh agent_s_gui_task \"...\"). dry_run_default only sets the default for tasks that do not ask otherwise; setting it false makes every task live until one asks for a dry run, and the worker's --check flags that as a problem.",
-      "Safety keys in this block (enabled, dry_run_default, bind_owner_live_desktop, require_approval_token, max_steps_hard_cap) are read from here only \u2014 an environment variable cannot weaken them.",
+      "Safety keys in this block (enabled, dry_run_default, bind_owner_live_desktop, require_approval_token, max_steps_hard_cap) are read from here only — an environment variable cannot weaken them.",
       "Host knobs (display, geometry, provider, model, grounding_*, timeout_seconds, venv_path) may be overridden in .env; see docs/CONFIG.md."
     ]
   },
@@ -120,13 +126,26 @@
     "delegation": {
       "max_parallel": 4,
       "default_timeout": 1800,
-      "use_opencode": true
+      "use_opencode": true,
+      "required_for_nontrivial_tasks": true,
+      "final_review_required": true
     },
     "notes": [
       "dai-omni provides continuous self-healing, persistent memory, and unbounded delegation",
       "Memory stores: episodic (events), semantic (facts), procedural (how-to), vector (embeddings)",
       "Healing runs every interval; dry-run by default; approval-gated for sudo/install/git-push",
       "Skill synthesis auto-generates skills from repeated manual patterns (3+ occurrences)"
-    ]
+    ],
+    "overseer": {
+      "model": "dai/auto",
+      "role": "primary task planner, delegation coordinator, final reviewer and result owner",
+      "mandatory_delegation": true,
+      "delegation_mode": "capability_routed",
+      "max_parallel": 4,
+      "minimum_specialists_for_nontrivial_tasks": 1,
+      "verify_worker_results": true,
+      "report_unavailable_workers": true,
+      "preserve_user_model_selection": true
+    }
   }
 }
