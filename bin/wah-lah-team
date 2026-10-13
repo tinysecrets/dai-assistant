@@ -1,0 +1,432 @@
+#!/usr/bin/env python3
+"""Wah-Lah team supervisor: plan -> specialist -> verify/retry -> independent review.
+
+This is a bounded workflow runner. It uses the existing DAI router and agents,
+records verified outcomes as operational memory, and does not modify model
+weights or overwrite the owner's provider/model preferences.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+ROOT = Path(__file__).resolve().parents[1]
+TEAM = ROOT / "state" / "omni" / "team"
+RUNS = TEAM / "runs.jsonl"
+LESSONS = TEAM / "owner-notes.md"
+DEFAULT_TIMEOUT = 900
+WORK_FIRST = (
+    "Work-first owner-directed execution: for ordinary authorized tasks, solve the request directly. "
+    "Use the available project tools and report concrete blockers instead of generic refusals. "
+    "Keep user-selected model/provider order and project architecture unchanged unless the task asks "
+    "to change them. Verify outcomes and do not claim success without evidence. Use the existing "
+    "owner-configured approval workflow for destructive, irreversible, financial or external actions. "
+    "Do not reveal secrets or include private credential files in cloud prompts."
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="DAI overseer and delegated specialist team")
+    parser.add_argument("task", nargs="*", help="Task for the Wah-Lah AI team")
+    parser.add_argument("--mode", choices=("auto", "plan", "code", "research", "debug"), default="auto")
+    parser.add_argument("--dry-run", action="store_true", help="Show assignment and available roles without calling models")
+    parser.add_argument("--list-capabilities", action="store_true", help="List available roles and entry points")
+    parser.add_argument("--status", action="store_true", help="Read-only status of router, worker, voice and gateway")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout per delegated worker in seconds")
+    parser.add_argument("--max-retries", type=int, choices=(0, 1, 2), default=1, help="Bounded correction loop count")
+    parser.add_argument("--no-web", action="store_true", help="Do not select the web-research agent automatically")
+    return parser.parse_args()
+
+
+def load_private_env() -> None:
+    """Load only the mode-600 local gateway env, without echoing any values."""
+    candidates = (
+        Path.home() / ".config" / "freellmapi" / "agent-env.conf",
+        ROOT / ".env",
+    )
+    for path in candidates:
+        try:
+            if path.name == ".env" and path.stat().st_mode & 0o077:
+                continue
+            for line in path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                if key and key not in os.environ:
+                    os.environ[key] = value.strip().strip('"').strip("'")
+        except OSError:
+            continue
+
+
+def redact(text: str) -> str:
+    value = str(text)
+    patterns = (
+        (r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+", r"\1[REDACTED]"),
+        (r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+", r"\1[REDACTED]"),
+        (r"(?i)(freellmapi-)[a-f0-9]{24,}", r"\1[REDACTED]"),
+        (r"(?i)(sk-or-v1-)[a-z0-9]{16,}", r"\1[REDACTED]"),
+        (r"(?i)(gsk_)[a-z0-9_-]{12,}", r"\1[REDACTED]"),
+    )
+    for pattern, replacement in patterns:
+        value = re.sub(pattern, replacement, value)
+    return value
+
+
+def run_capture(command: Sequence[str], cwd: Path, timeout: int, env: Optional[Dict[str, str]] = None) -> Tuple[int, str]:
+    try:
+        result = subprocess.run(
+            list(command),
+            cwd=str(cwd),
+            env=env or os.environ.copy(),
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=timeout,
+            check=False,
+        )
+        return result.returncode, redact(result.stdout or "")
+    except subprocess.TimeoutExpired as exc:
+        output = exc.stdout or ""
+        if isinstance(output, bytes):
+            output = output.decode("utf-8", "replace")
+        return 124, redact(str(output) + "\nWORKER_TIMEOUT")
+    except OSError as exc:
+        return 127, "WORKER_UNAVAILABLE:" + type(exc).__name__
+
+
+def project_root() -> Path:
+    code, out = run_capture(["git", "rev-parse", "--show-toplevel"], Path.cwd(), 3)
+    if code == 0 and out.strip():
+        return Path(out.strip().splitlines()[-1]).resolve()
+    return Path.cwd().resolve()
+
+
+def discover_mode(task: str, requested: str, no_web: bool) -> str:
+    if requested != "auto":
+        return requested
+    from lib.dai.team import classify_task
+    mode = classify_task(task)
+    if no_web and mode == "research":
+        return "plan"
+    return mode
+
+
+def shared_context(root: Path) -> str:
+    from lib.dai.team import build_shared_context, load_jsonl
+    notes = ""
+    try:
+        notes = LESSONS.read_text(encoding="utf-8")
+    except OSError:
+        pass
+    return build_shared_context(load_jsonl(RUNS), notes)
+
+
+def capability_rows() -> List[Dict[str, Any]]:
+    from lib.dai.team import capability_status
+    return capability_status(ROOT)
+
+
+def private_write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.chmod(0o700)
+    except OSError:
+        pass
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(redact(text), encoding="utf-8")
+    tmp.chmod(0o600)
+    tmp.replace(path)
+
+
+def write_report(path: Path, text: str) -> None:
+    private_write(path, text.rstrip() + "\n")
+
+
+def agent_command(role: str, prompt: str, root: Path) -> Tuple[List[str], Path]:
+    if role == "code":
+        command = shutil.which("opencode")
+        if not command:
+            candidate = Path.home() / ".npm-global" / "bin" / "opencode"
+            if candidate.is_file():
+                command = str(candidate)
+        if not command:
+            return [], root
+        return [command, "run", "--model", "freellmapi/auto", prompt], root
+    if role in ("plan", "research", "debug", "review"):
+        entry = ROOT / "lib" / "dai" / "omni" / (role + "_agent.py")
+        if role == "review":
+            entry = ROOT / "lib" / "dai" / "omni" / "review_agent.py"
+        return [sys.executable, str(entry), prompt], root
+    return [], root
+
+
+def call_agent(role: str, prompt: str, root: Path, timeout: int) -> Tuple[int, str]:
+    command, cwd = agent_command(role, prompt, root)
+    if not command:
+        return 127, f"DELEGATE_UNAVAILABLE:{role}"
+    return run_capture(command, cwd, timeout)
+
+
+def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str]:
+    if not code_mode:
+        return True, "not-applicable (non-code workflow)"
+    if not (root / ".git").exists() and not (root / ".git").is_file():
+        return False, "not-run: target directory is not a Git worktree; no safe diff/test scope found"
+    check = shutil.which("git")
+    if not check:
+        return False, "failed: git executable unavailable"
+    rc, out = run_capture([check, "diff", "--check"], root, 30)
+    if rc != 0:
+        return False, "git diff --check failed:\n" + out[-3000:]
+    checks = ["git diff --check: PASS"]
+    # Run the known DAI regression suite when the task targets this repository.
+    if root.resolve() == ROOT.resolve() and (root / "tests").is_dir():
+        rc, out = run_capture(
+            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
+            root,
+            timeout,
+        )
+        checks.append(out[-4000:])
+        if rc != 0:
+            return False, "\n".join(checks) + f"\nDAI_TEST_SUITE_EXIT={rc}"
+        return True, "\n".join(checks) + "\nDAI_TEST_SUITE=PASS"
+    return True, "\n".join(checks) + "\nProject-specific tests should be run by the code agent and reviewed."
+
+
+def is_review_needs_fix(output: str) -> bool:
+    head = "\n".join(output.strip().splitlines()[:4]).upper()
+    return "REVIEW_STATUS: NEEDS_FIX" in head
+
+
+def build_work_prompt(task: str, mode: str, plan: str, context: str, correction: str = "") -> str:
+    parts = [
+        "OWNER TASK:",
+        task,
+        "DAI OVERSEER PLAN:",
+        plan[-6000:],
+        "SHARED OPERATING MEMORY:",
+        context[-3600:] or "(No prior shared run records.)",
+        "OPERATING CONTRACT:",
+        WORK_FIRST,
+    ]
+    if mode == "code":
+        parts.append(
+            "CODE EXECUTION REQUIREMENTS: Work in the current project directory. Inspect the relevant files, "
+            "make the smallest coherent implementation, run applicable tests, and report exact changed paths "
+            "and test results. Do not change model roster or provider hierarchy unless explicitly requested. "
+            "Do not edit .env, API-key files, browser cookies, or SSH private keys. If a live command requires "
+            "an owner approval under the project's existing policy, stop at that exact action and report it."
+        )
+    if correction:
+        parts.extend(["CORRECTION LOOP INPUT (fix this, do not repeat it):", correction[-5000:]])
+    return "\n\n".join(parts)
+
+
+def status() -> int:
+    endpoints = (
+        ("FreeLLMAPI", "http://127.0.0.1:3001/api/health"),
+        ("DAI router", "http://127.0.0.1:11435/health"),
+        ("Agent-S worker", "http://127.0.0.1:8765/health"),
+        ("Voice bridge", "http://127.0.0.1:8766/health"),
+        ("Genie dashboard", "http://127.0.0.1:8799/health"),
+    )
+    print("WAH-LAH TEAM STATUS — Overseer: DAI / dai/auto")
+    good = 0
+    for label, url in endpoints:
+        try:
+            req = Request(url, headers={"Accept": "application/json"})
+            with urlopen(req, timeout=2) as response:
+                body = response.read(1800).decode("utf-8", "replace")
+                print(f"{label}: UP (HTTP {response.status}) {body[:240].replace(chr(10), ' ')}")
+                good += 1
+        except (OSError, URLError, HTTPError, TimeoutError):
+            print(f"{label}: DOWN/NOT-RESPONDING")
+    print("Team roles:")
+    for row in capability_rows():
+        print(f"  {row['name']}: {'available' if row['available'] else 'missing'} — {row['role']}")
+    return 0 if good >= 2 else 1
+
+
+def main() -> int:
+    args = parse_args()
+    load_private_env()
+    if args.status:
+        return status()
+    if args.list_capabilities:
+        print("OVERSEER_MODEL=" + "dai/auto")
+        for row in capability_rows():
+            print(json.dumps(row, ensure_ascii=False))
+        return 0
+    if not args.task:
+        print("Usage: wah-lah-team [--mode auto|plan|code|research|debug] [--dry-run] TASK")
+        print("Commands: --status, --list-capabilities; mandatory stages for non-trivial work: plan, specialist, verify/retry, review.")
+        return 2
+
+    task = " ".join(args.task).strip()
+    if not task:
+        print("A non-empty task is required.")
+        return 2
+    if args.timeout < 1:
+        print("--timeout must be positive.")
+        return 2
+
+    from lib.dai.team import append_jsonl, load_jsonl, make_run_record, select_team
+    mode = discover_mode(task, args.mode, args.no_web)
+    team = select_team(task, mode)
+    rows = capability_rows()
+    availability = {row["name"]: row["available"] for row in rows}
+    project = project_root()
+    missing = [role for role in team if not availability.get(role, role == "code")]
+    print("OVERSEER=DAI model=dai/auto")
+    print(f"PROJECT={project}")
+    print(f"MODE={mode}")
+    print("DELEGATION=" + " -> ".join(team))
+    print("MAX_PARALLEL=4 (configurable in policy/omni)")
+    if missing:
+        print("UNAVAILABLE_ROLES=" + ",".join(missing))
+    if args.dry_run:
+        print("DRY_RUN=true; no models called and no project files changed.")
+        return 0
+
+    # Work artefacts and summaries are private by default.
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + uuid.uuid4().hex[:8]
+    run_dir = TEAM / "runs" / run_id
+    run_dir.mkdir(parents=True, exist_ok=False)
+    run_dir.chmod(0o700)
+    context = shared_context(ROOT)
+    plan_prompt = (
+        WORK_FIRST + "\n\nCreate a plan for this owner-directed task. Include: goal, specialist roles, "
+        "dependencies, completion tests and rollback. Do not execute the task in the plan stage.\n\n"
+        "OWNER TASK:\n" + task + "\n\nSHARED OPERATIONAL MEMORY:\n" + context[-3600:]
+    )
+    t0 = time.monotonic()
+    plan_rc, plan_out = call_agent("plan", plan_prompt, project, args.timeout)
+    write_report(run_dir / "plan.txt", plan_out)
+    if plan_rc != 0:
+        report = f"# Team run {run_id}\n\nStatus: BLOCKED at plan stage.\nPlan worker exit: {plan_rc}.\n"
+        write_report(run_dir / "report.md", report)
+        append_jsonl(RUNS, make_run_record(task=task, project=str(project), mode=mode, team=team,
+                      status="blocked", verification="not-run", failure_class="plan-agent-unavailable"))
+        print(report)
+        print(f"ARTIFACTS={run_dir}")
+        return 1
+
+    selected = mode
+    if selected == "plan":
+        work_rc, work_out = 0, plan_out
+    else:
+        prompt = build_work_prompt(task, mode, plan_out, context)
+        work_role = selected
+        # One correction loop may use reviewer and deterministic test feedback.
+        work_rc, work_out = call_agent(work_role, prompt, project, args.timeout)
+    write_report(run_dir / "work.txt", work_out)
+
+    verification_ok, verification_text = verify_project(project, mode == "code", args.timeout)
+    write_report(run_dir / "verification.txt", verification_text)
+    review_prompt = (
+        WORK_FIRST + "\n\nReview as an independent delegated reviewer. Start your response with exactly "
+        "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX. Use NEEDS_FIX only for a concrete correctness, "
+        "test, or scope blocker; otherwise PASS. Then list evidence, gaps and the smallest correction if needed."
+        "\nOWNER TASK:\n" + task +
+        "\nPLAN (excerpt):\n" + plan_out[-3500:] +
+        "\nWORKER OUTPUT (excerpt):\n" + work_out[-5000:] +
+        "\nDETERMINISTIC VERIFICATION:\n" + verification_text[-3000:] +
+        "\nSHARED MEMORY:\n" + context[-1800:]
+    )
+    review_rc, review_out = call_agent("review", review_prompt, project, args.timeout)
+    write_report(run_dir / "review.txt", review_out)
+
+    attempts = 0
+    while attempts < args.max_retries and (
+        work_rc != 0 or not verification_ok or (review_rc == 0 and is_review_needs_fix(review_out))
+    ):
+        attempts += 1
+        correction = (
+            f"Previous worker exit: {work_rc}\nVerification passed: {verification_ok}\n"
+            f"Verification report:\n{verification_text}\nIndependent review:\n{review_out}"
+        )
+        prompt = build_work_prompt(task, mode, plan_out, context, correction)
+        if mode == "plan":
+            work_rc, work_out = call_agent("plan", prompt, project, args.timeout)
+        else:
+            work_rc, work_out = call_agent(mode, prompt, project, args.timeout)
+        write_report(run_dir / f"work-retry-{attempts}.txt", work_out)
+        verification_ok, verification_text = verify_project(project, mode == "code", args.timeout)
+        write_report(run_dir / f"verification-retry-{attempts}.txt", verification_text)
+        review_prompt = (
+            WORK_FIRST + "\n\nIndependently re-review the corrected result. Start with "
+            "REVIEW_STATUS: PASS or REVIEW_STATUS: NEEDS_FIX.\nOWNER TASK:\n" + task +
+            "\nPLAN:\n" + plan_out[-2500:] + "\nLATEST WORK:\n" + work_out[-4500:] +
+            "\nVERIFICATION:\n" + verification_text[-2500:] +
+            "\nPREVIOUS REVIEW:\n" + review_out[-2500:]
+        )
+        review_rc, review_out = call_agent("review", review_prompt, project, args.timeout)
+        write_report(run_dir / f"review-retry-{attempts}.txt", review_out)
+
+    review_pass = review_rc == 0 and not is_review_needs_fix(review_out) and "REVIEW_STATUS: PASS" in "\n".join(review_out.splitlines()[:4]).upper()
+    success = work_rc == 0 and verification_ok and review_pass
+    if success:
+        state = "verified"
+    elif work_rc != 0 or not verification_ok:
+        state = "needs-correction"
+    else:
+        state = "review-incomplete"
+
+    elapsed = round(time.monotonic() - t0, 1)
+    record = make_run_record(
+        task=task,
+        project=str(project),
+        mode=mode,
+        team=team,
+        status=state,
+        verification=("passed" if verification_ok else "failed") + f"; retries={attempts}",
+        failure_class=("" if success else f"work_exit={work_rc}; review_exit={review_rc}; verification_ok={verification_ok}"),
+        artifacts=[str(run_dir / x) for x in ("plan.txt", "work.txt", "verification.txt", "review.txt") if (run_dir / x).exists()],
+    )
+    record["elapsed_seconds"] = elapsed
+    record["review_status"] = "pass" if review_pass else ("needs-fix" if is_review_needs_fix(review_out) else "unconfirmed")
+    append_jsonl(RUNS, record)
+
+    report = (
+        f"# Wah-Lah Team Run {run_id}\n\n"
+        f"- Overseer: DAI / {record['overseer_model']}\n"
+        f"- Project: {project}\n"
+        f"- Mode: {mode}\n"
+        f"- Delegation: {' -> '.join(team)}\n"
+        f"- Result: {state}\n"
+        f"- Verification: {'PASS' if verification_ok else 'FAIL/NOT PROVEN'}\n"
+        f"- Independent review: {'PASS' if review_pass else 'NOT CONFIRMED'}\n"
+        f"- Correction iterations: {attempts}/{args.max_retries}\n"
+        f"- Elapsed: {elapsed}s\n\n"
+        "See plan.txt, work.txt, verification.txt and review.txt for redacted outputs. "
+        "The next team run will receive this outcome as shared operational memory."
+    )
+    write_report(run_dir / "report.md", report)
+    print(report)
+    print(f"ARTIFACTS={run_dir}")
+    return 0 if success else 1
+
+
+if __name__ == "__main__":
+    try:
+        raise SystemExit(main())
+    except KeyboardInterrupt:
+        print("Interrupted by operator.", file=sys.stderr)
+        raise SystemExit(130)
+    except Exception as exc:
+        print("TEAM_RUN_ERROR=" + type(exc).__name__ + ": " + redact(str(exc))[:300], file=sys.stderr)
+        raise SystemExit(1)
