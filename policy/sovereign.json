@@ -1,6 +1,6 @@
 {
   "version": 3,
-  "mode": "cloud_first_free_rotation",
+  "mode": "hard_zero_cost_free_first",
   "ask_before": [
     "paid_inference",
     "openrouter_paid",
@@ -16,29 +16,29 @@
   ],
   "inference": {
     "default_model": "dai/auto",
-    "strategy": "rotate_top_free_across_providers",
+    "strategy": "FreeLLMAPI gateway first, verified OpenRouter :free models second, local Ollama fallback",
     "router_url": "http://127.0.0.1:11435/v1",
     "openrouter": {
       "enabled": true,
       "paid_enabled": false,
       "free_only_default": true,
-      "note": "Rotate :free models. Paid needs paid_enabled=true or a one-shot openrouter_paid approval token."
+      "note": "Only :free OpenRouter models may route; Google-branded models are excluded. Paid routes cannot be enabled by policy or approval token."
     },
     "groq": {
-      "enabled": true
+      "enabled": false
     },
     "cerebras": {
-      "enabled": true
+      "enabled": false
     },
     "ollama_cloud": {
-      "enabled": true
+      "enabled": false
     },
     "ollama_local": {
       "enabled": true,
-      "role": "last_resort"
+      "role": "fallback"
     },
     "secret_redaction": true,
-    "private_data_must_stay_local": false,
+    "private_data_must_stay_local": true,
     "never_send_to_cloud": [
       ".env",
       "api_keys",
@@ -46,7 +46,11 @@
       "password_dumps",
       "browser_cookies"
     ],
-    "free_cloud_only": false
+    "free_cloud_only": true,
+    "freellmapi": {
+      "enabled": true,
+      "note": "Loopback FreeLLMAPI gateway; keep its own router in free-only mode."
+    }
   },
   "agent_s": {
     "enabled": true,

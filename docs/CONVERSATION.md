@@ -69,8 +69,7 @@ via the `dai-voice` skill — see Path 3).
 
 ### 1c. What conversing does NOT require
 
-- A paid plan. The pool is free-tier models only; paid needs an explicit
-  `openrouter_paid` approval token.
+- A paid plan. The router only offers FreeLLMAPI, OpenRouter `:free` models (excluding Google), and local Ollama. Paid OpenRouter routes are disabled even if an approval token is supplied.
 - The GUI stack. Chat, dry-run and voice all run without Xvfb or gui-agents.
 
 ---
@@ -169,7 +168,7 @@ how to run the "I'm active" reminders.
 
 | Item | Here | On your workstation |
 | --- | --- | --- |
-| Spine, smoke, 487 tests | ✅ verified | ✅ |
+| Spine, smoke, 514 tests | ✅ verified | ✅ |
 | Voice (TTS) + heartbeat blips | ✅ working (CC0 `en_US-joe-medium`) | ✅ |
 | Chat | ❌ no key / HF blocked here | ✅ once a key is in `.env` |
 | Dry-run GUI | ✅ verified | ✅ |

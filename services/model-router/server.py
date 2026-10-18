@@ -20,6 +20,7 @@ import contextlib
 import http.client
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -61,6 +62,7 @@ from lib.dai.routing import (
     keys_needed,
     plan_candidates,
     provider_status,
+    resolve_explicit,
     rotate_index,
 )
 from lib.dai.stats import StatsCollector
@@ -75,6 +77,52 @@ SECRET_ENV_PARTS = ("KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL"
 # Body fields the router consumes and must not forward upstream.
 DAI_BODY_KEYS = ("dai_approval_token", "dai_hint")
 DAI_TOKEN_HEADERS = ("x-dai-approval-token",)
+
+# Conservative detector for credential/private-key patterns that must never
+# be sent to a cloud provider. This is a tripwire, not a complete PII detector.
+_SENSITIVE_TEXT = re.compile(
+    r"-----BEGIN (?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"
+    r"|\bsk-(?:or-v1-)?[A-Za-z0-9_-]{8,}\b"
+    r"|\bgh[pousr]_[A-Za-z0-9]{20,}\b"
+    r"|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"
+    r"|\bxox[baprs]-[A-Za-z0-9-]{20,}\b"
+    r"|\bBearer\s+[A-Za-z0-9._~+/=-]{12,}\b"
+    r"|\b(?:api[_ -]?key|access[_ -]?token|client[_ -]?secret|password|passwd|private[_ -]?key|secret)\s*[:=]\s*\S+",
+    re.IGNORECASE,
+)
+_SENSITIVE_FIELD_NAMES = {
+    "api_key", "apikey", "access_token", "refresh_token", "client_secret",
+    "password", "passwd", "private_key", "secret", "cookie", "authorization",
+}
+
+
+def sensitive_payload_reason(value: Any) -> Optional[str]:
+    """Return a safe classification only; never include the matching value."""
+    def visit(item: Any, key: str = "") -> Optional[str]:
+        key_norm = key.strip().lower().replace("-", "_")
+        if key_norm in _SENSITIVE_FIELD_NAMES and item not in (None, "", [], {}):
+            return "sensitive_field"
+        if isinstance(item, dict):
+            if str(item.get("type", "")).lower() in {"image", "image_url", "input_image"}:
+                return "image_payload"
+            for child_key, child in item.items():
+                reason = visit(child, str(child_key))
+                if reason:
+                    return reason
+            return None
+        if isinstance(item, list):
+            for child in item:
+                reason = visit(child, key)
+                if reason:
+                    return reason
+            return None
+        if isinstance(item, str):
+            if _SENSITIVE_TEXT.search(item):
+                return "credential_pattern"
+            return None
+        return None
+
+    return visit(value)
 
 UNSUPPORTED_PATHS: Dict[str, str] = {
     "/v1/embeddings": "Vellum embeds locally (ONNX) by default; the router does not proxy embeddings.",
@@ -157,7 +205,7 @@ class RouterRuntime:
 
     def provider_enabled(self, name: str) -> bool:
         """A provider is on unless the policy explicitly switches it off."""
-        if self.inference_policy().get("free_cloud_only") is True and name not in ("openrouter", "ollama_local"):
+        if self.inference_policy().get("free_cloud_only") is True and name not in ("freellmapi", "openrouter", "ollama_local"):
             return False
         cfg = self.inference_policy().get(name)
         return not (isinstance(cfg, dict) and cfg.get("enabled") is False)
@@ -166,10 +214,8 @@ class RouterRuntime:
         return [name for name in PROVIDERS if self.provider_enabled(name)]
 
     def paid_openrouter_enabled(self) -> bool:
-        if self.inference_policy().get("free_cloud_only") is True:
-            return False
-        cfg = self.inference_policy().get("openrouter")
-        return bool(isinstance(cfg, dict) and cfg.get("paid_enabled"))
+        """Hard $0 invariant: paid OpenRouter inference is never enabled."""
+        return False
 
     def default_model(self) -> str:
         return str(self.inference_policy().get("default_model") or "dai/auto")
@@ -604,25 +650,46 @@ class RouterHandler(JsonHandler):
         if not isinstance(requested_model, str) or not requested_model.strip():
             raise HttpError(400, "invalid_model", "'model' must be a non-empty string.")
 
-        token = self.approval_token(body)
         preferred = None if requested_model.strip() in ("dai/auto", "auto", "router/auto") else requested_model.strip()
-        plan = rt.plan(task_hint=self.task_hint(body), preferred=preferred)
+        resolved = resolve_explicit(preferred)
+        if resolved and resolved.get("provider") == "openrouter":
+            requested_id = str(resolved.get("model") or "").strip().lower()
+            if requested_id.startswith("google/"):
+                raise HttpError(
+                    403,
+                    "provider_excluded",
+                    "Google-branded model routes are disabled by owner policy.",
+                    extra={"requested_model": requested_model},
+                )
+            if not requested_id.endswith(":free"):
+                raise HttpError(
+                    403,
+                    "paid_models_disabled",
+                    "Hard $0 policy blocks paid OpenRouter models; approval tokens cannot override this rule.",
+                    extra={"requested_model": requested_model},
+                )
+        private_reason = None
+        if rt.inference_policy().get("private_data_must_stay_local") is True:
+            private_reason = sensitive_payload_reason(body)
+            if private_reason and resolved and resolved.get("provider") not in ("ollama_local", "vision-auto"):
+                raise HttpError(
+                    403,
+                    "private_data_local_only",
+                    "This request contains a credential/private-key pattern or image payload; only local Ollama is allowed.",
+                    extra={"sensitive_payload_class": private_reason},
+                )
 
-        # Paid OpenRouter: policy flag, or a one-shot approval token.
-        paid_by_policy = rt.paid_openrouter_enabled()
-        explicit_paid = next(
-            (c for c in plan.candidates if c.origin == "explicit" and c.provider == "openrouter" and not c.free),
-            None,
-        )
-        if explicit_paid is not None and not paid_by_policy and not token:
-            raise HttpError(
-                403,
-                "paid_models_disabled",
-                "Paid OpenRouter models need owner approval: set inference.openrouter.paid_enabled in "
-                "policy/sovereign.json, or send a token from "
-                f"`bin/issue-approval.sh openrouter_paid {explicit_paid.model}`.",
-                extra={"requested_model": requested_model},
-            )
+        plan = rt.plan(task_hint=self.task_hint(body), preferred=preferred)
+        if private_reason:
+            # Do not allow a cloud retry/fallback after the local candidate fails.
+            plan.candidates = [candidate for candidate in plan.candidates if candidate.provider == "ollama_local"]
+            if not plan.candidates:
+                raise HttpError(
+                    503,
+                    "private_data_local_unavailable",
+                    "Local-only policy blocked cloud routing, but no local Ollama candidate is available.",
+                    extra={"sensitive_payload_class": private_reason},
+                )
 
         if not plan.candidates:
             self.log_message(
@@ -656,7 +723,6 @@ class RouterHandler(JsonHandler):
 
         wants_stream = bool(body.get("stream")) and not legacy
         attempts: List[Dict[str, Any]] = []
-        token_spent = False
         request_started = time.monotonic()
 
         for index, cand in enumerate(plan.candidates):
@@ -666,17 +732,9 @@ class RouterHandler(JsonHandler):
             if rt.is_cooled(cand.cooldown_key) or rt.is_cooled(cand.provider_key):
                 attempts.append({"candidate": cand.cooldown_key, "skipped": "cooled_during_request"})
                 continue
-            if cand.provider == "openrouter" and not cand.free and not paid_by_policy:
-                if not token:
-                    attempts.append({"candidate": cand.cooldown_key, "skipped": "paid_model_needs_approval"})
-                    continue
-                if not token_spent:
-                    err, detail = rt.approvals.consume("openrouter_paid", token, cand.model)
-                    if err:
-                        raise HttpError(
-                            403, err, detail or "Approval token rejected.", extra={"requested_model": requested_model}
-                        )
-                    token_spent = True
+            if cand.provider == "openrouter" and not cand.free:
+                attempts.append({"candidate": cand.cooldown_key, "skipped": "hard_zero_cost_paid_model_blocked"})
+                continue
 
             payload = self.upstream_payload(body, cand, stream=wants_stream)
             endpoint = f"{cand.base_url}/completions" if legacy else f"{cand.base_url}/chat/completions"

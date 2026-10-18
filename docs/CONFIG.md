@@ -129,13 +129,15 @@ From `policy/sovereign.json` → `inference`:
 | --- | --- |
 | `default_model` | Model used when a request omits one (shipped: `dai/auto`) |
 | `<provider>.enabled` | `false` removes that provider from every plan |
-| `openrouter.paid_enabled` | `true` allows paid OpenRouter models without a per-request token |
+| `openrouter.paid_enabled` | Retired and ignored; the router always rejects paid OpenRouter models, even if this is `true` or an approval token is supplied |
+| `free_cloud_only` | `true` restricts routing to FreeLLMAPI, OpenRouter `:free` models excluding Google, and local Ollama |
 | `openrouter.free_only_default` | Documents intent; the pool itself only lists `:free` ids |
 | `secret_redaction` | Kept `true`; redaction is not actually optional |
 
-A provider is **on unless the policy explicitly switches it off** — a missing
-section is not a disable. That keeps a trimmed policy file from silently
-narrowing your rotation.
+A provider is **on unless the policy explicitly switches it off**, but the
+hard-$0 allowlist takes precedence: with `free_cloud_only=true`, only FreeLLMAPI,
+OpenRouter `:free`, and local Ollama can be candidates. Paid OpenRouter IDs and
+Google-branded model IDs are rejected independently of configuration.
 
 ### Cooldown behaviour worth knowing
 
@@ -244,7 +246,7 @@ Committed intent. Version 3.
 | --- | --- | --- |
 | `mode` | `cloud_first_free_rotation` | informational |
 | `ask_before` | list of action names | documents what needs approval |
-| `inference` | `default_model`, `router_url`, per-provider `enabled`, `openrouter.paid_enabled`, `secret_redaction`, `never_send_to_cloud` | router |
+| `inference` | `default_model`, `router_url`, per-provider `enabled`, `free_cloud_only`, `secret_redaction`, `never_send_to_cloud` | router |
 | `agent_s` | the safety keys plus every host knob | worker |
 | `approvals` | `file`, `default_ttl_seconds`, `default_max_uses`, `require_scope_match` | approval store |
 | `vellum` | `cli`, `point_inference_at`, `skills_to_install` | `bin/hatch-vellum.sh` |

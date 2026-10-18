@@ -41,6 +41,7 @@ def plan(
     preferred: Optional[str] = None,
     strict: bool = False,
     enabled: Optional[List[str]] = None,
+    free_cloud_only: bool = False,
 ) -> Any:
     return plan_candidates(
         pool=pool if pool is not None else default_pool(),
@@ -53,6 +54,7 @@ def plan(
         preferred=preferred,
         strict_models=strict,
         enabled_providers=enabled,
+        free_cloud_only=free_cloud_only,
     )
 
 
@@ -104,13 +106,17 @@ class TestCandidateBuilding(unittest.TestCase):
         self.assertEqual(result.candidates, [])
         self.assertTrue(result.notes)
 
-    def test_local_pool_comes_before_cloud_pools(self) -> None:
-        env = {**KEY_ENV, "OLLAMA_API_KEY": "oll"}
+    def test_local_pool_is_a_fallback_after_free_rotation(self) -> None:
+        env = {**KEY_ENV, "OLLAMA_API_KEY": "oll", "FREELLMAPI_API_KEY": "free-gateway"}
         pool = {**default_pool(), "ollama_cloud_models": ["cloud-model"], "ollama_local_models": ["hermes3:8b"]}
-        result = plan(env=env, pool=pool)
+        result = plan(env=env, pool=pool, free_cloud_only=True)
         order = [c.provider for c in result.candidates]
-        self.assertEqual(order[0], "ollama_local")
-        self.assertEqual(order[-1], "ollama_cloud")
+        self.assertEqual(order[0], "freellmapi")
+        self.assertIn("openrouter", order)
+        self.assertIn("ollama_local", order)
+        self.assertNotIn("groq", order)
+        self.assertNotIn("cerebras", order)
+        self.assertNotIn("ollama_cloud", order)
         self.assertEqual(order, sorted(order, key=PROVIDER_ORDER.index))
 
     def test_local_defaults_when_pool_key_is_absent(self) -> None:
@@ -147,6 +153,30 @@ class TestCandidateBuilding(unittest.TestCase):
         pool = {**default_pool(), "openrouter_free": ["alpha/one:free", "alpha/one:free", "beta/two:free"]}
         ids = models(plan(pool=pool))
         self.assertEqual(len(ids), len(set(ids)))
+
+    def test_free_cloud_only_uses_gateway_free_models_and_local_ollama(self) -> None:
+        env = {**KEY_ENV, "FREELLMAPI_API_KEY": "gateway-test", "CEREBRAS_API_KEY": "test", "OLLAMA_API_KEY": "test"}
+        result = plan(env=env, free_cloud_only=True)
+        self.assertTrue(result.candidates)
+        self.assertEqual(result.candidates[0].provider, "freellmapi")
+        self.assertTrue(all(c.provider in {"freellmapi", "openrouter", "ollama_local"} for c in result.candidates))
+        self.assertTrue(all(c.provider != "openrouter" or c.model.endswith(":free") for c in result.candidates))
+
+    def test_google_models_are_excluded_from_pool_catalog_and_vision(self) -> None:
+        google = "google/gemma-4-31b-it:free"
+        pool = {**default_pool(), "openrouter_free": [google, "alpha/one:free"], "openrouter_free_vision": [google]}
+        catalog = {"models": [{"id": google, "architecture": {"input_modalities": ["text", "image"]}, "pricing": {"prompt": "0"}}]}
+        result = plan(env=KEY_ENV, pool=pool, catalog=catalog, free_cloud_only=True)
+        self.assertTrue(result.candidates)
+        self.assertNotIn(google, [c.model for c in result.candidates])
+        vision = plan(env=KEY_ENV, pool=pool, catalog=catalog, preferred="dai/vision-auto", free_cloud_only=True)
+        self.assertNotIn(google, [c.model for c in vision.candidates])
+
+    def test_explicit_google_and_paid_openrouter_models_are_not_planned(self) -> None:
+        for requested in ("google/gemma-4-31b-it:free", "openrouter/anthropic/claude-sonnet-4.5"):
+            with self.subTest(requested=requested):
+                result = plan(env=KEY_ENV, preferred=requested, strict=True, free_cloud_only=True)
+                self.assertEqual(result.candidates, [])
 
     def test_explicit_model_is_pinned_first_across_rotation(self) -> None:
         """Regression: round-robin used to rotate the requested model away."""

@@ -173,7 +173,7 @@ Two router-specific fields are consumed and **not** forwarded:
 
 | Field | Purpose |
 | --- | --- |
-| `dai_approval_token` | One-shot token authorising a paid OpenRouter model |
+| `dai_approval_token` | Legacy compatibility field; it is stripped and never authorises paid inference. Paid OpenRouter requests return 403 `paid_models_disabled`. |
 | `dai_hint` | Text used to detect a vision request and boost the vision pool |
 
 The approval token may also be sent as a header: `X-DAI-Approval-Token: <token>`.
@@ -239,7 +239,9 @@ honest behaviour; silently restarting a half-delivered answer is worse.
 | 400 | `messages_required` | `messages` missing or empty |
 | 400 | `invalid_model` | `model` is present but not a usable id |
 | 401 | `unauthorized` | Bearer token required and missing/wrong |
-| 403 | `paid_models_disabled` | Paid OpenRouter model without policy opt-in or a token |
+| 403 | `paid_models_disabled` | Hard $0 policy rejects paid OpenRouter inference; approval tokens cannot override it |
+| 403 | `provider_excluded` | Google-branded model ID is blocked by owner policy |
+| 403 | `private_data_local_only` | Credential/private-key pattern or image payload cannot be pinned to a cloud model |
 | 403 | `missing_approval_token` | Token required and not supplied |
 | 403 | `unknown_approval_token` | Token is not in `policy/approvals.json` |
 | 403 | `approval_expired` | Past its TTL |
@@ -251,6 +253,7 @@ honest behaviour; silently restarting a half-delivered answer is worse.
 | 503 | `no_providers_ready` | No key configured at all, and no local Ollama |
 | 503 | `requested_model_unavailable` | A key exists, but not for the model you asked for |
 | 503 | `all_candidates_failed` | Every candidate failed; see `attempts` |
+| 503 | `private_data_local_unavailable` | Sensitive payload is local-only but no local Ollama candidate is available |
 
 `no_providers_ready` and `requested_model_unavailable` are deliberately
 different: the first means "add any key", the second means "add *that*
@@ -264,7 +267,7 @@ fastest way to diagnose a rotation problem:
   "error": "all_candidates_failed",
   "detail": "Every candidate failed or was rate-limited. Wait for cooldowns to expire, or add another provider key (see KEYS.md).",
   "attempts": [
-    {"candidate": "openrouter:google/gemma-4-31b-it:free", "status": 429,
+    {"candidate": "openrouter:inclusionai/ling-3.0-flash-vl:free", "status": 429,
      "kind": "rate_limit", "error": "Rate limit exceeded", "cooldown_applied": 90.0}
   ]
 }
@@ -342,7 +345,7 @@ widen the rotation.
 #### `GET /v1/status/cooldowns`
 
 ```json
-{"count": 1, "cooldowns": {"openrouter:google/gemma-4-31b-it:free": 1789204199.5}}
+{"count": 1, "cooldowns": {"openrouter:inclusionai/ling-3.0-flash-vl:free": 1789204199.5}}
 ```
 
 Values are absolute unix timestamps: the moment the candidate becomes eligible
@@ -567,7 +570,7 @@ That is intentional: a token authorises one attempt, not one success.
 | 403 | `missing_approval_token` | Live task with no token |
 | 403 | `unknown_approval_token` | Token not in `policy/approvals.json` |
 | 403 | `approval_scope_mismatch` | Token's scope is a different instruction |
-| 403 | `approval_action_mismatch` | Token is for another action (e.g. `openrouter_paid`) |
+| 403 | `approval_action_mismatch` | Token does not match the requested privileged action |
 | 403 | `approval_expired` | Past its TTL |
 | 403 | `approval_exhausted` | Already used `max_uses` times |
 | 403 | `agent_s_disabled_in_policy` | `agent_s.enabled` is false |
@@ -691,7 +694,7 @@ Tokens authorise exactly one privileged action. They live in
 
 ```
 ./bin/issue-approval.sh agent_s_gui_task "exact instruction"   # -> token on stdout
-./bin/issue-approval.sh openrouter_paid  "anthropic/claude-sonnet-4.5"
+# Paid OpenRouter model approvals are retired; paid inference is always rejected.
 ./bin/issue-approval.sh --list | --revoke <token> | --prune
 ./bin/issue-approval.sh --ttl 60 --max-uses 3 --note "why"
 ```
@@ -699,7 +702,7 @@ Tokens authorise exactly one privileged action. They live in
 | Action | Scope is | Sent as |
 | --- | --- | --- |
 | `agent_s_gui_task` | the exact instruction | body `approval_token` |
-| `openrouter_paid` | the model id | body `dai_approval_token` or header `X-DAI-Approval-Token` |
+| `openrouter_paid` | Retired; the router will not honor this action for inference |
 
 Rules the store enforces:
 

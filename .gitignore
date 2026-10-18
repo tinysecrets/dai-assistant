@@ -35,5 +35,7 @@ vendor/
 .idea/
 .vscode/
 
-# Local timestamped backups (archive outside source tree)
+# Local timestamped backups (never stage runtime recovery copies)
+*.bak
+*.bak-*
 config/*.bak*

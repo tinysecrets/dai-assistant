@@ -458,6 +458,79 @@ class TestFailureRotation(RouterCase):
         self.assertEqual(service.get("/ready")[0], 503)
 
 
+class TestSensitivePayloadRouting(RouterCase):
+    def setUp(self) -> None:
+        self.spine = TempSpine(pool=self.pool, policy=self.policy)
+        self.upstream = StubUpstream().start()
+        for match, kwargs in self.rules:
+            self.upstream.rule(match, **kwargs)
+        env = dict(self.router_env)
+        env["DAI_OLLAMA_LOCAL_BASE_URL"] = self.upstream.base_url
+        self.service, self.runtime = start_router(self.spine, self.upstream, env=env)
+        self.base = self.service.base_url
+        self.addCleanup(self.tearDownServices)
+
+    pool = {
+        "openrouter_free": ["alpha/one:free"],
+        "openrouter_free_vision": [],
+        "groq_models": ["groq-fast"],
+        "ollama_cloud_models": ["cloud-model"],
+        "ollama_local_models": ["hermes3:8b"],
+    }
+    policy = {
+        "version": 3,
+        "inference": {"free_cloud_only": True, "private_data_must_stay_local": True},
+    }
+    router_env = {
+        "OPENROUTER_API_KEY": TEST_KEY,
+        "FREELLMAPI_API_KEY": "gateway-test-key",
+        "GROQ_API_KEY": GROQ_KEY,
+    }
+
+    def test_credential_pattern_is_routed_only_to_local_ollama(self) -> None:
+        payload = {"messages": [{"role": "user", "content": "Please use this API key: sk-or-v1-TESTKEY-DO-NOT-LEAK-1234567890"}]}
+        status, body, _headers, _raw = self.chat(payload)
+        self.assertEqual(status, 200, body)
+        calls = self.upstream.calls_for("/chat/completions")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["model"], "hermes3:8b")
+        self.assertTrue(calls[0]["model"].startswith("hermes3:"))
+
+    def test_sensitive_payload_cannot_be_pinned_to_cloud(self) -> None:
+        status, body, _headers, _raw = self.chat(
+            {"model": "openrouter/alpha/one:free", "messages": [{"role": "user", "content": "password=not-a-real-password"}]}
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "private_data_local_only")
+        self.assertEqual(self.upstream.calls_for("/chat/completions"), [])
+
+    def test_image_payload_is_not_sent_to_cloud(self) -> None:
+        payload = {
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": "Describe this picture"},
+                {"type": "image_url", "image_url": {"url": "https://invalid.example/image.png"}},
+            ]}]
+        }
+        status, body, _headers, _raw = self.chat(payload)
+        self.assertEqual(status, 200, body)
+        calls = self.upstream.calls_for("/chat/completions")
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["model"], "hermes3:8b")
+
+    def test_private_route_fails_closed_without_local_candidate(self) -> None:
+        pool = {"openrouter_free": ["alpha/one:free"], "openrouter_free_vision": [], "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}
+        spine = TempSpine(pool=pool, policy=self.policy)
+        self.addCleanup(spine.cleanup)
+        service, _runtime = start_router(spine, self.upstream, env=dict(self.router_env))
+        self.addCleanup(service.stop)
+        status, body, _headers, _raw = service.post(
+            "/v1/chat/completions",
+            {"model": "dai/auto", "messages": [{"role": "user", "content": "api_key=abc123"}]},
+        )
+        self.assertEqual(status, 503)
+        self.assertEqual(body["error"], "private_data_local_unavailable")
+
+
 class TestPaidModelsAndApprovals(RouterCase):
     def issue_token(self, action: str, scope: str) -> str:
         token, _rec = self.runtime.approvals.issue(action, scope)
@@ -467,7 +540,7 @@ class TestPaidModelsAndApprovals(RouterCase):
         status, body, _h, _r = self.chat({"model": "openrouter/anthropic/claude-sonnet-4.5"})
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "paid_models_disabled")
-        self.assertIn("issue-approval.sh", body["detail"])
+        self.assertIn("Hard $0 policy", body["detail"])
         self.assertEqual(self.upstream.calls_for("/chat/completions"), [])
 
     def test_bare_paid_slug_is_also_refused(self) -> None:
@@ -475,46 +548,54 @@ class TestPaidModelsAndApprovals(RouterCase):
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "paid_models_disabled")
 
+    def test_google_free_model_is_excluded(self) -> None:
+        status, body, _h, _r = self.chat({"model": "google/gemma-4-31b-it:free"})
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "provider_excluded")
+        self.assertEqual(self.upstream.calls_for("/chat/completions"), [])
+
     def test_paid_model_runs_with_a_valid_token(self) -> None:
         token = self.issue_token("openrouter_paid", "anthropic/claude-sonnet-4.5")
         status, body, _h, _r = self.chat(
             {"model": "openrouter/anthropic/claude-sonnet-4.5"}, headers={"X-DAI-Approval-Token": token}
         )
-        self.assertEqual(status, 200)
-        self.assertEqual(body["dai_routed"]["model"], "anthropic/claude-sonnet-4.5")
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "paid_models_disabled")
+        self.assertEqual(self.upstream.calls_for("/chat/completions"), [])
 
     def test_token_may_also_travel_in_the_body(self) -> None:
         token = self.issue_token("openrouter_paid", "*")
-        status, _body, _h, _r = self.chat(
+        status, body, _h, _r = self.chat(
             {"model": "openrouter/anthropic/claude-sonnet-4.5", "dai_approval_token": token}
         )
-        self.assertEqual(status, 200)
+        self.assertEqual(status, 403)
+        self.assertEqual(body["error"], "paid_models_disabled")
 
     def test_single_use_token_is_spent(self) -> None:
         token = self.issue_token("openrouter_paid", "*")
-        self.assertEqual(self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token})[0], 200)
-        status, body, _h, _r = self.chat({"model": "openrouter/paid/y"}, headers={"X-DAI-Approval-Token": token})
+        status, body, _h, _r = self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token})
         self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "approval_exhausted")
+        self.assertEqual(body["error"], "paid_models_disabled")
+        self.assertEqual(self.upstream.calls_for("/chat/completions"), [])
 
     def test_wrong_action_token_is_refused(self) -> None:
         token = self.issue_token("agent_s_gui_task", "*")
         status, body, _h, _r = self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token})
         self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "approval_action_mismatch")
+        self.assertEqual(body["error"], "paid_models_disabled")
 
     def test_scope_mismatched_token_is_refused(self) -> None:
         token = self.issue_token("openrouter_paid", "some/other-model")
         status, body, _h, _r = self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": token})
         self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "approval_scope_mismatch")
+        self.assertEqual(body["error"], "paid_models_disabled")
 
     def test_garbage_token_is_refused(self) -> None:
         status, body, _h, _r = self.chat({"model": "openrouter/paid/x"}, headers={"X-DAI-Approval-Token": "nope"})
         self.assertEqual(status, 403)
-        self.assertEqual(body["error"], "unknown_approval_token")
+        self.assertEqual(body["error"], "paid_models_disabled")
 
-    def test_policy_flag_allows_paid_without_a_token(self) -> None:
+    def test_policy_flag_cannot_override_hard_zero_cost(self) -> None:
         policy = {"version": 3, "inference": {"openrouter": {"enabled": True, "paid_enabled": True}}}
         spine = TempSpine(policy=policy)
         self.addCleanup(spine.cleanup)
@@ -524,8 +605,9 @@ class TestPaidModelsAndApprovals(RouterCase):
             "/v1/chat/completions",
             {"model": "openrouter/anthropic/claude-sonnet-4.5", "messages": [{"role": "user", "content": "hi"}]},
         )
-        self.assertEqual(status, 200)
-        self.assertTrue(service.get("/health")[1]["openrouter_paid_enabled"])
+        self.assertEqual(status, 403)
+        self.assertEqual(_body["error"], "paid_models_disabled")
+        self.assertFalse(service.get("/health")[1]["openrouter_paid_enabled"])
 
     def test_paid_models_in_the_pool_are_skipped_not_billed(self) -> None:
         pool = {

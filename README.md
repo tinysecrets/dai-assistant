@@ -9,7 +9,7 @@ Three roles, kept deliberately separate:
 | Role | What it is | Where |
 | --- | --- | --- |
 | Personal assistant | **Vellum** — identity, memory, planning, phone pairing | `vendor/vellum-assistant` (linked by you) |
-| Inference | **model-router** — cloud-first free-tier rotation, local last | `services/model-router` on `:11435` |
+| Inference | **model-router** — hard-$0 rotation: FreeLLMAPI, OpenRouter `:free` (no Google), then local Ollama | `services/model-router` on `:11435` |
 | GUI hands | **agent-s-worker** — bounded Agent S tasks, dry-run by default | `services/agent-s-worker` on `:8765` |
 | Voice | **voice-bridge** — free/offline STT + TTS, relayed through the router | `services/voice-bridge` on `:8766` (optional) |
 
@@ -173,7 +173,7 @@ Or `make help` for the same operations as make targets.
 | `config/free-models.json` | Reference catalog of free models |
 | `policy/sovereign.json` | Intent and safety: what needs approval, what is forbidden |
 | `policy/approvals.json` | Live tokens — created on first use, `0600`, git-ignored |
-| `tests/` | 487 tests: unit, HTTP integration, scripts, drift detection |
+| `tests/` | 514 tests: unit, HTTP integration, scripts, drift detection |
 | `docs/` | API, configuration, operations, architecture |
 | `.env` | Your keys — `0600`, git-ignored |
 | `logs/`, `state/` | Runtime artifacts, git-ignored, fully regenerable |
@@ -237,7 +237,7 @@ curl -s localhost:8765/v1/settings
 ```bash
 make help        # every target
 make lint        # compile + bash -n + service --check
-make test        # 487 tests
+make test        # 514 tests
 make all         # lint + test + smoke — the gate CI runs
 ```
 

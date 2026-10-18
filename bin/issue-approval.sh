@@ -2,7 +2,7 @@
 # Manage one-shot approval tokens for privileged actions.
 #
 #   ./bin/issue-approval.sh agent_s_gui_task "exact instruction"
-#   ./bin/issue-approval.sh openrouter_paid  "anthropic/claude-sonnet-4.5"
+#   Paid inference approvals are disabled by hard-$0 policy.
 #   ./bin/issue-approval.sh --list
 #   ./bin/issue-approval.sh --revoke <token>
 #   ./bin/issue-approval.sh --prune
@@ -77,7 +77,10 @@ SCOPE="${POSITIONAL[1]:-}"
 
 if [[ -z "$ACTION" ]]; then
   usage >&2
-  dai_die "an action is required: agent_s_gui_task | openrouter_paid"
+  dai_die "an action is required: agent_s_gui_task"
+fi
+if [[ "$ACTION" == "openrouter_paid" ]]; then
+  dai_die "paid OpenRouter inference is permanently disabled by the hard-zero-cost policy; an approval token cannot override it"
 fi
 if [[ -z "$SCOPE" ]]; then
   dai_die "a scope is required — the exact instruction (or model id) this token authorises.
@@ -104,5 +107,5 @@ dai_dim "use it once, e.g.:" >&2
 if [[ "$ACTION" == "agent_s_gui_task" ]]; then
   dai_dim "  python3 skills/agent-s-delegate/scripts/delegate_task.py --instruction \"$SCOPE\" --live --approval-token <token>" >&2
 else
-  dai_dim "  curl -H 'X-DAI-Approval-Token: <token>' .../v1/chat/completions -d '{\"model\":\"openrouter/$SCOPE\",...}'" >&2
+  dai_dim "  Use this token only with the integration that validates action '$ACTION'." >&2
 fi

@@ -32,8 +32,8 @@ check:
 	@for svc in $(SERVICES); do \
 		echo "== $$svc"; \
 		CHECK_PY="$(PYTHON)"; \
-		case "$svc" in *voice-bridge*) CHECK_PY="${DAI_VOICE_PY:-$HOME/.local/voice-venv/bin/python}"; test -x "$CHECK_PY" || CHECK_PY="$(PYTHON)";; esac; \
-		"$CHECK_PY" "$svc" --check || exit 1; \
+		case "$$svc" in *voice-bridge*) CHECK_PY="$${DAI_VOICE_PY:-$$HOME/.local/voice-venv/bin/python}"; test -x "$$CHECK_PY" || CHECK_PY="$(PYTHON)";; esac; \
+		"$$CHECK_PY" "$$svc" --check || exit 1; \
 	done
 
 ## test: run the full suite (unit, HTTP integration, shell, consistency)

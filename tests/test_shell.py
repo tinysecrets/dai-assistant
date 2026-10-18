@@ -405,13 +405,15 @@ class TestIssueApproval(unittest.TestCase):
         code, _out, _err = self.issue()
         self.assertEqual(code, 1)
 
-    def test_list_is_valid_json(self):
+    def test_list_is_valid_json_and_paid_inference_is_not_authorisable(self):
         self.issue("agent_s_gui_task", "one")
-        self.issue("openrouter_paid", "anthropic/claude-sonnet-4.5")
+        code, _out, err = self.issue("openrouter_paid", "anthropic/claude-sonnet-4.5")
+        self.assertEqual(code, 1)
+        self.assertIn("hard-zero-cost policy", err)
         code, out, err = self.issue("--list")
         self.assertEqual(code, 0, err)
         doc = json.loads(out)
-        self.assertEqual(len(doc), 2)
+        self.assertEqual(len(doc), 1)
         for entry in doc:
             # Tokens are masked in listings — the full value is printed once, at issue.
             self.assertIn("…", entry["token"])

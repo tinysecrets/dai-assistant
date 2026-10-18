@@ -170,7 +170,7 @@ Add confirmed project-specific facts, names, decisions, and fixes here. Use this
     wrapper_template = r'''#!/usr/bin/env bash
 set -euo pipefail
 ROOT=@DAI_ROOT@
-HOME="${HOME:-/home/justin}"
+HOME="${HOME:?HOME must be set}"
 CMD="open"
 if [ "$#" -gt 0 ]; then CMD="$1"; shift; fi
 load_gateway_env() {
@@ -260,12 +260,12 @@ esac
 Type=Application
 Name=Wah-Lah AI Workbench
 Comment=DAI overseer, delegated AI agents and shared operational memory
-Exec=/home/justin/.local/bin/ai-toolchain-open
+Exec=@AI_TOOLCHAIN_OPEN@
 Icon=utilities-terminal
 Terminal=true
 StartupNotify=true
 Categories=Development;Utility;
-"""
+""".replace("@AI_TOOLCHAIN_OPEN@", str(HOME / ".local/bin/ai-toolchain-open"))
     for path in (
         LAB / "Wah-Lah AI Workbench.desktop",
         HOME / ".local/share/applications/wah-lah-ai-workbench.desktop",
@@ -306,7 +306,7 @@ Categories=Development;Utility;
                 changed = original.replace('root.geometry("470x470")', 'root.geometry("470x510")', 1)
                 changed = changed.replace(
                     function_anchor,
-                    function_anchor + '\ndef open_model_workbench():\n    subprocess.Popen(["/home/justin/.local/bin/ai-toolchain-open"], start_new_session=True)\n',
+                    function_anchor + f'\ndef open_model_workbench():\n    subprocess.Popen([{str(HOME / ".local/bin/ai-toolchain-open")!r}], start_new_session=True)\n',
                     1,
                 )
                 for anchor in button_anchors:

@@ -143,7 +143,7 @@ A failed request also explains itself:
 {
   "error": "all_candidates_failed",
   "attempts": [
-    {"candidate": "openrouter:google/gemma-4-31b-it:free", "status": 429,
+    {"candidate": "openrouter:inclusionai/ling-3.0-flash-vl:free", "status": 429,
      "kind": "rate_limit", "error": "Rate limit exceeded", "cooldown_applied": 90.0}
   ]
 }
@@ -251,7 +251,7 @@ and "the agent can spend money" from becoming ambient capabilities.
 
 ```bash
 TOKEN=$(./bin/issue-approval.sh agent_s_gui_task "Open Chromium and go to example.com")
-./bin/issue-approval.sh openrouter_paid "anthropic/claude-sonnet-4.5"
+# Paid OpenRouter inference is disabled permanently; approval tokens do not override hard-$0 policy.
 ./bin/issue-approval.sh agent_s_gui_task "..." --ttl 300 --max-uses 1 --note "demo"
 ```
 
@@ -266,9 +266,8 @@ curl -X POST localhost:8765/v1/tasks -H 'Content-Type: application/json' \
   -d "{\"instruction\":\"Open Chromium and go to example.com\",
        \"dry_run\":false,\"approval_token\":\"$TOKEN\"}"
 
-# paid model: body field or header
+# Paid OpenRouter request: this always returns 403 under hard-$0 policy
 curl -X POST localhost:11435/v1/chat/completions -H 'Content-Type: application/json' \
-  -H "X-DAI-Approval-Token: $TOKEN" \
   -d '{"model":"openrouter/anthropic/claude-sonnet-4.5",
        "messages":[{"role":"user","content":"hi"}]}'
 ```

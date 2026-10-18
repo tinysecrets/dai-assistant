@@ -109,6 +109,15 @@ class ProviderSpec:
 
 
 PROVIDERS: Dict[str, ProviderSpec] = {
+    "freellmapi": ProviderSpec(
+        name="freellmapi",
+        key_env="FREELLMAPI_API_KEY",
+        default_base_url="http://127.0.0.1:3001/v1",
+        base_url_env="DAI_FREELLMAPI_BASE_URL",
+        pool_key=None,
+        # This alias is explicitly selected by the workstation's free-route hardening.
+        default_models=("free-router",),
+    ),
     "openrouter": ProviderSpec(
         name="openrouter",
         key_env="OPENROUTER_API_KEY",
@@ -155,11 +164,12 @@ PROVIDERS: Dict[str, ProviderSpec] = {
     ),
 }
 
-# Order used when rotating: local free inference first, then cloud free pools.
-PROVIDER_ORDER: Tuple[str, ...] = ("ollama_local", "openrouter", "groq", "cerebras", "ollama_cloud")
+# Order used when rotating: the local FreeLLMAPI gateway first, then verified free OpenRouter models, then local Ollama.
+PROVIDER_ORDER: Tuple[str, ...] = ("freellmapi", "openrouter", "ollama_local", "groq", "cerebras", "ollama_cloud")
 
 # ``provider/`` prefixes a caller may use to pin a model to a backend.
 PREFIX_TO_PROVIDER: Dict[str, str] = {
+    "freellmapi": "freellmapi",
     "groq": "groq",
     "cerebras": "cerebras",
     "ollama-cloud": "ollama_cloud",
@@ -389,13 +399,17 @@ def resolve_explicit(preferred: Optional[str]) -> Optional[Dict[str, str]]:
 
 def _vision_models(pool: Mapping[str, Any], catalog: Mapping[str, Any]) -> List[str]:
     """Vision-capable ids: the explicit pool first, then free catalog entries."""
-    out: List[str] = [str(m) for m in (pool.get("openrouter_free_vision") or []) if m]
+    out: List[str] = [
+        str(m)
+        for m in (pool.get("openrouter_free_vision") or [])
+        if m and not str(m).strip().lower().startswith("google/")
+    ]
     seen = set(out)
     for entry in catalog.get("models") or []:
         if not isinstance(entry, dict):
             continue
         mid = str(entry.get("id") or "")
-        if not mid or mid in seen:
+        if not mid or mid in seen or mid.strip().lower().startswith("google/"):
             continue
         arch = entry.get("architecture") or {}
         modalities = arch.get("input_modalities") or []
@@ -415,7 +429,11 @@ def _text_models(pool: Mapping[str, Any], catalog: Mapping[str, Any], task_hint:
     each group rather than across the whole list, so the intent survives
     round-robin instead of being shuffled straight back out.
     """
-    models: List[str] = [str(m) for m in (pool.get("openrouter_free") or []) if m]
+    models: List[str] = [
+        str(m)
+        for m in (pool.get("openrouter_free") or [])
+        if m and not str(m).strip().lower().startswith("google/")
+    ]
     if models and is_vision_request(task_hint):
         vision = set(_vision_models(pool, catalog))
         primary = [m for m in models if m in vision]
@@ -463,10 +481,14 @@ def plan_candidates(
 
     def make(provider_name: str, model: str, *, origin: str, free: Optional[bool] = None) -> Optional[Candidate]:
         spec = PROVIDERS[provider_name]
-        if free_cloud_only and (
-            provider_name not in ("openrouter", "ollama_local")
-            or (provider_name == "openrouter" and not model.endswith(":free"))
-        ):
+        # Google-branded models are excluded even if the upstream catalog calls them free.
+        if provider_name == "openrouter" and model.strip().lower().startswith("google/"):
+            return None
+        # Hard $0 policy: never plan a paid OpenRouter model. The HTTP layer also
+        # rejects explicit paid requests rather than silently billing or overriding approval policy.
+        if provider_name == "openrouter" and not model.strip().lower().endswith(":free"):
+            return None
+        if free_cloud_only and provider_name not in ("freellmapi", "openrouter", "ollama_local"):
             return None
         if provider_name not in allowed:
             return None

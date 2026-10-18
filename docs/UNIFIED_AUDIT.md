@@ -25,8 +25,8 @@
 |---|---|---|
 | **High** | Omni used to be represented by machine-specific absolute symlinks. | The source is now tracked and portable. |
 | **High** | The original healer could attempt live fixes by default, and delegation could start OpenCode without an approval adapter. | Healing is now dry-run-only. Delegation records intent but starts no subprocess. Omni daemon start/stop/restart/upgrade commands fail closed until proper service-control and approval integration exists. |
-| **High** | `inference.private_data_must_stay_local=false` and `inference.never_send_to_cloud` exist in policy, but source inspection found no router enforcement for either field. | Treat these as declarative policy, **not a privacy boundary**. Do not send confidential prompts on the assumption that those fields keep them local. Add content/data classification and tests before claiming that guarantee. |
-| **Medium** | `inference.free_cloud_only=false`. | Default strategy is free-model rotation and `openrouter.paid_enabled=false`; paid OpenRouter use is separately approval-gated. The policy does not globally prohibit cloud providers or prove that a provider's free tier will remain free. |
+| **Resolved with limitation** | Private-data routing was previously declarative only. | `private_data_must_stay_local=true` now blocks recognizable credential/private-key patterns and image payloads from cloud routes; explicit cloud pins return 403 and auto routes are local-only, failing closed when no local candidate exists. This is a targeted tripwire, not a complete PII classifier: arbitrary confidential prose may not be recognized. Use an explicitly local model for private personal details. |
+| **Resolved 2026-10-17** | `inference.free_cloud_only=false` and paid routes were not blocked globally. | The policy now enables `free_cloud_only=true`; route planning only allows FreeLLMAPI, OpenRouter `:free` (with Google-branded IDs excluded), and local Ollama. The HTTP route returns 403 for paid OpenRouter models regardless of `paid_enabled` or approval tokens. Regression tests cover both checks. |
 | **Medium** | `bin/dai-gemini.py` still recognizes fixed PulseAudio/PipeWire source names for the S22 and G8. | Those names may change after a reconnect/reset. Runtime source discovery and a real desktop-session microphone test remain required. The remote shell session did not have a reachable PulseAudio/PipeWire server, so this audit did not verify the active source. |
 | **Medium** | Current device/registry declarations do not prove live device readiness. | Actual ADB detection for the S22, G8, and A16, Lubuntu peer health, Deskflow, PipeWire default input, and running services still require on-host verification. |
 
@@ -40,7 +40,7 @@
 ## Verification — tested code/tree commit `1237bc0a3cc828206768b06826ea2cf6a5545f89`
 
 - `python3 -m compileall -q lib services skills tests` — passed.
-- `python3 -m unittest discover -s tests -t . -v` — **487 tests passed**, 0 failures on the Debian checkout.
+- `python3 -m unittest discover -s tests -t . -v` — **514 tests passed**, 0 failures on the Debian checkout.
 - Ruff lint and format checks — passed.
 - Shell syntax checks (`bash -n`) — passed.
 - GitHub Actions — **passed**: Python 3.9, 3.11, and 3.12 test/smoke/clean-checkout doctor jobs; Ruff; ShellCheck; repository hygiene.
@@ -55,4 +55,4 @@ These checks run against a clean clone; they do **not** prove that the currently
 4. Refresh provider catalog evidence before asserting every model in the rotation pool is currently available and free.
 5. Removing old device identifiers from earlier Git history, if desired, requires a separate planned history rewrite; sanitizing present-day files does not erase old commits.
 
-**Audit status: 487 tests and the full CI matrix passed on the verified code/test tree. This report correction is documentation-only. Production readiness is still conditional on the release-gate items above.**
+**Audit status: 514 tests and the full CI matrix passed on the verified code/test tree. This report correction is documentation-only. Production readiness is still conditional on the release-gate items above.**
