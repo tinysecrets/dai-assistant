@@ -86,7 +86,7 @@ The dashboard port may expose HTML rather than a JSON health endpoint; a failed 
 
 ## Owner authority and approval boundaries
 
-The team runner is owner-directed: use the owner's model roster and provider order. It does not quietly change the selected models. It must also honor the existing DAI approval policy for live desktop actions, package installs, sudo, credential export, external messages, Git publishing, destructive changes, and paid inference. A task can be carried right up to that boundary and should report the precise action awaiting the owner's authorization.
+The team runner is owner-directed: use the owner's model roster and provider order. It does not quietly change the selected models. It must honor the DAI approval policy for live desktop actions, package installs, sudo, credential export, external messages, Git publishing, and destructive changes. Paid inference is not an approval-gated option: the hard-$0 router rejects it unconditionally. When only paid models are available, report that blocker rather than requesting a paid-inference token.
 
 ## Reports and recovery
 

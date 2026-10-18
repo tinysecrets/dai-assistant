@@ -40,7 +40,7 @@
 ## Verification — tested code/tree commit `1237bc0a3cc828206768b06826ea2cf6a5545f89`
 
 - `python3 -m compileall -q lib services skills tests` — passed.
-- `python3 -m unittest discover -s tests -t . -v` — **514 tests passed**, 0 failures on the Debian checkout.
+- `python3 -m unittest discover -s tests -t . -v` — **515 tests passed**, 0 failures on the Debian checkout.
 - Ruff lint and format checks — passed.
 - Shell syntax checks (`bash -n`) — passed.
 - GitHub Actions — **passed**: Python 3.9, 3.11, and 3.12 test/smoke/clean-checkout doctor jobs; Ruff; ShellCheck; repository hygiene.
@@ -55,4 +55,4 @@ These checks run against a clean clone; they do **not** prove that the currently
 4. Refresh provider catalog evidence before asserting every model in the rotation pool is currently available and free.
 5. Removing old device identifiers from earlier Git history, if desired, requires a separate planned history rewrite; sanitizing present-day files does not erase old commits.
 
-**Audit status: 514 tests and the full CI matrix passed on the verified code/test tree. This report correction is documentation-only. Production readiness is still conditional on the release-gate items above.**
+**Audit status: 515 tests and the full CI matrix passed on the verified code/test tree. This report correction is documentation-only. Production readiness is still conditional on the release-gate items above.**

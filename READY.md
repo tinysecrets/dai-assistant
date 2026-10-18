@@ -102,12 +102,12 @@ fails:
 Practical options, in rough order of reliability:
 
 1. A local VLM through Ollama (for example a vision-capable `llava` or
-   `qwen2.5vl` build), pointed at with `AGENT_S_GROUND_MODEL`. No rate limits,
-   no credits, and it stays on your machine.
-2. A paid OpenRouter vision model, authorised per request with
-   `./bin/issue-approval.sh openrouter_paid "<model>"`.
-3. Retry the free vision pool with a longer `AGENT_S_TIMEOUT` and accept that it
-   will fail often.
+   `qwen2.5vl` build), pointed at with `AGENT_S_GROUND_MODEL`. No provider
+   rate limits or credits are needed, and images stay on your machine.
+2. Use a currently listed OpenRouter vision model ending in `:free`. It may
+   rate-limit; retry or wait for its cooldown.
+3. If neither free route is available, the hard-$0 policy requires the task to
+   fail closed. Paid vision models and `openrouter_paid` tokens are not permitted.
 
 Set the grounding model separately from the reasoning model — they do not have
 to be the same provider:

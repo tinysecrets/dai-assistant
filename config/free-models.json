@@ -1,7 +1,7 @@
 {
   "updated": 1789658443,
   "source": "https://openrouter.ai/api/v1/models",
-  "policy": "strict-free-only; unknown-pricing-blocked",
+  "policy": "strict-free-only; unknown-pricing-blocked; Google-branded models excluded by owner policy",
   "models": [
     {
       "id": "thinkingmachines/inkling-small:free",
@@ -543,141 +543,6 @@
       }
     },
     {
-      "id": "google/gemma-4-31b-it:free",
-      "canonical_slug": "google/gemma-4-31b-it-20260402",
-      "hugging_face_id": "google/gemma-4-31B-it",
-      "name": "Google: Gemma 4 31B (free)",
-      "created": 1775148486,
-      "description": "Gemma 4 31B Instruct is Google DeepMind's 30.7B dense multimodal model supporting text and image input with text output. Features a 256K token context window, configurable thinking/reasoning mode, native function...",
-      "context_length": 262144,
-      "architecture": {
-        "modality": "text+image+video->text",
-        "input_modalities": [
-          "image",
-          "text",
-          "video"
-        ],
-        "output_modalities": [
-          "text"
-        ],
-        "tokenizer": "Gemma",
-        "instruct_type": null
-      },
-      "pricing": {
-        "prompt": "0",
-        "completion": "0"
-      },
-      "top_provider": {
-        "context_length": 262144,
-        "max_completion_tokens": 32768,
-        "is_moderated": false
-      },
-      "per_request_limits": null,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "response_format",
-        "seed",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ],
-      "default_parameters": {
-        "temperature": 1,
-        "top_p": 0.95,
-        "top_k": 64,
-        "frequency_penalty": null,
-        "presence_penalty": null,
-        "repetition_penalty": null
-      },
-      "supported_voices": null,
-      "knowledge_cutoff": null,
-      "expiration_date": null,
-      "links": {
-        "details": "/api/v1/models/google/gemma-4-31b-it-20260402/endpoints"
-      },
-      "benchmarks": {
-        "design_arena": [],
-        "artificial_analysis": {
-          "intelligence_index": 15.4,
-          "coding_index": 43.4,
-          "agentic_index": 6.7
-        }
-      },
-      "reasoning": {
-        "mandatory": false,
-        "default_enabled": false
-      }
-    },
-    {
-      "id": "google/gemma-4-26b-a4b-it:free",
-      "canonical_slug": "google/gemma-4-26b-a4b-it-20260403",
-      "hugging_face_id": "google/gemma-4-26B-A4B-it",
-      "name": "Google: Gemma 4 26B A4B  (free)",
-      "created": 1775227989,
-      "description": "Gemma 4 26B A4B IT is an instruction-tuned Mixture-of-Experts (MoE) model from Google DeepMind. Despite 25.2B total parameters, only 3.8B activate per token during inference \u2014 delivering near-31B quality at...",
-      "context_length": 262144,
-      "architecture": {
-        "modality": "text+image+video->text",
-        "input_modalities": [
-          "image",
-          "text",
-          "video"
-        ],
-        "output_modalities": [
-          "text"
-        ],
-        "tokenizer": "Gemma",
-        "instruct_type": null
-      },
-      "pricing": {
-        "prompt": "0",
-        "completion": "0"
-      },
-      "top_provider": {
-        "context_length": 262144,
-        "max_completion_tokens": 32768,
-        "is_moderated": false
-      },
-      "per_request_limits": null,
-      "supported_parameters": [
-        "include_reasoning",
-        "max_tokens",
-        "reasoning",
-        "response_format",
-        "seed",
-        "temperature",
-        "tool_choice",
-        "tools",
-        "top_p"
-      ],
-      "default_parameters": {
-        "temperature": 1,
-        "top_p": 0.95,
-        "top_k": 64
-      },
-      "supported_voices": null,
-      "knowledge_cutoff": null,
-      "expiration_date": null,
-      "links": {
-        "details": "/api/v1/models/google/gemma-4-26b-a4b-it-20260403/endpoints"
-      },
-      "benchmarks": {
-        "design_arena": [],
-        "artificial_analysis": {
-          "intelligence_index": null,
-          "coding_index": 39.3,
-          "agentic_index": null
-        }
-      },
-      "reasoning": {
-        "mandatory": false,
-        "default_enabled": false
-      }
-    },
-    {
       "id": "dots-studio/dots-3-note-preview:free",
       "canonical_slug": "dots-studio/dots-3-note-preview-20260813",
       "hugging_face_id": null,
@@ -735,7 +600,7 @@
       "hugging_face_id": "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
       "name": "NVIDIA: Nemotron 3 Nano Omni (free)",
       "created": 1777393095,
-      "description": "NVIDIA Nemotron\u2122 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
+      "description": "NVIDIA Nemotron™ 3 Nano Omni is a 30B-A3B open multimodal model designed to function as a perception and context sub-agent in enterprise agent systems. It accepts text, image, video, and...",
       "context_length": 256000,
       "architecture": {
         "modality": "text+image+audio+video->text",

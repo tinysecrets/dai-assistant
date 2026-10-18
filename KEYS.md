@@ -104,31 +104,13 @@ ollama pull hermes3:8b
 
 ---
 
-## Paid models
+## Paid models — disabled unconditionally
 
-Paid OpenRouter models are **off by default**. Requesting one returns
-`403 paid_models_disabled`.
+DAI runs under a hard-$0 inference policy. Paid OpenRouter model IDs always return `403 paid_models_disabled`; neither an approval token nor `inference.openrouter.paid_enabled=true` can override that restriction. The legacy `openrouter_paid` approval action is retired for inference.
 
-Two ways to allow it, in increasing order of commitment:
+Use `dai/auto`, a listed OpenRouter `:free` model, FreeLLMAPI, or local Ollama. Google-branded model IDs are excluded from the active catalog and routing pool. When no allowed free route is available, the router fails closed instead of switching to a paid model.
 
-```bash
-# One request, one model — preferred
-TOKEN=$(./bin/issue-approval.sh openrouter_paid "anthropic/claude-sonnet-4.5")
-curl -s localhost:11435/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -H "X-DAI-Approval-Token: $TOKEN" \
-  -d '{"model":"openrouter/anthropic/claude-sonnet-4.5",
-       "messages":[{"role":"user","content":"hi"}]}'
-```
-
-Or set `inference.openrouter.paid_enabled` to `true` in
-`policy/sovereign.json`, which allows paid models without a per-request token.
-That is a standing decision — the token route is the one that keeps spending
-explicit.
-
-The token can also go in the request body as `dai_approval_token`. It is
-single-use, scoped to that exact model id, and expires after an hour by
-default. See `docs/API.md` and `docs/OPERATIONS.md`.
+Approval tokens still apply to the separate actions documented in `docs/OPERATIONS.md`, including live desktop control and destructive operations.
 
 ---
 

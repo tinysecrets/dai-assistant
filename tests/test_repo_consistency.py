@@ -324,8 +324,12 @@ class TestPolicyFile(unittest.TestCase):
         for key in safety_keys():
             self.assertIn(key, agent_s, f"policy/sovereign.json omits safety key '{key}'")
 
-    def test_paid_inference_is_off_by_default(self):
-        self.assertFalse(self.policy["inference"]["openrouter"]["paid_enabled"], "paid inference must be opt-in")
+    def test_hard_zero_policy_blocks_paid_inference_unconditionally(self):
+        inference = self.policy["inference"]
+        self.assertFalse(inference["openrouter"]["paid_enabled"])
+        self.assertTrue(inference["openrouter"]["free_only_default"])
+        self.assertTrue(inference["free_cloud_only"])
+        self.assertIn("cannot be enabled", inference["openrouter"]["note"].lower())
         self.assertIn("paid_inference", self.policy["ask_before"])
         self.assertIn("openrouter_paid", self.policy["ask_before"])
 
@@ -476,6 +480,19 @@ class TestRotationPool(unittest.TestCase):
         for entry in entries[:50]:
             with self.subTest(entry.get("id")):
                 self.assertIn("id", entry)
+
+    def test_google_models_are_absent_from_active_catalog_and_pools(self):
+        """The owner excludes Google routes even when upstream marks them free."""
+        active_pool_ids = [model for models in self.pool.values() for model in models]
+        catalog_ids = [str(entry.get("id") or "") for entry in self.catalog.get("models", [])]
+        self.assertFalse(
+            [model for model in active_pool_ids if model.strip().lower().startswith("google/")],
+            "Google-branded models must not be eligible through the active rotation pool",
+        )
+        self.assertFalse(
+            [model for model in catalog_ids if model.strip().lower().startswith("google/")],
+            "Google-branded models must not be listed in the selectable free-model catalog",
+        )
 
     def test_catalog_ids_are_provider_prefixed_or_bare(self):
         """Whatever the shape, ids must be strings the router can route on."""

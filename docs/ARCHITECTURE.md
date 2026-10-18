@@ -229,7 +229,7 @@ lists structurally rather than re-classifying message text.
 | `vendor/` | you, by hand | never |
 | `skills-ready/` | `bin/install-vellum-skill.sh` | never |
 
-All git-ignored, all regenerable. Deleting `state/` and `logs/` is safe.
+These paths are git-ignored, but not all are disposable. Logs and caches can usually be regenerated; `state/commander.sqlite3`, task records, runtime policy, and approval records may contain important local state. Back them up before any cleanup; never delete `state/` as a generic repair step.
 
 ---
 
@@ -237,8 +237,7 @@ All git-ignored, all regenerable. Deleting `state/` and `logs/` is safe.
 
 * No overwriting another assistant's working tree (Hermes, NOVA, LIYA, OpenClaw,
   Genie). The policy lists protected paths.
-* No paid provider calls without an explicit policy change or a per-request
-  token.
+* Hard-$0 inference only: paid OpenRouter models are always blocked, and neither policy flags nor approval tokens can override the router's spend guard.
 * No live control of the owner's everyday desktop session.
 * No `sudo` or package installs without the operator running them.
 * No CORS. Both services are localhost-only; a browser page must not be able to

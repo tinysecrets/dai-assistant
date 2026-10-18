@@ -74,8 +74,7 @@ On rotation:
 * Every response carries `dai_routed` telling you which provider and model
   actually answered, and how many attempts it took.
 
-Paid OpenRouter models are refused unless you opt in via policy or supply a
-one-shot approval token.
+**Hard-$0 inference policy:** OpenRouter model IDs must end in `:free`. Paid model requests return `403 paid_models_disabled` even when an approval token is supplied or `paid_enabled` is set to `true`. Google-branded models are excluded from routing and the active catalog.
 
 ### GUI automation you have to approve
 
@@ -173,7 +172,7 @@ Or `make help` for the same operations as make targets.
 | `config/free-models.json` | Reference catalog of free models |
 | `policy/sovereign.json` | Intent and safety: what needs approval, what is forbidden |
 | `policy/approvals.json` | Live tokens — created on first use, `0600`, git-ignored |
-| `tests/` | 514 tests: unit, HTTP integration, scripts, drift detection |
+| `tests/` | 515 tests: unit, HTTP integration, scripts, drift detection |
 | `docs/` | API, configuration, operations, architecture |
 | `.env` | Your keys — `0600`, git-ignored |
 | `logs/`, `state/` | Runtime artifacts, git-ignored, fully regenerable |
@@ -237,7 +236,7 @@ curl -s localhost:8765/v1/settings
 ```bash
 make help        # every target
 make lint        # compile + bash -n + service --check
-make test        # 514 tests
+make test        # 515 tests
 make all         # lint + test + smoke — the gate CI runs
 ```
 
