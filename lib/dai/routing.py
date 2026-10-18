@@ -115,8 +115,9 @@ PROVIDERS: Dict[str, ProviderSpec] = {
         default_base_url="http://127.0.0.1:3001/v1",
         base_url_env="DAI_FREELLMAPI_BASE_URL",
         pool_key=None,
-        # This alias is explicitly selected by the workstation's free-route hardening.
-        default_models=("free-router",),
+        # Use FreeLLMAPI's explicit free-only profile. Its generic ``free-router``
+        # alias can route to a broken openrouter/free backend and return prompt echoes.
+        default_models=("auto:free-only free-first",),
     ),
     "openrouter": ProviderSpec(
         name="openrouter",

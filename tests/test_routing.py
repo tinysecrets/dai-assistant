@@ -96,6 +96,13 @@ class TestResolveExplicit(unittest.TestCase):
 
 
 class TestCandidateBuilding(unittest.TestCase):
+    def test_freellmapi_defaults_to_explicit_free_only_profile(self) -> None:
+        env = {**KEY_ENV, "FREELLMAPI_API_KEY": "gateway-test"}
+        result = plan(env=env, free_cloud_only=True)
+        self.assertTrue(result.candidates)
+        self.assertEqual(result.candidates[0].provider, "freellmapi")
+        self.assertEqual(result.candidates[0].model, "auto:free-only free-first")
+
     def test_no_keys_leaves_only_local(self) -> None:
         result = plan(env={}, pool={**default_pool(), "ollama_local_models": ["hermes3:8b"]})
         self.assertEqual(models(result), ["ollama_local/hermes3:8b"])
