@@ -24,7 +24,7 @@ reaches it immediately.
 - [ ] The test suite passes — `make test`
 - [ ] The spine starts — `./bin/start-spine.sh`
 - [ ] The router answers — `curl -s localhost:11435/health`
-- [ ] The worker answers — `curl -s localhost:8765/health`
+- [ ] The worker answers — `curl -s localhost:8768/health`
 - [ ] `./bin/smoke.sh` reports `failed=0`
 - [ ] `./bin/stop-spine.sh` releases both ports
 
@@ -58,7 +58,7 @@ ollama pull hermes3:8b
 
 Needs nothing beyond Stage 1. This is the safe way to exercise the worker.
 
-- [ ] The worker reports `ready` — `curl -s localhost:8765/health`
+- [ ] The worker reports `ready` — `curl -s localhost:8768/health`
 - [ ] A dry-run task completes —
       `python3 skills/agent-s-delegate/scripts/delegate_task.py --instruction "Open Chromium and go to example.com"`
 - [ ] The result records the exact command — `result.would_run` in the output
@@ -78,7 +78,7 @@ Optional. Every item here is a deliberate step up in what the machine can do.
 - [ ] `tesseract-ocr` installed — `sudo apt install tesseract-ocr`
 - [ ] The spine was restarted so Xvfb comes up — `./bin/dai down && ./bin/dai up`
 - [ ] The agent display answers — `xset -display :99 q`
-- [ ] `live_capable` is true — `curl -s localhost:8765/health`
+- [ ] `live_capable` is true — `curl -s localhost:8768/health`
 - [ ] A **vision-capable** model is reachable (see the note below)
 - [ ] You understand what you are changing: set
       `agent_s.dry_run_default` to `false` in `policy/sovereign.json`, **or**
@@ -86,7 +86,7 @@ Optional. Every item here is a deliberate step up in what the machine can do.
 - [ ] You can issue a token — `./bin/issue-approval.sh agent_s_gui_task "<exact instruction>"`
 - [ ] A live task runs end to end on display `:99`
 - [ ] `bind_owner_live_desktop` is still `false` —
-      `curl -s localhost:8765/v1/settings`
+      `curl -s localhost:8768/v1/settings`
 
 ### The grounding problem, stated plainly
 
@@ -170,7 +170,7 @@ If no assistant workspace exists yet, the installer stages the skills into
 ./bin/dai config             # what actually resolved, secrets removed
 ./bin/dai plan               # what the router would try
 curl -s localhost:11435/v1/status/cooldowns   # who is sitting out, and until when
-curl -s localhost:8765/v1/settings            # includes safety_keys_policy_only
+curl -s localhost:8768/v1/settings            # includes safety_keys_policy_only
 ```
 
 `docs/OPERATIONS.md` has a symptom → cause → fix table for the common failures.

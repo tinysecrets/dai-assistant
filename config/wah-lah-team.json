@@ -50,7 +50,7 @@
   "routes": {
     "freellmapi": "http://100.105.171.108:3001/v1",
     "dai": "http://127.0.0.1:11435/v1",
-    "agent_s_worker": "http://127.0.0.1:8765",
+    "agent_s_worker": "http://127.0.0.1:8768",
     "voice_bridge": "http://127.0.0.1:8766",
     "dashboard": "http://127.0.0.1:8799"
   }

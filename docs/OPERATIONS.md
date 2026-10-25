@@ -41,7 +41,7 @@ git clone <repo> && cd dai-assistant
 
 ./bin/doctor.sh          # what is present, what is missing. Never fails here.
 ./bin/import-keys.sh     # or: cp .env.example .env && nano .env
-./bin/start-spine.sh     # starts router (:11435) + worker (:8765)
+./bin/start-spine.sh     # starts router (:11435) + worker (:8768)
 ./bin/smoke.sh           # verify end to end
 ./bin/dai chat "Say hi"  # once ready_for_chat is true
 ```
@@ -84,7 +84,7 @@ curl -s localhost:11435/health | python3 -m json.tool
 ### Worker: can it do GUI work?
 
 ```bash
-curl -s localhost:8765/health | python3 -m json.tool
+curl -s localhost:8768/health | python3 -m json.tool
 ```
 
 | Field | Meaning |
@@ -183,14 +183,14 @@ A dry run validates the request and records the exact command a live run would
 execute, without touching an input device:
 
 ```bash
-curl -s -X POST localhost:8765/v1/tasks -H 'Content-Type: application/json' \
+curl -s -X POST localhost:8768/v1/tasks -H 'Content-Type: application/json' \
   -d '{"instruction":"Open Chromium and go to example.com","dry_run":true}'
 ```
 
 Then read the result:
 
 ```bash
-curl -s localhost:8765/v1/tasks/<id> | python3 -m json.tool
+curl -s localhost:8768/v1/tasks/<id> | python3 -m json.tool
 ```
 
 Two fields matter:
@@ -229,7 +229,7 @@ sudo apt install xvfb x11-utils
 
 # 3. verify
 ./bin/doctor.sh
-curl -s localhost:8765/health | python3 -c \
+curl -s localhost:8768/health | python3 -c \
   'import json,sys; d=json.load(sys.stdin); print("live_capable:", d["live_capable"])'
 ```
 
@@ -262,7 +262,7 @@ explanatory goes to stderr.
 
 ```bash
 # live GUI task: token in the body
-curl -X POST localhost:8765/v1/tasks -H 'Content-Type: application/json' \
+curl -X POST localhost:8768/v1/tasks -H 'Content-Type: application/json' \
   -d "{\"instruction\":\"Open Chromium and go to example.com\",
        \"dry_run\":false,\"approval_token\":\"$TOKEN\"}"
 

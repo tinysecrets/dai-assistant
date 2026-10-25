@@ -39,7 +39,7 @@ POLL_SECONDS = 3
 def service_urls() -> dict[str, tuple[str, int]]:
     return {
         "router": (env_str("DAI_ROUTER_HOST", "127.0.0.1"), env_int("DAI_ROUTER_PORT", 11435)),
-        "worker": (env_str("DAI_AGENT_S_HOST", "127.0.0.1"), env_int("DAI_AGENT_S_PORT", 8765)),
+        "worker": (env_str("DAI_AGENT_S_HOST", "127.0.0.1"), env_int("DAI_AGENT_S_PORT", 8768)),
         "voice": (env_str("DAI_VOICE_BRIDGE_HOST", "127.0.0.1"), env_int("DAI_VOICE_BRIDGE_PORT", 8766)),
     }
 

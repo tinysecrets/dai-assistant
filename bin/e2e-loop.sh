@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/bin/lib.sh"
 
 ROUTER="http://127.0.0.1:11435"
-WORKER="http://127.0.0.1:8765"
+WORKER="http://127.0.0.1:8768"
 VOICE="http://127.0.0.1:8766"
 DASH="http://127.0.0.1:8799"
 

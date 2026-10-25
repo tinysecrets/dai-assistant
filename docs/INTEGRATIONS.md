@@ -7,7 +7,7 @@ the frame owns routing, policy, approvals, service health and orchestration.
 
 - Vellum: primary personal-assistant runtime, identity and durable memory.
 - Model router: free-tier inference rotation at :11435.
-- Agent-S worker: bounded computer use at :8765.
+- Agent-S worker: bounded computer use at :8768.
 - Voice bridge: local STT/TTS boundary at :8766.
 - Headquarters/dashboard: operator surface at :8799.
 - Ollama: local inference fallback at :11434.

@@ -58,10 +58,10 @@ else
   dai_warn "router is down — run dai up"
 fi
 
-if curl -sf --max-time 3 "http://127.0.0.1:8765/health" >/dev/null; then
+if curl -sf --max-time 3 "http://127.0.0.1:8768/health" >/dev/null; then
   dai_ok "Agent-S worker is ready"
   # Verify dry-run works end-to-end
-  if curl -sf --max-time 3 -X POST http://127.0.0.1:8765/v1/tasks -H 'Content-Type: application/json' -d '{"instruction":"unify check dry run","dry_run":true}' >/dev/null; then
+  if curl -sf --max-time 3 -X POST http://127.0.0.1:8768/v1/tasks -H 'Content-Type: application/json' -d '{"instruction":"unify check dry run","dry_run":true}' >/dev/null; then
     dai_ok "Agent-S dry-run task admission works"
   fi
 else

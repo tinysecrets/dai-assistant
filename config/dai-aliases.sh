@@ -11,7 +11,7 @@ alias dlog='~/dai-assistant/bin/dai logs'
 alias ddoctor='~/dai-assistant/bin/doctor.sh'
 alias de2e='~/dai-assistant/bin/e2e-loop.sh'
 alias dmodels='~/dai-assistant/bin/dai models'
-alias dtasks='curl -s http://127.0.0.1:8765/v1/tasks | python3 -m json.tool | tail -n 100'
+alias dtasks='curl -s http://127.0.0.1:8768/v1/tasks | python3 -m json.tool | tail -n 100'
 alias dcooldowns='curl -s http://127.0.0.1:11435/v1/status/cooldowns | python3 -m json.tool'
 
 # Everything hotkey helper - bind Ctrl+Alt+Space to dai-ask --listen in Debian Settings > Keyboard > Custom Shortcuts

@@ -33,7 +33,7 @@ done
 dai_need python3 curl
 
 ROUTER_URL="http://$(dai_env_get DAI_ROUTER_HOST 127.0.0.1):$(dai_env_get DAI_ROUTER_PORT 11435)"
-WORKER_URL="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$(dai_env_get DAI_AGENT_S_PORT 8765)"
+WORKER_URL="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$(dai_env_get DAI_AGENT_S_PORT 8768)"
 SMOKE_FAILS=0
 SMOKE_PASSES=0
 

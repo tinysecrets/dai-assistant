@@ -564,7 +564,7 @@ class TestSkills(unittest.TestCase):
     def test_policy_worker_url_matches_the_worker_default_port(self):
         policy = json.loads(read(ROOT / "policy/sovereign.json"))
         url = policy["agent_s"]["worker_url"]
-        self.assertTrue(url.endswith(":8765"), f"policy worker_url {url} disagrees with the worker's default port")
+        self.assertTrue(url.endswith(":8768"), f"policy worker_url {url} disagrees with the worker's default port")
 
     def test_policy_router_url_matches_the_router_default_port(self):
         policy = json.loads(read(ROOT / "policy/sovereign.json"))

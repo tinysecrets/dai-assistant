@@ -473,7 +473,7 @@ def default_policy() -> Dict[str, Any]:
             "bind_owner_live_desktop": False,
             "require_approval_token": True,
             "display": ":99",
-            "worker_url": "http://127.0.0.1:8765",
+            "worker_url": "http://127.0.0.1:8768",
             "max_steps_default": 15,
             "max_steps_hard_cap": 20,
             "timeout_seconds": 5,

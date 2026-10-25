@@ -421,7 +421,7 @@ def build_config(runtime: WorkerRuntime, env: Optional[Mapping[str, str]] = None
     return Config(
         root=runtime.root,
         host=env_str("DAI_AGENT_S_HOST", "127.0.0.1", env=source),
-        port=env_int("DAI_AGENT_S_PORT", 8765, env=source),
+        port=env_int("DAI_AGENT_S_PORT", 8768, env=source),
         env_path=runtime.env_path,
         auth_token=env_str("DAI_AGENT_S_TOKEN", "", env=source),
         max_body_bytes=env_int("DAI_MAX_BODY_BYTES", 1024 * 1024, env=source),

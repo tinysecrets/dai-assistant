@@ -4,7 +4,7 @@
   "policy": "policy/sovereign.json",
   "core": {
     "router": "127.0.0.1:11435",
-    "agent_s": "127.0.0.1:8765",
+    "agent_s": "127.0.0.1:8768",
     "voice": "127.0.0.1:8766",
     "dashboard": "127.0.0.1:8799",
     "vellum": "vendor/vellum-assistant"

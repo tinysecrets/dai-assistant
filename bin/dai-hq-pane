@@ -4,7 +4,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$ROOT/bin/lib.sh"
 MODE="${1:-status}"
 R="http://$(dai_env_get DAI_ROUTER_HOST 127.0.0.1):$(dai_env_get DAI_ROUTER_PORT 11435)"
-W="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$(dai_env_get DAI_AGENT_S_PORT 8765)"
+W="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$(dai_env_get DAI_AGENT_S_PORT 8768)"
 V="http://$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1):$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
 while :; do
 clear

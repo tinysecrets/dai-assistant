@@ -39,7 +39,7 @@ fi
 dai_need python3 curl
 
 ROUTER_PORT="$(dai_env_get DAI_ROUTER_PORT 11435)"
-WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8765)"
+WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8768)"
 VOICE_PORT="$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
 ROUTER_URL="http://$(dai_env_get DAI_ROUTER_HOST 127.0.0.1):$ROUTER_PORT"
 WORKER_URL="http://$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1):$WORKER_PORT"
@@ -344,10 +344,32 @@ else
   dai_info "vendor/Agent-S missing — reference only; not needed to run the spine"
 fi
 
-if dai_have vellum || [[ -x "$HOME/.bun/bin/vellum" ]]; then
-  dai_ok "vellum CLI linked"
+if [[ -x "$HOME/.bun/bin/vellum" ]]; then
+  VELLUM_AUDIT_PS="$(PATH="$HOME/.bun/bin:$PATH" timeout 8 "$HOME/.bun/bin/vellum" ps 2>&1 || true)"
+  if [[ "$VELLUM_AUDIT_PS" == *"healthy"* ]]; then
+    VELLUM_AUDIT_HTTP="$(curl -sS --max-time 2 -o /dev/null -w '%{http_code}' http://127.0.0.1:20100/ 2>/dev/null || true)"
+    case "$VELLUM_AUDIT_HTTP" in
+      2??|3??) dai_ok "Vellum local assistant runtime reachable at :20100" ;;
+      401|403) dai_warn "Vellum runtime responds HTTP $VELLUM_AUDIT_HTTP; interactive session authorization is unresolved" ;;
+      *) dai_warn "Vellum reports healthy but :20100 did not answer (HTTP ${VELLUM_AUDIT_HTTP:-none})" ;;
+    esac
+  elif [[ "$VELLUM_AUDIT_PS" == *"sleeping"* ]]; then
+    dai_warn "Vellum CLI works, but the debian-ai assistant runtime is sleeping; wake it before chat"
+  else
+    dai_warn "Vellum CLI exists, but the assistant runtime status could not be verified"
+  fi
 else
-  dai_warn "vellum CLI not found — run vendor/vellum-assistant/setup.sh, then ./bin/hatch-vellum.sh"
+  dai_warn "Vellum CLI not found — run vendor/vellum-assistant/setup.sh, then ./bin/hatch-vellum.sh"
+fi
+
+VELLUM_AUDIT_CONFIG="$HOME/.local/share/vellum-local/assistants/debian-ai/.vellum/workspace/config.json"
+if [[ -f "$VELLUM_AUDIT_CONFIG" ]]; then
+  VELLUM_AUDIT_MCP_COUNT="$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1])).get("mcp",{}).get("servers",{})))' "$VELLUM_AUDIT_CONFIG" 2>/dev/null || printf '0')"
+  if [[ "$VELLUM_AUDIT_MCP_COUNT" =~ ^[0-9]+$ ]] && (( VELLUM_AUDIT_MCP_COUNT > 0 )); then
+    dai_ok "Vellum MCP servers configured: $VELLUM_AUDIT_MCP_COUNT"
+  else
+    dai_warn "Vellum MCP registry is empty; conversational assistant has no direct MCP tool servers"
+  fi
 fi
 
 for rel in skills/agent-s-delegate skills/english-to-code skills/dai-voice; do

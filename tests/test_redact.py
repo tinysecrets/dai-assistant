@@ -37,7 +37,7 @@ class TestPatternRedaction(unittest.TestCase):
 
     def test_known_token_shapes(self) -> None:
         shapes = {
-            "gsk_AbC123XyZ987654321": "gsk_",
+            "gsk_AbC123XyZ987684321": "gsk_",
             "ghp_1234567890abcdefghijklmnopqrstuv": "ghp_",
             "AIza1234567890abcdefghijklmn": "AIza",
             "xoxb-" + "dummytoken1234567890": "xoxb-",

@@ -10,7 +10,7 @@ Three roles, kept deliberately separate:
 | --- | --- | --- |
 | Personal assistant | **Vellum** — identity, memory, planning, phone pairing | `vendor/vellum-assistant` (linked by you) |
 | Inference | **model-router** — hard-$0 rotation: FreeLLMAPI, OpenRouter `:free` (no Google), then local Ollama | `services/model-router` on `:11435` |
-| GUI hands | **agent-s-worker** — bounded Agent S tasks, dry-run by default | `services/agent-s-worker` on `:8765` |
+| GUI hands | **agent-s-worker** — bounded Agent S tasks, dry-run by default | `services/agent-s-worker` on `:8768` |
 | Voice | **voice-bridge** — free/offline STT + TTS, relayed through the router | `services/voice-bridge` on `:8766` (optional) |
 
 The router is the only thing that talks to a provider. The worker talks to the
@@ -33,7 +33,7 @@ cd dai-assistant
 
 ./bin/doctor.sh          # what is present, what is missing — never fails here
 ./bin/import-keys.sh     # or: cp .env.example .env && nano .env
-./bin/start-spine.sh     # router (:11435) + worker (:8765) + voice bridge (:8766)
+./bin/start-spine.sh     # router (:11435) + worker (:8768) + voice bridge (:8766)
 ./bin/smoke.sh           # end-to-end self-test
 ./bin/dai chat "Say hi"  # once ready_for_chat is true
 ```
@@ -226,7 +226,7 @@ Inspect what actually resolved — never guess:
 ./bin/dai config
 ./bin/dai plan
 curl -s localhost:11435/v1/status/keys      # booleans only, never a value
-curl -s localhost:8765/v1/settings
+curl -s localhost:8768/v1/settings
 ```
 
 ---

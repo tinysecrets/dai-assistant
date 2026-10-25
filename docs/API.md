@@ -6,7 +6,7 @@ one error envelope, one redaction rule, and one auth scheme.
 | Service | Default | Purpose |
 | --- | --- | --- |
 | `model-router` | `http://127.0.0.1:11435` | OpenAI-compatible inference with free-model rotation |
-| `agent-s-worker` | `http://127.0.0.1:8765` | Bounded GUI-agent tasks (dry-run by default) |
+| `agent-s-worker` | `http://127.0.0.1:8768` | Bounded GUI-agent tasks (dry-run by default) |
 
 Everything here is captured from the running services, not from intent. To
 re-verify any of it: `./bin/start-spine.sh && ./bin/smoke.sh`.
@@ -547,7 +547,7 @@ Tokens are issued per instruction and spent at admission:
 
 ```
 TOKEN=$(./bin/issue-approval.sh agent_s_gui_task "Open Chromium and go to example.com")
-curl -X POST http://127.0.0.1:8765/v1/tasks \
+curl -X POST http://127.0.0.1:8768/v1/tasks \
   -H 'Content-Type: application/json' \
   -d "{\"instruction\":\"Open Chromium and go to example.com\",\"dry_run\":false,\"approval_token\":\"$TOKEN\"}"
 ```
@@ -823,7 +823,7 @@ worker API, including polling to a terminal status.
 
 ```bash
 R=http://127.0.0.1:11435
-W=http://127.0.0.1:8765
+W=http://127.0.0.1:8768
 
 curl -s $R/v1/models | python3 -m json.tool
 curl -s -X POST $R/v1/chat/completions -H 'Content-Type: application/json' \

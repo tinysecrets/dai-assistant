@@ -59,7 +59,7 @@
     "require_approval_token": true,
     "display": ":99",
     "geometry": "1280x800x24",
-    "worker_url": "http://127.0.0.1:8765",
+    "worker_url": "http://127.0.0.1:8768",
     "venv_path": "~/.local/agent-s-venv",
     "provider": "openai",
     "model": "dai/auto",

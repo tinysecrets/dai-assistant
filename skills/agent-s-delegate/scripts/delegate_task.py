@@ -38,7 +38,7 @@ from typing import Any, Dict, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_POLICY = ROOT / "policy" / "sovereign.json"
-DEFAULT_WORKER = "http://127.0.0.1:8765"
+DEFAULT_WORKER = "http://127.0.0.1:8768"
 
 # Terminal statuses, split by whether they count as success.
 SUCCESS_STATUSES = ("succeeded", "dry_run_complete")

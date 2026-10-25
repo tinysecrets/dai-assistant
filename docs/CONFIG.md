@@ -50,7 +50,7 @@ These five come from `policy/sovereign.json` → `agent_s` and nowhere else:
 The worker reports the list live, so you never have to trust this table:
 
 ```bash
-curl -s localhost:8765/v1/settings | python3 -c \
+curl -s localhost:8768/v1/settings | python3 -c \
   'import json,sys; print(json.load(sys.stdin)["safety_keys_policy_only"])'
 ```
 
@@ -158,7 +158,7 @@ Google-branded model IDs are rejected independently of configuration.
 | Variable | Default | Meaning |
 | --- | --- | --- |
 | `DAI_AGENT_S_HOST` | `127.0.0.1` | Bind address |
-| `DAI_AGENT_S_PORT` | `8765` | Listen port |
+| `DAI_AGENT_S_PORT` | `8768` | Listen port |
 | `DAI_AGENT_S_TOKEN` | *(unset)* | When set, requires `Authorization: Bearer` |
 | `DAI_MODEL_ROUTER` | `http://127.0.0.1:11435` | Where the worker sends inference |
 | `DAI_AGENT_S_CONCURRENCY` | `1` | Simultaneous tasks. One GUI agent per display |
@@ -332,7 +332,7 @@ curl -s localhost:11435/v1/status/keys | python3 -m json.tool
 ./bin/dai plan ollama_local/hermes3:8b
 
 # worker: resolved settings + the safety-key list
-curl -s localhost:8765/v1/settings | python3 -m json.tool
+curl -s localhost:8768/v1/settings | python3 -m json.tool
 
 # both, plus files, keys, services and optional GUI deps
 ./bin/doctor.sh

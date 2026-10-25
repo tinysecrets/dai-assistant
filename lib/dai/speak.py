@@ -83,7 +83,7 @@ def router_url() -> str:
 
 
 def worker_url() -> str:
-    return f"http://{env_str('DAI_AGENT_S_HOST', '127.0.0.1')}:{env_int('DAI_AGENT_S_PORT', 8765)}"
+    return f"http://{env_str('DAI_AGENT_S_HOST', '127.0.0.1')}:{env_int('DAI_AGENT_S_PORT', 8768)}"
 
 
 def voice_url() -> str:

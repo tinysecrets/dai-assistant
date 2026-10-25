@@ -108,7 +108,7 @@ fact.
 ```bash
 ./bin/doctor.sh                        # files, config, keys, services, GUI deps
 ./bin/dai config                       # resolved config, secrets removed
-curl -s localhost:8765/v1/settings     # includes safety_keys_policy_only
+curl -s localhost:8768/v1/settings     # includes safety_keys_policy_only
 curl -s localhost:11435/v1/status/keys # booleans only, never a value
 ./bin/dai test                         # includes the safety-key and redaction tests
 ```

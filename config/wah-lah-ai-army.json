@@ -175,7 +175,7 @@
     },
     "computer_use": {
       "service": "Agent-S",
-      "endpoint": "http://127.0.0.1:8765",
+      "endpoint": "http://127.0.0.1:8768",
       "approval_gated": true,
       "dry_run_default": true
     },

@@ -35,7 +35,7 @@ def gather_health() -> dict:
     r_host = os.environ.get("DAI_ROUTER_HOST", "127.0.0.1")
     r_port = os.environ.get("DAI_ROUTER_PORT", "11435")
     w_host = os.environ.get("DAI_AGENT_S_HOST", "127.0.0.1")
-    w_port = os.environ.get("DAI_AGENT_S_PORT", "8765")
+    w_port = os.environ.get("DAI_AGENT_S_PORT", "8768")
     v_host = os.environ.get("DAI_VOICE_BRIDGE_HOST", "127.0.0.1")
     v_port = os.environ.get("DAI_VOICE_BRIDGE_PORT", "8766")
     return {

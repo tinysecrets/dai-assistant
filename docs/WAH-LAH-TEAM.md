@@ -78,7 +78,7 @@ Health endpoints:
 |---|---|
 | FreeLLMAPI | `http://127.0.0.1:3001/api/health` |
 | DAI model router | `http://127.0.0.1:11435/health` |
-| Agent S worker | `http://127.0.0.1:8765/health` |
+| Agent S worker | `http://127.0.0.1:8768/health` |
 | Voice bridge | `http://127.0.0.1:8766/health` |
 | Dashboard | `http://127.0.0.1:8799` |
 

@@ -54,10 +54,10 @@ if ((DRY)); then
 fi
 
 # Live path: issue token + run live
-if ! dai_http_up "http://127.0.0.1:8765" 2; then dai_die "agent-s-worker not running — dai up"; fi
+if ! dai_http_up "http://127.0.0.1:8768" 2; then dai_die "agent-s-worker not running — dai up"; fi
 
 # Check live_capable
-HEALTH=$(curl -s http://127.0.0.1:8765/health || echo "{}")
+HEALTH=$(curl -s http://127.0.0.1:8768/health || echo "{}")
 LIVE=$(echo "$HEALTH" | python3 -c "import json,sys; print(json.load(sys.stdin).get('live_capable',False))" 2>/dev/null || echo "False")
 if [[ "$LIVE" != "True" ]]; then
   dai_warn "worker not live_capable yet — showing dry-run + blockers"

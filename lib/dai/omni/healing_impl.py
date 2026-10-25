@@ -192,7 +192,7 @@ class OmniHealer:
 
     def _check_worker(self) -> Dict[str, Any]:
         """Check agent-s-worker health."""
-        data = self._http_get_json("http://127.0.0.1:8765/health")
+        data = self._http_get_json("http://127.0.0.1:8768/health")
         if data.get("status") == "unreachable":
             return data
         return {

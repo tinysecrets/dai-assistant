@@ -22,7 +22,7 @@ Vellum Assistant ── identity, memory, planning, approvals
    │                            ─► Ollama Cloud
    │                            ─► Ollama local :11434  [last resort]
    │
-   └──► agent-s-worker :8765
+   └──► agent-s-worker :8768
           │  policy gate: enabled → dry-run? → approval token
           │  queue (bounded, serialised)
           ▼

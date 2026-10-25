@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the spine: model-router (:11435) + agent-s-worker (:8765), and the
+# Start the spine: model-router (:11435) + agent-s-worker (:8768), and the
 # dedicated agent display when Xvfb is installed.
 #
 #   ./bin/start-spine.sh              start (restarts if already running)
@@ -36,7 +36,7 @@ dai_need python3 curl
 ROUTER_HOST="$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)"
 ROUTER_PORT="$(dai_env_get DAI_ROUTER_PORT 11435)"
 WORKER_HOST="$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1)"
-WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8765)"
+WORKER_PORT="$(dai_env_get DAI_AGENT_S_PORT 8768)"
 VOICE_HOST="$(dai_env_get DAI_VOICE_BRIDGE_HOST 127.0.0.1)"
 VOICE_PORT="$(dai_env_get DAI_VOICE_BRIDGE_PORT 8766)"
 ROUTER_URL="http://$ROUTER_HOST:$ROUTER_PORT"

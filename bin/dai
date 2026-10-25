@@ -50,7 +50,7 @@ router_url() {
   printf 'http://%s:%s' "$(dai_env_get DAI_ROUTER_HOST 127.0.0.1)" "$(dai_env_get DAI_ROUTER_PORT 11435)"
 }
 worker_url() {
-  printf 'http://%s:%s' "$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1)" "$(dai_env_get DAI_AGENT_S_PORT 8765)"
+  printf 'http://%s:%s' "$(dai_env_get DAI_AGENT_S_HOST 127.0.0.1)" "$(dai_env_get DAI_AGENT_S_PORT 8768)"
 }
 
 require_router() {

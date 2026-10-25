@@ -42,7 +42,7 @@ if "XDG_RUNTIME_DIR" not in os.environ:
 ROOT = Path(__file__).resolve().parents[1]
 ROUTER_URL = os.environ.get("DAI_ROUTER_URL", "http://127.0.0.1:11435")
 VOICE_URL = os.environ.get("DAI_VOICE_URL", "http://127.0.0.1:8766")
-WORKER_URL = os.environ.get("DAI_WORKER_URL", "http://127.0.0.1:8765")
+WORKER_URL = os.environ.get("DAI_WORKER_URL", "http://127.0.0.1:8768")
 GITHUB_MODELS_URL = "https://models.inference.ai.azure.com/chat/completions"
 
 # Load persistent voice preference if set by dai audition
