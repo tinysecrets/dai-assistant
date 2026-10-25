@@ -21,6 +21,7 @@ import ast
 import json
 import os
 import re
+import runpy
 import shutil
 import subprocess
 import sys
@@ -493,6 +494,12 @@ class TestRotationPool(unittest.TestCase):
             [model for model in catalog_ids if model.strip().lower().startswith("google/")],
             "Google-branded models must not be listed in the selectable free-model catalog",
         )
+        # Keep future live refreshes inside the same policy; upstream free status cannot override it.
+        refresh = runpy.run_path(str(ROOT / "bin/refresh-free-models"), run_name="refresh_free_models_test")
+        google_free = {"id": "google/gemma-4-31b-it:free", "pricing": {"prompt": "0", "completion": "0"}}
+        non_google_free = {"id": "nvidia/nemotron-test:free", "pricing": {"prompt": "0", "completion": "0"}}
+        self.assertFalse(refresh["is_free"](google_free), "refresh must exclude Google routes even when price is zero")
+        self.assertTrue(refresh["is_free"](non_google_free), "refresh must retain genuinely free non-Google routes")
 
     def test_catalog_ids_are_provider_prefixed_or_bare(self):
         """Whatever the shape, ids must be strings the router can route on."""

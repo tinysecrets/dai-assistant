@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071312">
+<title>DAI · Wah-Lah Mobile</title>
+<style>
+:root{color-scheme:dark;--bg:#07100f;--panel:#101d1b;--line:#21413b;--teal:#63e6c4;--muted:#9cb7b0;--ink:#edf8f4;--violet:#a99aff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 80% -10%,#153b34 0,transparent 42%),var(--bg);color:var(--ink);font:16px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100dvh}
+main{width:min(820px,100%);margin:auto;padding:env(safe-area-inset-top) 16px calc(16px + env(safe-area-inset-bottom))}
+header{padding:24px 4px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.mark{width:46px;height:46px;border:1px solid #3b8071;border-radius:15px;display:grid;place-items:center;color:var(--teal);font-size:24px;background:#102823}
+h1{font-size:19px;letter-spacing:.13em;margin:0;font-weight:750}header p{margin:4px 0 0;color:var(--muted);font-size:12px;letter-spacing:.06em}
+.panel{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:18px;padding:15px;margin-top:15px}
+label{display:block;color:var(--muted);font-size:12px;margin-bottom:7px;letter-spacing:.04em}
+input,textarea,button{font:inherit}input,textarea{width:100%;background:#081310;border:1px solid #2b4b43;border-radius:12px;color:var(--ink);padding:13px;outline:none}input:focus,textarea:focus{border-color:var(--teal)}
+button{border:1px solid #398a75;background:linear-gradient(135deg,#1e6856,#15483f);color:white;border-radius:12px;padding:12px 15px;font-weight:650;cursor:pointer}
+button:disabled{opacity:.45;cursor:wait}.secondary{background:#14221f;border-color:#304a43;color:#cfe4dc}.row{display:flex;gap:9px;align-items:center}.row>*{min-width:0}.row input{flex:1}
+.status{font-size:12px;color:var(--muted);margin-top:9px}.status.ok{color:var(--teal)}.status.bad{color:#ffadad}
+#chat{display:flex;flex-direction:column;gap:12px;min-height:150px;margin:14px 0}
+.bubble{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.55;padding:13px 14px;border:1px solid var(--line);border-radius:15px;max-width:100%}
+.user{align-self:flex-end;background:#12352d;border-color:#285d4e}.assistant{align-self:stretch;background:#0d1916}.who{font-size:10px;letter-spacing:.12em;color:var(--teal);margin-bottom:6px}
+form textarea{resize:vertical;min-height:82px;max-height:220px}form .row{justify-content:space-between;margin-top:9px}.hint{font-size:11px;color:var(--muted);line-height:1.5;margin:12px 2px}
+footer{text-align:center;color:#77958c;font-size:10px;letter-spacing:.12em;padding:22px 0}
+@media(min-width:600px){main{padding-top:22px}.panel{padding:18px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="mark">◇</div><div><h1>DAI <span style="color:var(--teal)">/</span> MOBILE</h1><p>WAH-LAH · PRIVATE TAILNET INTERFACE</p></div></header>
+<section class="panel" aria-label="Connection settings">
+<label for="token">DEBIAN ACCESS TOKEN</label>
+<div class="row"><input id="token" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="Paste the token from Debian"><button id="connect" type="button">Connect</button></div>
+<div id="status" class="status">Not connected · DAI stays on your Debian system.</div>
+</section>
+<section class="panel" aria-label="Conversation">
+<div id="chat" aria-live="polite"><div class="bubble assistant"><div class="who">DAI · READY WHEN CONNECTED</div>Connect with your private token, then send a message. Requests route through Debian’s local DAI router using the free-first policy.</div></div>
+<form id="form"><label for="prompt">MESSAGE</label><textarea id="prompt" maxlength="100000" placeholder="Ask DAI anything…" required></textarea><div class="row"><span class="status">Text chat · no tools or shell execution</span><button id="send" type="submit">Send ↗</button></div></form>
+</section>
+<p class="hint">Security: this page accepts only authenticated chat requests from the S22 Tailscale address. It does not expose a terminal, desktop-control actions, provider keys, or arbitrary model selection. Keep your token private.</p>
+<footer>DAI COORDINATION · FREE-FIRST ROUTING · TAILSCALE ONLY</footer>
+</main>
+<script>
+const tokenEl=document.getElementById('token'),statusEl=document.getElementById('status'),connectBtn=document.getElementById('connect'),form=document.getElementById('form'),promptEl=document.getElementById('prompt'),sendBtn=document.getElementById('send'),chat=document.getElementById('chat');
+tokenEl.value=sessionStorage.getItem('dai_phone_token')||'';
+let connected=false,history=[];
+function setStatus(msg,kind=''){statusEl.textContent=msg;statusEl.className='status '+kind}
+function addBubble(role,text){const b=document.createElement('div');b.className='bubble '+role;const who=document.createElement('div');who.className='who';who.textContent=role==='user'?'YOU':'DAI · RESPONSE';const body=document.createElement('div');body.textContent=text;b.append(who,body);chat.appendChild(b);b.scrollIntoView({behavior:'smooth',block:'end'});return body}
+connectBtn.addEventListener('click',async()=>{const t=tokenEl.value.trim();if(t.length<40){setStatus('Enter the access token from Debian.','bad');return}setStatus('Checking secure connection…');connectBtn.disabled=true;try{const r=await fetch('/health',{cache:'no-store'});const d=await r.json();if(!r.ok||!d.ok)throw Error('DAI interface unavailable');const test=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({messages:[{role:'user',content:'Reply with exactly: connection verified'}]})});if(test.status===401)throw Error('Token rejected. Check the token and try again.');if(!test.ok){const e=await test.json().catch(()=>({}));throw Error(e.detail||e.error||('HTTP '+test.status))}const data=await test.json();const answer=data.choices?.[0]?.message?.content;if(!answer)throw Error('Router returned no answer');sessionStorage.setItem('dai_phone_token',t);connected=true;setStatus('Connected · '+(data.model||'DAI free-first router'),'ok');history=[{role:'user',content:'Reply with exactly: connection verified'},{role:'assistant',content:answer}];addBubble('assistant','Connection verified. '+answer)}catch(e){connected=false;setStatus(e.message||'Connection failed.','bad')}finally{connectBtn.disabled=false}});
+form.addEventListener('submit',async e=>{e.preventDefault();const text=promptEl.value.trim(),t=tokenEl.value.trim();if(!text)return;if(!t){setStatus('Connect with your Debian token first.','bad');return}sendBtn.disabled=true;promptEl.disabled=true;addBubble('user',text);history.push({role:'user',content:text});const reply=addBubble('assistant','Thinking through Debian DAI…');setStatus('Routing to a free-first model…');try{const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({messages:history})});const data=await r.json();if(!r.ok)throw Error(data.detail||data.error||('HTTP '+r.status));const answer=data.choices?.[0]?.message?.content;if(typeof answer!=='string')throw Error('No answer returned');reply.textContent=answer;history.push({role:'assistant',content:answer});if(history.length>24)history=history.slice(-24);setStatus('Answered · '+(data.model||'DAI auto'),'ok');promptEl.value=''}catch(err){reply.textContent='Request failed: '+(err.message||'connection error');history.pop();setStatus('Request failed. Check Tailscale and the token.','bad')}finally{sendBtn.disabled=false;promptEl.disabled=false;promptEl.focus()}});
+</script>
+</body>
+</html>

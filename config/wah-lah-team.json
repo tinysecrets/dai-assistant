@@ -48,7 +48,7 @@
     "google_gemini_in_host_fallbacks": false
   },
   "routes": {
-    "freellmapi": "http://127.0.0.1:3001/v1",
+    "freellmapi": "http://100.105.171.108:3001/v1",
     "dai": "http://127.0.0.1:11435/v1",
     "agent_s_worker": "http://127.0.0.1:8765",
     "voice_bridge": "http://127.0.0.1:8766",

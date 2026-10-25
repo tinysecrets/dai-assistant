@@ -45,9 +45,12 @@ def zero(value: object) -> bool:
 def is_free(model: object) -> bool:
     if not isinstance(model, dict):
         return False
-    mid = str(model.get("id") or "")
+    mid = str(model.get("id") or "").strip()
     pricing = model.get("pricing") or {}
+    # Owner policy: Google-branded routes are excluded even when upstream marks them free.
     # The suffix is an additional guard. Zero pricing alone is not enough.
+    if mid.lower().startswith("google/"):
+        return False
     return mid.endswith(":free") and zero(pricing.get("prompt")) and zero(pricing.get("completion"))
 
 

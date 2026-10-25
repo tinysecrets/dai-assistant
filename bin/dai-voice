@@ -112,7 +112,7 @@ dai_ok "router replied"
 dai_info "speaking the reply"
 if curl -sS --max-time 90 -X POST "$ROUTER_URL/v1/audio/speech" \
     -H 'Content-Type: application/json' \
-    -d "$(python3 -c 'import json,sys;print(json.dumps({"input":sys.argv[1],"voice":"en_US-bryce-medium","response_format":"wav"}))' "$RESPONSE")" \
+    -d "$(python3 -c 'import json,sys;print(json.dumps({"input":sys.argv[1],"voice":"default","response_format":"wav"}))' "$RESPONSE")" \
     --output "$OUT" >/dev/null 2>&1; then
   :
 else

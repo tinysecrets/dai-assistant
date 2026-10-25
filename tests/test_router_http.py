@@ -206,6 +206,27 @@ class TestChatRouting(RouterCase):
         self.assertEqual(headers.get("X-DAI-Provider"), "openrouter")
         self.assertEqual(headers.get("X-DAI-Model"), body["dai_routed"]["model"])
 
+        # Regression: a 200 response with content=null must not count as a served answer.
+        self.upstream.rule(
+            "alpha/one:free",
+            status=200,
+            body={
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": None, "reasoning": "reasoning only"},
+                        "finish_reason": "length",
+                    }
+                ]
+            },
+        )
+        status, fallback, fallback_headers, _raw = self.chat({"model": "openrouter/alpha/one:free"})
+        self.assertEqual(status, 200)
+        self.assertEqual(fallback["choices"][0]["message"]["content"], "Hello world")
+        self.assertEqual(fallback["dai_routed"]["model"], "beta/two:free")
+        self.assertEqual(fallback["dai_routed"]["attempts"], 2)
+        self.assertEqual(fallback_headers.get("X-DAI-Provider"), "openrouter")
+
     def test_rotation_spreads_load_across_models(self) -> None:
         served = set()
         for _ in range(6):

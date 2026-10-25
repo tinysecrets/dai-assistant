@@ -18,7 +18,7 @@ def router_base() -> str:
 
 def ask_router(prompt: str, timeout: float = 180.0) -> str:
     body = {
-        "model": "dai/auto",
+        "model": os.environ.get("DAI_PLAN_MODEL", "dai/auto"),
         "messages": [
             {
                 "role": "system",

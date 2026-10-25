@@ -1,0 +1,256 @@
+{
+  "name": "Wah-Lah AI Command Center",
+  "version": 1,
+  "principles": {
+    "architecture": "independent-model-teams-with-nested-specialists",
+    "hard_zero_cost": true,
+    "exclude_google": true,
+    "catalog_is_not_proof_of_availability": true,
+    "require_distinct_actual_models_for_independent_review": true,
+    "never_invent_consensus": true,
+    "preserve_existing_safety_approval_gates": true
+  },
+  "orchestrator": {
+    "name": "DAI",
+    "role": "Supreme Orchestrator",
+    "responsibilities": [
+      "route work",
+      "coordinate independent teams",
+      "compare evidence",
+      "resolve disagreements",
+      "verify results",
+      "report execution outcomes"
+    ]
+  },
+  "teams": [
+    {
+      "id": "alpha",
+      "name": "Team Alpha",
+      "mission": "Flagship reasoning",
+      "lead_role": "flagship reasoning lead",
+      "specialists": [
+        {
+          "id": "alpha-research",
+          "name": "Research & Evidence"
+        },
+        {
+          "id": "alpha-planning",
+          "name": "Planning & Analysis"
+        },
+        {
+          "id": "alpha-review",
+          "name": "Independent Reviewer"
+        }
+      ],
+      "nested_teams": [
+        "research",
+        "analysis"
+      ],
+      "review_required": true,
+      "verified_worker_ids": [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ],
+      "active_worker_rule": "Only exact models returning ordinary answer content with zero-cost routing count as active workers. Reject fallback substitutions and reasoning-only outputs."
+    },
+    {
+      "id": "omega",
+      "name": "Team Omega",
+      "mission": "Coding & engineering",
+      "lead_role": "flagship coding lead",
+      "specialists": [
+        {
+          "id": "omega-architecture",
+          "name": "Architecture"
+        },
+        {
+          "id": "omega-implementation",
+          "name": "Implementation"
+        },
+        {
+          "id": "omega-review",
+          "name": "Independent Code Reviewer"
+        }
+      ],
+      "nested_teams": [
+        "architecture",
+        "implementation",
+        "testing"
+      ],
+      "review_required": true,
+      "verified_worker_ids": [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ],
+      "active_worker_rule": "Only exact models returning ordinary answer content with zero-cost routing count as active workers. Reject fallback substitutions and reasoning-only outputs."
+    },
+    {
+      "id": "sentinel",
+      "name": "Team Sentinel",
+      "mission": "Verification & security",
+      "lead_role": "flagship verification lead",
+      "specialists": [
+        {
+          "id": "sentinel-security",
+          "name": "Security Audit"
+        },
+        {
+          "id": "sentinel-evidence",
+          "name": "Evidence Checker"
+        },
+        {
+          "id": "sentinel-review",
+          "name": "Independent Adversarial Reviewer"
+        }
+      ],
+      "nested_teams": [
+        "security",
+        "verification",
+        "adversarial-review"
+      ],
+      "review_required": true,
+      "verified_worker_ids": [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ],
+      "active_worker_rule": "Only exact models returning ordinary answer content with zero-cost routing count as active workers. Reject fallback substitutions and reasoning-only outputs."
+    },
+    {
+      "id": "forge",
+      "name": "Team Forge",
+      "mission": "Desktop, Linux & ADB",
+      "lead_role": "flagship systems lead",
+      "specialists": [
+        {
+          "id": "forge-linux",
+          "name": "Linux & Filesystem"
+        },
+        {
+          "id": "forge-desktop",
+          "name": "Desktop & Browser Automation"
+        },
+        {
+          "id": "forge-android",
+          "name": "ADB & Android"
+        },
+        {
+          "id": "forge-review",
+          "name": "Independent Operations Reviewer"
+        }
+      ],
+      "nested_teams": [
+        "linux",
+        "desktop-browser",
+        "android-adb",
+        "device-network"
+      ],
+      "review_required": true,
+      "verified_worker_ids": [
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3-super-120b-a12b:free"
+      ],
+      "active_worker_rule": "Only exact models returning ordinary answer content with zero-cost routing count as active workers. Reject fallback substitutions and reasoning-only outputs."
+    }
+  ],
+  "model_selection": {
+    "source": "live FreeLLMAPI catalog",
+    "active_only_after_successful_live_probe": true,
+    "prioritize_families": [
+      "Nemotron Ultra 550B",
+      "Nemotron Super 120B",
+      "Qwen 397B/235B",
+      "Hermes 405B",
+      "Llama 405B",
+      "GLM flagship",
+      "Nex-N2.5 Pro",
+      "strongest verified free coding models"
+    ],
+    "never_auto_substitute_a_smaller_model_without_disclosing_it": true,
+    "team_lead_and_reviewer_must_be_distinct_models": true
+  },
+  "tool_fabric": {
+    "filesystem_shell": {
+      "service": "Debian local OS",
+      "status": "requires live probe"
+    },
+    "computer_use": {
+      "service": "Agent-S",
+      "endpoint": "http://127.0.0.1:8765",
+      "approval_gated": true,
+      "dry_run_default": true
+    },
+    "browser_agent": {
+      "service": "OpenClaw Gateway",
+      "status": "requires live capability probe"
+    },
+    "android": {
+      "service": "ADB + scrcpy + Horus",
+      "status": "requires per-device live probe"
+    },
+    "network": {
+      "service": "Tailscale + SSH",
+      "status": "requires live probe"
+    },
+    "voice": {
+      "service": "Genie voice bridge",
+      "endpoint": "http://127.0.0.1:8766"
+    },
+    "model_gateway": {
+      "service": "DAI model router",
+      "endpoint": "http://127.0.0.1:11435"
+    },
+    "model_catalog": {
+      "service": "FreeLLMAPI",
+      "endpoint": "http://100.105.171.108:3001/v1/models"
+    }
+  },
+  "consensus": {
+    "compare_evidence": true,
+    "preserve_disagreement": true,
+    "synthesis_may_not_fabricate_agreement": true,
+    "execution_requires_authorization": true
+  },
+  "verified_roster": [
+    {
+      "id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+      "display_name": "NVIDIA Nemotron Ultra 550B",
+      "tier": "flagship",
+      "probe_status": "verified_answer",
+      "probe_note": "Returned an ordinary answer through DAI hard-$0 router in Team Alpha test."
+    },
+    {
+      "id": "nvidia/nemotron-3-super-120b-a12b:free",
+      "display_name": "NVIDIA Nemotron Super 120B",
+      "tier": "flagship",
+      "probe_status": "verified_answer",
+      "probe_note": "Returned an ordinary answer through DAI hard-$0 router in Team Alpha test."
+    }
+  ],
+  "inactive_candidates": [
+    {
+      "id": "nex-agi/nex-n2.5-pro:free",
+      "status": "excluded_from_active_roster",
+      "reason": "Requested ID was substituted by poolside/laguna-s-2.1:free; exact-model verification failed."
+    },
+    {
+      "id": "cohere/north-mini-code:free",
+      "status": "not_live_verified",
+      "reason": "Not promoted to active roster until exact model response is verified."
+    },
+    {
+      "id": "thinkingmachines/inkling:free",
+      "status": "not_live_verified",
+      "reason": "Not promoted to active roster until exact model response is verified."
+    },
+    {
+      "id": "poolside/laguna-s-2.1:free",
+      "status": "not_top_tier_active_worker",
+      "reason": "Excluded from flagship roster; never silently substitute it for a selected flagship."
+    },
+    {
+      "id": "nvidia/nemotron-3.5-lightning:free",
+      "status": "excluded_from_active_roster",
+      "reason": "Live tests returned a thinking-process trace instead of ordinary answer content; do not count as a valid reviewer or synthesis."
+    }
+  ]
+}

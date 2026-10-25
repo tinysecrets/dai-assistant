@@ -84,7 +84,7 @@ echo
 # 4. TTS — voice-bridge /v1/audio/speech
 printf '4) TTS (voice-bridge) — /v1/audio/speech\n'
 TTS_FILE=/tmp/dai-e2e-tts.wav
-curl -s --max-time 5 -o "$TTS_FILE" -X POST "$VOICE/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello from D-A-I, wiring check","voice":"en_US-bryce-medium","response_format":"wav"}' || true
+curl -s --max-time 5 -o "$TTS_FILE" -X POST "$VOICE/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello from D-A-I, wiring check","voice":"default","response_format":"wav"}' || true
 if head -c 4 "$TTS_FILE" 2>/dev/null | grep -q "RIFF"; then
   dai_ok "TTS wiring OK — got WAV bytes"
 else
@@ -97,7 +97,7 @@ else
 fi
 # Via router proxy
 TTS_ROUTER_FILE=/tmp/dai-e2e-tts-router.wav
-curl -s --max-time 5 -o "$TTS_ROUTER_FILE" -X POST "$ROUTER/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello via router","voice":"en_US-bryce-medium","response_format":"wav"}' || true
+curl -s --max-time 5 -o "$TTS_ROUTER_FILE" -X POST "$ROUTER/v1/audio/speech" -H 'Content-Type: application/json' -d '{"model":"tts-1","input":"Hello via router","voice":"default","response_format":"wav"}' || true
 if head -c 4 "$TTS_ROUTER_FILE" 2>/dev/null | grep -q "RIFF" || grep -aEq "voice_download_failed|piper" "$TTS_ROUTER_FILE" 2>/dev/null; then
   dai_ok "TTS via router proxy wiring OK — router forwards AUDIO_PATHS"
 fi

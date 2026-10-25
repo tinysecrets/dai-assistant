@@ -142,6 +142,42 @@ def _is_number(value: Any) -> bool:
         return False
 
 
+def _has_user_visible_completion(data: Any) -> bool:
+    """Reject OpenAI-style 200 responses with no assistant text or tool call.
+
+    Some reasoning models return HTTP 200 with content=null after using their
+    token budget on reasoning. Treat that as a failed candidate so rotation can
+    continue rather than reporting a blank answer as a successful chat.
+    Responses without a choices field are left untouched for compatibility with
+    provider-specific success payloads outside the standard Chat Completions shape.
+    """
+    if not isinstance(data, dict) or "choices" not in data:
+        return True
+    choices = data.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return False
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        text = choice.get("text")
+        if isinstance(text, str) and text.strip():
+            return True
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            continue
+        if message.get("tool_calls") or message.get("function_call"):
+            return True
+        refusal = message.get("refusal")
+        if isinstance(refusal, str) and refusal.strip():
+            return True
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            return True
+        if isinstance(content, list) and content:
+            return True
+    return False
+
+
 def build_redactor(env: Mapping[str, str], env_path: Path) -> Redactor:
     """Seed the redactor with every secret-looking value we can see."""
     redactor = Redactor()
@@ -865,6 +901,17 @@ class RouterHandler(JsonHandler):
             "POST", endpoint, payload, cand.headers, timeout=rt.request_timeout, redactor=rt.redactor
         )
         if is_success(status):
+            if isinstance(data, dict) and "choices" in data and not _has_user_visible_completion(data):
+                failure = Failure(
+                    "empty_response",
+                    True,
+                    rt.short_cooldown,
+                    0.0,
+                    "upstream returned no user-visible assistant output",
+                    502,
+                )
+                self._apply_failure(cand, failure, attempts)
+                return "failed", failure
             if isinstance(data, dict):
                 data.setdefault("id", f"chatcmpl-{uuid.uuid4().hex[:12]}")
                 data["dai_routed"] = self._annotation(cand, plan, attempts, stream=False)
