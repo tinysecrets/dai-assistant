@@ -7,9 +7,9 @@ OpenAI-compatible endpoints, proxied by the model-router:
     GET  /health                    status + loaded-model state
     GET  /version                   service identity
 
-Speech-to-text uses faster-whisper (int8, CPU).  Text-to-speech uses piper
-(ONNX, CPU).  Models download once into ~/.local/voice-models, then run fully
-offline forever.
+Speech-to-text uses faster-whisper (int8, CPU). Text-to-speech supports local
+Kokoro ONNX (preferred when configured) with Piper as a tested fallback. Models
+are local and speech generation does not require a cloud API.
 
 Run it with the voice venv's python (it is not on the system path):
 
@@ -62,6 +62,18 @@ VERSION = SERVICE.version
 
 WHISPER_MODEL = os.environ.get("DAI_WHISPER_MODEL", "base.en")
 PIPER_VOICE = os.environ.get("DAI_PIPER_VOICE", "en_US-lessac-medium")
+TTS_ENGINE = os.environ.get("DAI_TTS_ENGINE", "piper").strip().lower()
+KOKORO_VOICE = os.environ.get("DAI_KOKORO_VOICE", "af_heart")
+KOKORO_SPEED = float(os.environ.get("DAI_KOKORO_SPEED", "0.97"))
+KOKORO_MODEL_PATH = Path(os.environ.get(
+    "DAI_KOKORO_MODEL_PATH",
+    str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "kokoro-v1.0.int8.onnx"),
+))
+KOKORO_VOICES_PATH = Path(os.environ.get(
+    "DAI_KOKORO_VOICES_PATH",
+    str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "voices-v1.0.bin"),
+))
+TTS_FALLBACK_PIPER = os.environ.get("DAI_TTS_FALLBACK_PIPER", "1").strip().lower() not in ("0", "false", "no")
 VOICE_MODELS_DIR = Path(os.environ.get("DAI_VOICE_MODELS_DIR", str(Path.home() / ".local" / "voice-models")))
 HOST = os.environ.get("DAI_VOICE_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DAI_VOICE_BRIDGE_PORT", "8766"))
@@ -78,6 +90,7 @@ VOICE_WORKERS = int(os.environ.get("DAI_VOICE_BRIDGE_WORKERS", "4"))
 VOICE_SEM = threading.BoundedSemaphore(VOICE_WORKERS)
 _stt: Dict[str, Optional[object]] = {"model": None, "error": None}
 _tts: Dict[str, Tuple[object, bool]] = {}
+_kokoro: Dict[str, Optional[object]] = {"model": None, "error": None}
 
 SPEECH_FORMATS = {
     "wav": "audio/wav",
@@ -131,13 +144,48 @@ def _load_tts() -> object:
     return obj
 
 
+def _load_kokoro() -> object:
+    if _kokoro["model"] is not None:
+        return _kokoro["model"]
+    if _kokoro["error"]:
+        raise VoiceError(500, "kokoro_load_failed", str(_kokoro["error"]))
+    if not KOKORO_MODEL_PATH.is_file() or not KOKORO_VOICES_PATH.is_file():
+        missing = [str(p) for p in (KOKORO_MODEL_PATH, KOKORO_VOICES_PATH) if not p.is_file()]
+        raise VoiceError(500, "kokoro_files_missing", "Missing local Kokoro files: " + ", ".join(missing))
+    try:
+        module = importlib.import_module("kokoro_onnx")
+        _kokoro["model"] = module.Kokoro(str(KOKORO_MODEL_PATH), str(KOKORO_VOICES_PATH))
+    except Exception as exc:
+        _kokoro["error"] = str(exc)
+        raise VoiceError(500, "kokoro_load_failed", f"Could not load Kokoro: {exc}") from None
+    return _kokoro["model"]
+
+
+def _kokoro_wav(text: str) -> bytes:
+    model = _load_kokoro()
+    audio, sample_rate = model.create(text, voice=KOKORO_VOICE, speed=KOKORO_SPEED, lang="en-us")
+    soundfile = importlib.import_module("soundfile")
+    buffer = io.BytesIO()
+    soundfile.write(buffer, audio, sample_rate, format="WAV", subtype="PCM_16")
+    return buffer.getvalue()
+
+
 def _tts_wav(text: str) -> bytes:
     with TTS_LOCK:
+        if TTS_ENGINE == "kokoro":
+            try:
+                return _kokoro_wav(text)
+            except Exception as exc:
+                if not TTS_FALLBACK_PIPER:
+                    if isinstance(exc, VoiceError):
+                        raise
+                    raise VoiceError(500, "kokoro_synthesis_failed", str(exc)) from None
+                print(f"[voice-bridge] Kokoro failed; falling back to Piper: {exc}", file=sys.stderr, flush=True)
         voice = _load_tts()
         buffer = io.BytesIO()
         with wave.open(buffer, "wb") as wav_file:
             voice.synthesize_wav(text, wav_file)
-    return buffer.getvalue()
+        return buffer.getvalue()
 
 
 def _to_requested_format(wav_bytes: bytes, fmt: str) -> Tuple[bytes, str]:
@@ -188,7 +236,12 @@ def _deps_available() -> Dict[str, bool]:
         except (ImportError, ValueError):
             return False
 
-    return {"faster_whisper": has("faster_whisper"), "piper": has("piper")}
+    return {
+        "faster_whisper": has("faster_whisper"),
+        "piper": has("piper"),
+        "kokoro_onnx": has("kokoro_onnx"),
+        "soundfile": has("soundfile"),
+    }
 
 
 def check_configuration() -> Dict[str, object]:
@@ -206,7 +259,14 @@ def check_configuration() -> Dict[str, object]:
     if not deps["faster_whisper"]:
         warnings.append("faster-whisper not installed — STT will fail (pip install into the voice venv)")
     if not deps["piper"]:
-        warnings.append("piper not installed — TTS will fail (pip install into the voice venv)")
+        warnings.append("piper not installed — fallback TTS will fail (pip install into the voice venv)")
+    if TTS_ENGINE not in ("piper", "kokoro"):
+        problems.append(f"unsupported DAI_TTS_ENGINE={TTS_ENGINE!r}; use piper or kokoro")
+    if TTS_ENGINE == "kokoro":
+        if not deps["kokoro_onnx"] or not deps["soundfile"]:
+            warnings.append("Kokoro selected but kokoro-onnx/soundfile missing from voice venv")
+        if not KOKORO_MODEL_PATH.is_file() or not KOKORO_VOICES_PATH.is_file():
+            warnings.append("Kokoro selected but model/voices files are missing")
     if not FFMPEG:
         warnings.append("ffmpeg not installed — only response_format=wav is available")
     if not VOICE_MODELS_DIR.exists():
@@ -220,11 +280,15 @@ def check_configuration() -> Dict[str, object]:
         "service": SERVICE.name,
         "version": VERSION,
         "whisper_model": WHISPER_MODEL,
-        "voice": PIPER_VOICE,
+        "voice": KOKORO_VOICE if TTS_ENGINE == "kokoro" else PIPER_VOICE,
+        "tts_engine": TTS_ENGINE,
+        "tts_speed": KOKORO_SPEED if TTS_ENGINE == "kokoro" else 1.0,
+        "tts_fallback_piper": TTS_FALLBACK_PIPER,
         "whisper_loaded": _stt["model"] is not None,
-        "voice_loaded": bool(_tts),
+        "voice_loaded": bool(_tts) or _kokoro["model"] is not None,
         "whisper_available": bool(deps["faster_whisper"]),
         "piper_available": bool(deps["piper"]),
+        "kokoro_available": bool(deps["kokoro_onnx"] and deps["soundfile"]),
         "ffmpeg": bool(FFMPEG),
         "voice_models_dir": str(VOICE_MODELS_DIR),
         "speech_formats": list(SPEECH_FORMATS),
@@ -306,8 +370,12 @@ class VoiceHandler(BaseHTTPRequestHandler):
             "version": VERSION,
             "whisper_model": WHISPER_MODEL,
             "whisper_loaded": _stt["model"] is not None,
-            "voice": PIPER_VOICE,
-            "voice_loaded": bool(_tts),
+            "voice": KOKORO_VOICE if TTS_ENGINE == "kokoro" else PIPER_VOICE,
+            "tts_engine": TTS_ENGINE,
+            "tts_speed": KOKORO_SPEED if TTS_ENGINE == "kokoro" else 1.0,
+            "tts_fallback_piper": TTS_FALLBACK_PIPER,
+            "voice_loaded": bool(_tts) or _kokoro["model"] is not None,
+            "kokoro_available": importlib.util.find_spec("kokoro_onnx") is not None and importlib.util.find_spec("soundfile") is not None,
             "voice_models_dir": str(VOICE_MODELS_DIR),
             "ffmpeg": bool(FFMPEG),
             "formats": list(SPEECH_FORMATS),
@@ -356,8 +424,9 @@ class VoiceHandler(BaseHTTPRequestHandler):
         if not isinstance(text, str) or not text.strip():
             raise VoiceError(400, "input_required", "Provide an 'input' string to speak.")
         requested = body.get("voice")
-        if requested is not None and str(requested) not in (PIPER_VOICE, "default"):
-            raise VoiceError(400, "unknown_voice", f"Unknown voice '{requested}'; use '{PIPER_VOICE}'.")
+        allowed_voices = {PIPER_VOICE, KOKORO_VOICE, "default"}
+        if requested is not None and str(requested) not in allowed_voices:
+            raise VoiceError(400, "unknown_voice", f"Unknown voice '{requested}'; use '{KOKORO_VOICE if TTS_ENGINE == 'kokoro' else PIPER_VOICE}' or 'default'.")
         fmt = str(body.get("response_format") or "wav").lower()
         if fmt not in SPEECH_FORMATS:
             raise VoiceError(
@@ -451,7 +520,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         signal.signal(signal.SIGTERM, _stop)
     print(
         f"{SERVICE.name} {VERSION} listening on http://{HOST}:{PORT} "
-        f"(whisper={WHISPER_MODEL}, voice={PIPER_VOICE}, ffmpeg={'yes' if FFMPEG else 'no'})",
+        f"(whisper={WHISPER_MODEL}, tts={TTS_ENGINE}, voice={KOKORO_VOICE if TTS_ENGINE == 'kokoro' else PIPER_VOICE}, ffmpeg={'yes' if FFMPEG else 'no'})",
         flush=True,
     )
     try:

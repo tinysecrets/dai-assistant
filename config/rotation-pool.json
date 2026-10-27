@@ -8,19 +8,18 @@
     "nvidia/nemotron-3-ultra-550b-a55b:free",
     "nvidia/nemotron-3.5-lightning:free",
     "nvidia/nemotron-3.5-super-vl:free",
-    "minimax/minimax-m3.1-flash:free",
     "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
     "cohere/north-mini-code:free",
     "xingchen-agi/xing4.0-29b-a4b:free",
-    "poolside/laguna-xs-2.1:free"
+    "recursive/flint-v1.0:free",
+    "poolside/laguna-xs-2.1:free",
+    "poolside/laguna-s-2.1:free"
   ],
   "openrouter_free_vision": [
     "thinkingmachines/inkling-small:free",
     "thinkingmachines/inkling:free",
     "nvidia/nemotron-3.5-super-vl:free",
-    "minimax/minimax-m3.1-flash:free",
     "dots-studio/dots-3-note-preview:free",
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
   ],
@@ -41,7 +40,7 @@
   "notes": "Groq/Ollama Cloud model IDs may need tweak after you verify your account catalog.",
   "discovery": {
     "source": "https://openrouter.ai/api/v1/models",
-    "updated": 1792433108,
-    "verified_free_count": 15
+    "updated": 1793131766,
+    "verified_free_count": 14
   }
 }

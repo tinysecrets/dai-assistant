@@ -16,7 +16,7 @@
   ],
   "inference": {
     "default_model": "dai/auto",
-    "strategy": "FreeLLMAPI gateway first, verified OpenRouter :free models second, local Ollama fallback",
+    "strategy": "FreeLLMAPI gateway first, verified OpenRouter :free models second; local Ollama disabled",
     "router_url": "http://127.0.0.1:11435/v1",
     "openrouter": {
       "enabled": true,
@@ -34,8 +34,9 @@
       "enabled": false
     },
     "ollama_local": {
-      "enabled": true,
-      "role": "fallback"
+      "enabled": false,
+      "role": "disabled",
+      "note": "Local Ollama disabled by owner preference; do not route requests to local Llama fallback."
     },
     "secret_redaction": true,
     "private_data_must_stay_local": true,
