@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""CLI for OMEGA source persistence, isolated builds and SENTINEL verification."""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import uuid
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from lib.dai.execution import ExecutionClient, ExecutionError
+
+
+def load_json(path: str):
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit("cannot read JSON file: " + str(exc)) from None
+
+
+def parse_json_argument(value: str):
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        raise SystemExit("invalid JSON command argument: " + str(exc)) from None
+
+
+def emit(value):
+    print(json.dumps(value, indent=2, sort_keys=True, ensure_ascii=False, default=str))
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Real DAI execution: OMEGA writes/builds, SENTINEL verifies")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("status")
+    sub.add_parser("projects")
+    write = sub.add_parser("write")
+    write.add_argument("--project", required=True)
+    write.add_argument("--manifest", required=True, help="JSON object containing a files array")
+    write.add_argument("--overwrite", action="store_true")
+    run = sub.add_parser("run")
+    run.add_argument("--project", required=True)
+    run.add_argument("--argv-json", required=True, help="JSON argv array")
+    run.add_argument("--cwd", default=".")
+    run.add_argument("--timeout", type=int, default=120)
+    verify = sub.add_parser("verify")
+    verify.add_argument("--project", required=True)
+    verify.add_argument("--tests", required=True, help="JSON file containing argv arrays")
+    verify.add_argument("--required-file", action="append", default=[])
+    verify.add_argument("--timeout", type=int, default=120)
+    dispatch = sub.add_parser("dispatch", help="write, compile and independently verify a source manifest")
+    dispatch.add_argument("--project", required=True)
+    dispatch.add_argument("--manifest", required=True)
+    dispatch.add_argument("--tests", required=True)
+    dispatch.add_argument("--required-file", action="append", default=[])
+    dispatch.add_argument("--build-argv-json", default='["python3","-m","compileall","-q","."]')
+    dispatch.add_argument("--timeout", type=int, default=120)
+    snapshot = sub.add_parser("snapshot", help="persist and independently verify the current Git worktree")
+    snapshot.add_argument("--project", default="dai-snapshot-" + uuid.uuid4().hex[:16])
+    snapshot.add_argument("--root", type=Path, default=ROOT)
+    snapshot.add_argument("--timeout", type=int, default=180)
+    args = parser.parse_args()
+
+    try:
+        omega = ExecutionClient("omega")
+        sentinel = ExecutionClient("sentinel")
+        if args.command == "status":
+            result = {"omega": omega.health(), "sentinel": sentinel.health()}
+        elif args.command == "projects":
+            result = omega.projects()
+        elif args.command == "write":
+            manifest = load_json(args.manifest)
+            if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), list):
+                raise SystemExit("manifest must be an object with a files array")
+            result = omega.write_files(args.project, manifest["files"], args.overwrite)
+        elif args.command == "run":
+            argv = parse_json_argument(args.argv_json)
+            if not isinstance(argv, list):
+                raise SystemExit("--argv-json must be a JSON array")
+            result = omega.run(args.project, argv, args.cwd, args.timeout)
+        elif args.command == "verify":
+            tests = load_json(args.tests)
+            if not isinstance(tests, list):
+                raise SystemExit("--tests must contain an array of argv arrays")
+            result = sentinel.verify(args.project, tests, args.required_file, args.timeout)
+        elif args.command == "snapshot":
+            result = omega.snapshot_build_verify(args.root, args.project, args.timeout)
+        else:
+            manifest = load_json(args.manifest)
+            tests = load_json(args.tests)
+            build_argv = parse_json_argument(args.build_argv_json)
+            if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), list):
+                raise SystemExit("manifest must be an object with a files array")
+            if not isinstance(tests, list) or not isinstance(build_argv, list):
+                raise SystemExit("tests and build argv must be JSON arrays")
+            written = omega.write_files(args.project, manifest["files"])
+            built = omega.run(args.project, build_argv, ".", args.timeout)
+            if not built.get("ok"):
+                result = {"write": written, "build": built, "verification": None, "ok": False}
+            else:
+                checked = sentinel.verify(args.project, tests, args.required_file, args.timeout)
+                result = {"write": written, "build": built, "verification": checked,
+                          "ok": checked.get("verdict") == "PASS" and checked.get("ok") is True}
+        emit(result)
+        if args.command == "verify":
+            return 0 if result.get("verdict") == "PASS" and result.get("ok") is True else 2
+        if args.command in ("dispatch", "snapshot", "run"):
+            return 0 if result.get("ok") is True else 1
+        return 0
+    except ExecutionError as exc:
+        emit({"ok": False, "http_status": exc.status, "error": exc.payload})
+        return 2
+    except (OSError, ValueError, RuntimeError, PermissionError) as exc:
+        emit({"ok": False, "error": str(exc)})
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -65,14 +65,18 @@ PIPER_VOICE = os.environ.get("DAI_PIPER_VOICE", "en_US-lessac-medium")
 TTS_ENGINE = os.environ.get("DAI_TTS_ENGINE", "piper").strip().lower()
 KOKORO_VOICE = os.environ.get("DAI_KOKORO_VOICE", "af_heart")
 KOKORO_SPEED = float(os.environ.get("DAI_KOKORO_SPEED", "0.97"))
-KOKORO_MODEL_PATH = Path(os.environ.get(
-    "DAI_KOKORO_MODEL_PATH",
-    str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "kokoro-v1.0.int8.onnx"),
-))
-KOKORO_VOICES_PATH = Path(os.environ.get(
-    "DAI_KOKORO_VOICES_PATH",
-    str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "voices-v1.0.bin"),
-))
+KOKORO_MODEL_PATH = Path(
+    os.environ.get(
+        "DAI_KOKORO_MODEL_PATH",
+        str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "kokoro-v1.0.int8.onnx"),
+    )
+)
+KOKORO_VOICES_PATH = Path(
+    os.environ.get(
+        "DAI_KOKORO_VOICES_PATH",
+        str(Path.home() / ".venice-core" / "state" / "voice" / "kokoro" / "voices-v1.0.bin"),
+    )
+)
 TTS_FALLBACK_PIPER = os.environ.get("DAI_TTS_FALLBACK_PIPER", "1").strip().lower() not in ("0", "false", "no")
 VOICE_MODELS_DIR = Path(os.environ.get("DAI_VOICE_MODELS_DIR", str(Path.home() / ".local" / "voice-models")))
 HOST = os.environ.get("DAI_VOICE_BRIDGE_HOST", "127.0.0.1")
@@ -375,7 +379,8 @@ class VoiceHandler(BaseHTTPRequestHandler):
             "tts_speed": KOKORO_SPEED if TTS_ENGINE == "kokoro" else 1.0,
             "tts_fallback_piper": TTS_FALLBACK_PIPER,
             "voice_loaded": bool(_tts) or _kokoro["model"] is not None,
-            "kokoro_available": importlib.util.find_spec("kokoro_onnx") is not None and importlib.util.find_spec("soundfile") is not None,
+            "kokoro_available": importlib.util.find_spec("kokoro_onnx") is not None
+            and importlib.util.find_spec("soundfile") is not None,
             "voice_models_dir": str(VOICE_MODELS_DIR),
             "ffmpeg": bool(FFMPEG),
             "formats": list(SPEECH_FORMATS),
@@ -426,7 +431,11 @@ class VoiceHandler(BaseHTTPRequestHandler):
         requested = body.get("voice")
         allowed_voices = {PIPER_VOICE, KOKORO_VOICE, "default"}
         if requested is not None and str(requested) not in allowed_voices:
-            raise VoiceError(400, "unknown_voice", f"Unknown voice '{requested}'; use '{KOKORO_VOICE if TTS_ENGINE == 'kokoro' else PIPER_VOICE}' or 'default'.")
+            raise VoiceError(
+                400,
+                "unknown_voice",
+                f"Unknown voice '{requested}'; use '{KOKORO_VOICE if TTS_ENGINE == 'kokoro' else PIPER_VOICE}' or 'default'.",
+            )
         fmt = str(body.get("response_format") or "wav").lower()
         if fmt not in SPEECH_FORMATS:
             raise VoiceError(

@@ -1,0 +1,35 @@
+[Unit]
+Description=DAI Independent SENTINEL Verification Service
+After=default.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/home/justin/dai/services/execution-sandbox
+Environment=PYTHONUNBUFFERED=1
+Environment=DAI_SANDBOX_ROOT=/data/dai-execution-sandbox
+Environment=DAI_SENTINEL_PORT=8791
+ExecStart=/usr/bin/python3 /home/justin/dai/services/execution-sandbox/sentinel_server.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+ReadOnlyPaths=/data/dai-execution-sandbox/projects
+ReadWritePaths=/data/dai-execution-sandbox/state
+InaccessiblePaths=/data/dai-execution-sandbox/state/api.token /run/docker.sock
+MemoryMax=2G
+CPUQuota=200%
+TasksMax=128
+LimitNOFILE=1024
+LimitCORE=0
+
+[Install]
+WantedBy=default.target

@@ -172,7 +172,11 @@ class TestCandidateBuilding(unittest.TestCase):
     def test_google_models_are_excluded_from_pool_catalog_and_vision(self) -> None:
         google = "google/gemma-4-31b-it:free"
         pool = {**default_pool(), "openrouter_free": [google, "alpha/one:free"], "openrouter_free_vision": [google]}
-        catalog = {"models": [{"id": google, "architecture": {"input_modalities": ["text", "image"]}, "pricing": {"prompt": "0"}}]}
+        catalog = {
+            "models": [
+                {"id": google, "architecture": {"input_modalities": ["text", "image"]}, "pricing": {"prompt": "0"}}
+            ]
+        }
         result = plan(env=KEY_ENV, pool=pool, catalog=catalog, free_cloud_only=True)
         self.assertTrue(result.candidates)
         self.assertNotIn(google, [c.model for c in result.candidates])

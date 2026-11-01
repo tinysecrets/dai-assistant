@@ -10,13 +10,13 @@ import os
 import subprocess
 import time
 import uuid
-import shlex
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 # Make lib.dai import optional for when this module is loaded outside the dai-assistant project
 try:
     from lib.dai import env as dai_env
+
     HAS_DAI_ENV = True
 except ImportError:
     HAS_DAI_ENV = False
@@ -105,23 +105,16 @@ class OmniDelegator:
                 # Unknown role: fallback to intent only
                 return None, None
 
-            # Open log file for writing
-            log_f = open(log_file, "w")
-            # Spawn process
-            proc = subprocess.Popen(
-                cmd,
-                stdout=log_f,
-                stderr=subprocess.STDOUT,
-                text=True,
-                cwd=str(self.dai_root),
-            )
-            log_f.close()  # we'll let the subprocess keep it open? Actually we need to keep it open until process ends.
-            # Better to keep the file open and close when process ends? We'll reopen for reading later.
-            # For simplicity, we'll close and let the subprocess inherit the file descriptor? Actually we closed it.
-            # Let's instead not close and keep the file object, but we need to store it? That's messy.
-            # We'll instead let the subprocess write to the file, and we'll close after spawning? The file will be closed on our end but the subprocess still has it open? Actually on Unix, the file descriptor is duplicated, so closing our end doesn't affect the child.
-            # So we can close it.
-            # However, we want to be able to read the log later; we can just open it again for reading.
+            # The child receives its own file descriptor; close the parent's handle
+            # immediately after Popen succeeds so it cannot leak on the host.
+            with open(log_file, "w") as log_f:
+                proc = subprocess.Popen(
+                    cmd,
+                    stdout=log_f,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    cwd=str(self.dai_root),
+                )
             return proc.pid, log_file
         except Exception as e:
             print(f"Failed to spawn agent: {e}")
@@ -130,6 +123,7 @@ class OmniDelegator:
     def _find_opencode(self) -> Optional[Path]:
         """Find the opencode binary in PATH."""
         import shutil
+
         opencode = shutil.which("opencode")
         if opencode:
             return Path(opencode)
@@ -163,10 +157,7 @@ class OmniDelegator:
     def add_agent_log(self, agent_id: str, message: str):
         """Add a log entry to an agent."""
         if agent_id in self._agents:
-            self._agents[agent_id]["logs"].append({
-                "timestamp": time.time(),
-                "message": message
-            })
+            self._agents[agent_id]["logs"].append({"timestamp": time.time(), "message": message})
             self._save_agents()
 
     def complete_agent(self, agent_id: str, result: Any):
@@ -213,7 +204,7 @@ class OmniDelegator:
 
 
 # Default factory function
-def create_delegator(dai_root: Path = None) -> OmniDelegator:
+def create_delegator(dai_root: Optional[Path] = None) -> OmniDelegator:
     if dai_root is None:
         dai_root = Path(__file__).resolve().parents[3]
     return OmniDelegator(dai_root)

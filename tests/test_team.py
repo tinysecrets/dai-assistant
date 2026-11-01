@@ -1,4 +1,5 @@
 """Wah-Lah team supervisor: routing and shared operational memory tests."""
+
 from __future__ import annotations
 
 import json
@@ -49,7 +50,7 @@ class TestTaskSelection(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("OVERSEER=DAI model=dai/auto", result.stdout)
-        self.assertIn("DELEGATION=plan -> debug -> code -> review", result.stdout)
+        self.assertIn("DELEGATION=plan -> debug -> code -> execution -> review", result.stdout)
         self.assertIn("no models called", result.stdout.lower())
 
     def test_live_gui_requires_owner_token_before_any_model_or_worker_call(self):
@@ -85,12 +86,12 @@ class TestTaskSelection(unittest.TestCase):
         self.assertEqual(select_team("Help organize the next phase", "plan"), ["plan", "review"])
 
     def test_nontrivial_code_requires_plan_work_and_independent_review(self):
-        self.assertEqual(select_team("Build an app", "code"), ["plan", "code", "review"])
+        self.assertEqual(select_team("Build an app", "code"), ["plan", "code", "execution", "review"])
 
     def test_debug_fix_routes_diagnosis_then_code_then_review(self):
         self.assertEqual(
             select_team("Fix the broken model router loop", "auto"),
-            ["plan", "debug", "code", "review"],
+            ["plan", "debug", "code", "execution", "review"],
         )
 
     def test_diagnostic_only_task_does_not_delegate_mutation(self):
@@ -103,7 +104,9 @@ class TestTaskSelection(unittest.TestCase):
         self.assertEqual(classify_task("Open Chromium and click the settings icon"), "gui")
         self.assertEqual(select_team("Open Chromium and click the settings icon", "auto"), ["plan", "gui", "review"])
         self.assertEqual(classify_task("Read this response aloud through the voice bridge"), "voice")
-        self.assertEqual(select_team("Read this response aloud through the voice bridge", "auto"), ["plan", "voice", "review"])
+        self.assertEqual(
+            select_team("Read this response aloud through the voice bridge", "auto"), ["plan", "voice", "review"]
+        )
 
     def test_bad_mode_is_rejected(self):
         with self.assertRaises(ValueError):
@@ -112,32 +115,69 @@ class TestTaskSelection(unittest.TestCase):
     def test_capability_catalog_covers_the_wah_lah_projects(self):
         rows = capability_status(Path(__file__).resolve().parents[1])
         names = {row["name"] for row in rows}
-        self.assertTrue({
-            "plan", "code", "research", "debug", "review", "gui",
-            "repair", "voice", "codex", "openclaw", "hermes",
-            "continue", "nova", "genie", "omni", "zero-gravity",
-        }.issubset(names))
+        self.assertTrue(
+            {
+                "plan",
+                "code",
+                "execution",
+                "research",
+                "debug",
+                "review",
+                "gui",
+                "repair",
+                "voice",
+                "codex",
+                "openclaw",
+                "hermes",
+                "continue",
+                "nova",
+                "genie",
+                "omni",
+                "zero-gravity",
+            }.issubset(names)
+        )
         cloud = next(row for row in rows if row["name"] == "zero-gravity")
         self.assertIsNone(cloud["available"], "external app availability must be checked remotely")
 
 
-
 class TestSharedOperationalMemory(unittest.TestCase):
     def test_context_shares_outcomes_not_original_prompts(self):
-        context = build_shared_context([
-            {"project": "/work/dai", "mode": "code", "status": "verified", "verification": "passed"},
-            {"project": "/work/nova", "mode": "debug", "status": "needs-correction", "verification": "failed", "failure_class": "router timeout"},
-        ])
+        context = build_shared_context(
+            [
+                {"project": "/work/dai", "mode": "code", "status": "verified", "verification": "passed"},
+                {
+                    "project": "/work/nova",
+                    "mode": "debug",
+                    "status": "needs-correction",
+                    "verification": "failed",
+                    "failure_class": "router timeout",
+                },
+            ]
+        )
         self.assertIn("verified", context)
         self.assertIn("router timeout", context)
         self.assertNotIn("original prompt", context.lower())
         self.assertIn("operational memory, not model training", context.lower())
 
     def test_verified_lesson_is_shared_but_failed_lesson_is_not(self):
-        context = build_shared_context([
-            {"project": "/work/dai", "mode": "code", "status": "verified", "verification": "passed", "verified_lesson": "The router returns 503 when no providers are ready."},
-            {"project": "/work/nova", "mode": "debug", "status": "needs-correction", "verification": "failed", "verified_lesson": "Do not share this unverified claim."},
-        ])
+        context = build_shared_context(
+            [
+                {
+                    "project": "/work/dai",
+                    "mode": "code",
+                    "status": "verified",
+                    "verification": "passed",
+                    "verified_lesson": "The router returns 503 when no providers are ready.",
+                },
+                {
+                    "project": "/work/nova",
+                    "mode": "debug",
+                    "status": "needs-correction",
+                    "verification": "failed",
+                    "verified_lesson": "Do not share this unverified claim.",
+                },
+            ]
+        )
         self.assertIn("The router returns 503 when no providers are ready.", context)
         self.assertNotIn("Do not share this unverified claim.", context)
 
@@ -160,7 +200,9 @@ class TestSharedOperationalMemory(unittest.TestCase):
             verification="failed",
             verified_lesson="Unverified data",
         )
-        self.assertEqual(verified["verified_lesson"], "The health endpoint reports configured keys without showing values.")
+        self.assertEqual(
+            verified["verified_lesson"], "The health endpoint reports configured keys without showing values."
+        )
         self.assertEqual(failed["verified_lesson"], "")
 
     def test_owner_notes_are_shared_with_specialists(self):

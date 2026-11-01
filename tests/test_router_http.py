@@ -242,7 +242,7 @@ class TestChatRouting(RouterCase):
         self.assertIn("messages", keys)
 
     def test_dai_hint_drives_vision_boosting(self) -> None:
-        pool = {
+        pool: ClassVar[Dict[str, Any]] = {
             "openrouter_free": ["text/only:free", "alpha/one:free"],
             "openrouter_free_vision": ["alpha/one:free"],
             "groq_models": [],
@@ -491,25 +491,29 @@ class TestSensitivePayloadRouting(RouterCase):
         self.base = self.service.base_url
         self.addCleanup(self.tearDownServices)
 
-    pool = {
+    pool: ClassVar[Dict[str, Any]] = {
         "openrouter_free": ["alpha/one:free"],
         "openrouter_free_vision": [],
         "groq_models": ["groq-fast"],
         "ollama_cloud_models": ["cloud-model"],
         "ollama_local_models": ["hermes3:8b"],
     }
-    policy = {
+    policy: ClassVar[Dict[str, Any]] = {
         "version": 3,
         "inference": {"free_cloud_only": True, "private_data_must_stay_local": True},
     }
-    router_env = {
+    router_env: ClassVar[Dict[str, str]] = {
         "OPENROUTER_API_KEY": TEST_KEY,
         "FREELLMAPI_API_KEY": "gateway-test-key",
         "GROQ_API_KEY": GROQ_KEY,
     }
 
     def test_credential_pattern_is_routed_only_to_local_ollama(self) -> None:
-        payload = {"messages": [{"role": "user", "content": "Please use this API key: sk-or-v1-TESTKEY-DO-NOT-LEAK-1234567890"}]}
+        payload = {
+            "messages": [
+                {"role": "user", "content": "Please use this API key: sk-or-v1-TESTKEY-DO-NOT-LEAK-1234567890"}
+            ]
+        }
         status, body, _headers, _raw = self.chat(payload)
         self.assertEqual(status, 200, body)
         calls = self.upstream.calls_for("/chat/completions")
@@ -519,7 +523,10 @@ class TestSensitivePayloadRouting(RouterCase):
 
     def test_sensitive_payload_cannot_be_pinned_to_cloud(self) -> None:
         status, body, _headers, _raw = self.chat(
-            {"model": "openrouter/alpha/one:free", "messages": [{"role": "user", "content": "password=not-a-real-password"}]}
+            {
+                "model": "openrouter/alpha/one:free",
+                "messages": [{"role": "user", "content": "password=not-a-real-password"}],
+            }
         )
         self.assertEqual(status, 403)
         self.assertEqual(body["error"], "private_data_local_only")
@@ -527,10 +534,15 @@ class TestSensitivePayloadRouting(RouterCase):
 
     def test_image_payload_is_not_sent_to_cloud(self) -> None:
         payload = {
-            "messages": [{"role": "user", "content": [
-                {"type": "text", "text": "Describe this picture"},
-                {"type": "image_url", "image_url": {"url": "https://invalid.example/image.png"}},
-            ]}]
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Describe this picture"},
+                        {"type": "image_url", "image_url": {"url": "https://invalid.example/image.png"}},
+                    ],
+                }
+            ]
         }
         status, body, _headers, _raw = self.chat(payload)
         self.assertEqual(status, 200, body)
@@ -539,7 +551,13 @@ class TestSensitivePayloadRouting(RouterCase):
         self.assertEqual(calls[0]["model"], "hermes3:8b")
 
     def test_private_route_fails_closed_without_local_candidate(self) -> None:
-        pool = {"openrouter_free": ["alpha/one:free"], "openrouter_free_vision": [], "groq_models": [], "ollama_cloud_models": [], "ollama_local_models": []}
+        pool = {
+            "openrouter_free": ["alpha/one:free"],
+            "openrouter_free_vision": [],
+            "groq_models": [],
+            "ollama_cloud_models": [],
+            "ollama_local_models": [],
+        }
         spine = TempSpine(pool=pool, policy=self.policy)
         self.addCleanup(spine.cleanup)
         service, _runtime = start_router(spine, self.upstream, env=dict(self.router_env))

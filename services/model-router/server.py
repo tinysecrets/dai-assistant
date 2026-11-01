@@ -91,13 +91,23 @@ _SENSITIVE_TEXT = re.compile(
     re.IGNORECASE,
 )
 _SENSITIVE_FIELD_NAMES = {
-    "api_key", "apikey", "access_token", "refresh_token", "client_secret",
-    "password", "passwd", "private_key", "secret", "cookie", "authorization",
+    "api_key",
+    "apikey",
+    "access_token",
+    "refresh_token",
+    "client_secret",
+    "password",
+    "passwd",
+    "private_key",
+    "secret",
+    "cookie",
+    "authorization",
 }
 
 
 def sensitive_payload_reason(value: Any) -> Optional[str]:
     """Return a safe classification only; never include the matching value."""
+
     def visit(item: Any, key: str = "") -> Optional[str]:
         key_norm = key.strip().lower().replace("-", "_")
         if key_norm in _SENSITIVE_FIELD_NAMES and item not in (None, "", [], {}):
@@ -123,6 +133,7 @@ def sensitive_payload_reason(value: Any) -> Optional[str]:
         return None
 
     return visit(value)
+
 
 UNSUPPORTED_PATHS: Dict[str, str] = {
     "/v1/embeddings": "Vellum embeds locally (ONNX) by default; the router does not proxy embeddings.",
@@ -241,7 +252,11 @@ class RouterRuntime:
 
     def provider_enabled(self, name: str) -> bool:
         """A provider is on unless the policy explicitly switches it off."""
-        if self.inference_policy().get("free_cloud_only") is True and name not in ("freellmapi", "openrouter", "ollama_local"):
+        if self.inference_policy().get("free_cloud_only") is True and name not in (
+            "freellmapi",
+            "openrouter",
+            "ollama_local",
+        ):
             return False
         cfg = self.inference_policy().get(name)
         return not (isinstance(cfg, dict) and cfg.get("enabled") is False)
@@ -1077,7 +1092,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"{SERVICE.name} {VERSION}")
         return 0
 
-    load_dotenv(Path(os.environ.get("DAI_ENV", str(ROOT / ".env"))))
+    env_path = Path(os.environ.get("DAI_ENV", str(ROOT / ".env")))
+    load_dotenv(env_path)
+    # Upstream provider credentials come from the protected shared dhakidd store.
+    # Load them only in the model-router process, not in the agent/desktop worker.
+    shared_provider_env = Path.home() / ".config" / "dhakidd" / "providers.env"
+    load_dotenv(shared_provider_env, override=True)
     runtime = build_runtime()
     config = build_config(runtime)
 

@@ -431,9 +431,7 @@ def _text_models(pool: Mapping[str, Any], catalog: Mapping[str, Any], task_hint:
     round-robin instead of being shuffled straight back out.
     """
     models: List[str] = [
-        str(m)
-        for m in (pool.get("openrouter_free") or [])
-        if m and not str(m).strip().lower().startswith("google/")
+        str(m) for m in (pool.get("openrouter_free") or []) if m and not str(m).strip().lower().startswith("google/")
     ]
     if models and is_vision_request(task_hint):
         vision = set(_vision_models(pool, catalog))

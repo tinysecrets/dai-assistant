@@ -3,15 +3,14 @@
 
 from __future__ import annotations
 
+import contextlib
+import importlib
 import json
-import os
 import time
 import uuid
-import importlib
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from dataclasses import dataclass, asdict
-from collections import defaultdict
 
 # sentence_transformers + numpy are optional (semantic/embedding search).
 # They are imported lazily via importlib so the spine stays stdlib-only at
@@ -104,8 +103,14 @@ class OmniMemory:
 
     # ===== Episodic Memory (Event Log) =====
 
-    def log_event(self, event_type: str, detail: str, context: Dict = None,
-                  outcome: str = None, tags: List[str] = None) -> str:
+    def log_event(
+        self,
+        event_type: str,
+        detail: str,
+        context: Optional[Dict] = None,
+        outcome: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+    ) -> str:
         """Append an event to the episodic log."""
         event = EpisodicEvent(
             id=str(uuid.uuid4())[:8],
@@ -114,7 +119,7 @@ class OmniMemory:
             detail=detail,
             context=context or {},
             outcome=outcome,
-            tags=tags or []
+            tags=tags or [],
         )
 
         with open(self.episodic_path, "a") as f:
@@ -179,10 +184,8 @@ class OmniMemory:
         if self.episodic_path.exists():
             with open(self.episodic_path) as f:
                 for line in f:
-                    try:
+                    with contextlib.suppress(Exception):
                         events.append(json.loads(line))
-                    except Exception:
-                        pass
         return events[-limit:]
 
     # ===== Semantic Memory (Facts) =====
@@ -194,7 +197,7 @@ class OmniMemory:
             "confidence": confidence,
             "source": source,
             "updated": time.time(),
-            "access_count": self._semantic_cache.get(key, {}).get("access_count", 0) + 1
+            "access_count": self._semantic_cache.get(key, {}).get("access_count", 0) + 1,
         }
         self._save_semantic()
 
@@ -240,13 +243,15 @@ class OmniMemory:
         for _, key in results:
             if key in self._semantic_cache:
                 entry = self._semantic_cache[key]
-                full_results.append({
-                    "key": key,
-                    "value": entry["value"],
-                    "confidence": entry.get("confidence", 1.0),
-                    "source": entry.get("source", "unknown"),
-                    "updated": entry.get("updated", 0)
-                })
+                full_results.append(
+                    {
+                        "key": key,
+                        "value": entry["value"],
+                        "confidence": entry.get("confidence", 1.0),
+                        "source": entry.get("source", "unknown"),
+                        "updated": entry.get("updated", 0),
+                    }
+                )
 
         return full_results
 
@@ -256,8 +261,14 @@ class OmniMemory:
 
     # ===== Procedural Memory (How-To) =====
 
-    def learn_procedure(self, name: str, steps: List[Dict], context: str = "",
-                       success_rate: float = 1.0, tags: List[str] = None):
+    def learn_procedure(
+        self,
+        name: str,
+        steps: List[Dict],
+        context: str = "",
+        success_rate: float = 1.0,
+        tags: Optional[List[str]] = None,
+    ):
         """Store a learned procedure."""
         self._procedural_cache[name] = {
             "steps": steps,
@@ -266,7 +277,7 @@ class OmniMemory:
             "tags": tags or [],
             "created": time.time(),
             "updated": time.time(),
-            "use_count": 0
+            "use_count": 0,
         }
         self._save_procedural()
 
@@ -306,13 +317,15 @@ class OmniMemory:
         for _, name in results:
             if name in self._procedural_cache:
                 entry = self._procedural_cache[name]
-                full_results.append({
-                    "name": name,
-                    "steps": entry["steps"],
-                    "context": entry["context"],
-                    "success_rate": entry.get("success_rate", 1.0),
-                    "tags": entry.get("tags", [])
-                })
+                full_results.append(
+                    {
+                        "name": name,
+                        "steps": entry["steps"],
+                        "context": entry["context"],
+                        "success_rate": entry.get("success_rate", 1.0),
+                        "tags": entry.get("tags", []),
+                    }
+                )
 
         return full_results
 
@@ -365,10 +378,8 @@ class OmniMemory:
             events = []
             with open(self.episodic_path) as f:
                 for line in f:
-                    try:
+                    with contextlib.suppress(Exception):
                         events.append(json.loads(line))
-                    except Exception:
-                        pass
             if len(events) > 10000:
                 with open(self.episodic_path, "w") as f:
                     for e in events[-10000:]:
@@ -388,5 +399,5 @@ class OmniMemory:
             "semantic_facts": len(self._semantic_cache),
             "procedural_skills": len(self._procedural_cache),
             "vector_embeddings": len(self._vector_index),
-            "state_dir_size_mb": sum(f.stat().st_size for f in self.state_dir.rglob("*")) / 1024 / 1024
+            "state_dir_size_mb": sum(f.stat().st_size for f in self.state_dir.rglob("*")) / 1024 / 1024,
         }

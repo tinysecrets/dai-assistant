@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Narrow authenticated mobile web interface for the local DAI model router."""
+
 from __future__ import annotations
+
 import hmac
 import json
 import os
@@ -22,6 +24,7 @@ MAX_TEXT = 100_000
 ALLOWED_IPS = {"100.104.165.28", "100.105.171.108", "127.0.0.1", "::1"}
 requests_by_ip = defaultdict(deque)
 
+
 def read_token() -> str:
     try:
         token = TOKEN_FILE.read_text(encoding="utf-8").strip()
@@ -31,10 +34,13 @@ def read_token() -> str:
         raise RuntimeError("Phone UI token is invalid")
     return token
 
+
 TOKEN = read_token()
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "DAIPhoneUI/1.0"
+
     def log_message(self, fmt, *args):
         # Do not log prompts, auth headers, or user content.
         print("DAIPhoneUI %s %s" % (self.client_address[0], fmt.split(" ")[0]), flush=True)
@@ -68,7 +74,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(raw)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'")
+        self.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'",
+        )
         self.send_header("Referrer-Policy", "no-referrer")
         self.end_headers()
         self.wfile.write(raw)
@@ -93,7 +102,9 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self.send_json(400, {"error": "invalid_length"})
         if length < 2 or length > MAX_BODY:
-            return self.send_json(413 if length > MAX_BODY else 400, {"error": "payload_too_large" if length > MAX_BODY else "empty_body"})
+            return self.send_json(
+                413 if length > MAX_BODY else 400, {"error": "payload_too_large" if length > MAX_BODY else "empty_body"}
+            )
         try:
             doc = json.loads(self.rfile.read(length))
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -136,7 +147,10 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
         except Exception:
-            return self.send_json(502, {"error": "router_unavailable", "detail": "The local DAI router did not respond."})
+            return self.send_json(
+                502, {"error": "router_unavailable", "detail": "The local DAI router did not respond."}
+            )
+
 
 if __name__ == "__main__":
     if BIND_HOST not in ("100.105.171.108", "127.0.0.1"):

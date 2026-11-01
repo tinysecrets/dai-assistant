@@ -220,17 +220,21 @@ def verify_project(root: Path, code_mode: bool, timeout: int) -> Tuple[bool, str
         return False, "git diff --check failed:\n" + out[-3000:]
     checks = ["git diff --check: PASS"]
 
-    # This repo has a known complete regression suite; run it explicitly.
+    # DAI code missions are now persisted and independently tested by the
+    # OMEGA/SENTINEL execution services, not only by a host-side test command.
     if (root / "tests").is_dir() and (root / "services/model-router/server.py").is_file():
-        rc, out = run_capture(
-            [sys.executable, "-m", "unittest", "discover", "-s", "tests", "-t", "."],
-            root,
-            timeout,
-        )
-        checks.append(out[-5000:])
-        if rc != 0 or not re.search(r"Ran\s+[1-9][0-9]*\s+tests?", out):
-            return False, "\n".join(checks) + f"\nDAI_TEST_SUITE_FAILED_OR_EMPTY exit={rc}"
-        return True, "\n".join(checks) + "\nDAI_TEST_SUITE=PASS"
+        project_id = "dai-run-" + uuid.uuid4().hex[:20]
+        try:
+            from lib.dai.execution import ExecutionClient
+            result = ExecutionClient("omega", timeout=max(180, timeout + 45)).snapshot_build_verify(
+                root, project_id, timeout_seconds=min(300, max(30, timeout))
+            )
+            details = json.dumps(result, ensure_ascii=False, indent=2, default=str)
+            if result.get("ok") is True:
+                return True, "OMEGA_WRITE=PASS\\nBUBBLEWRAP_BUILD=PASS\\nSENTINEL=PASS\\n" + details[-12000:]
+            return False, "OMEGA_EXECUTION=FAIL\\n" + details[-12000:]
+        except Exception as exc:
+            return False, "OMEGA_EXECUTION=ERROR " + type(exc).__name__ + ": " + str(exc)[:1000]
 
     # Prefer an installed pytest suite (also discovers unittest tests) when
     # present, without installing anything or changing the environment.

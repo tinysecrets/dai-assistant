@@ -516,7 +516,17 @@ class TestSkills(unittest.TestCase):
 
     def test_the_shipped_skills_exist(self):
         names = {p.name for p in self.skills()}
-        self.assertEqual(names, {"agent-s-delegate", "dai-voice", "english-to-code", "wah-lah-overseer"})
+        self.assertEqual(
+            names,
+            {
+                "agent-s-delegate",
+                "dai-voice",
+                "english-to-code",
+                "wah-lah-overseer",
+                "omega-execution",
+                "sentinel-verification",
+            },
+        )
 
     def test_frontmatter_is_valid_yaml_with_required_fields(self):
         for skill in self.skills():
@@ -596,6 +606,12 @@ class TestStdlibOnly(unittest.TestCase):
                     if not name:
                         continue
                     if is_stdlib_module(name) or name in self.LOCAL_OK:
+                        continue
+                    if relative_path.startswith("services/execution-sandbox/") and name in {
+                        "common",
+                        "sandbox",
+                        "sentinel",
+                    }:
                         continue
                     # Kokoro is an optional TTS backend. Its third-party engines
                     # must stay lazy so a bare Python install can import the DAI

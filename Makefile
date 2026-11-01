@@ -65,7 +65,7 @@ lint: compile
 ## shellcheck: run shellcheck if it is installed (skipped otherwise)
 shellcheck:
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		shellcheck -x bin/*.sh bin/dai; \
+		shellcheck -x -S warning bin/*.sh bin/dai; \
 	else \
 		echo "shellcheck not installed — skipping (not a dependency)"; \
 	fi

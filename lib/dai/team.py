@@ -4,6 +4,7 @@ The model provider is selected by the existing DAI router. This module only
 coordinates roles, produces project-safe context, and records verifiable run
 outcomes; it does not change model weights or replace the owner's model roster.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -32,6 +33,11 @@ CAPABILITIES: Dict[str, Dict[str, str]] = {
         "role": "implement code/config changes in the selected project",
         "entry": "opencode",
         "kind": "tool-agent",
+    },
+    "execution": {
+        "role": "persist the generated source, run isolated builds and hand artifacts to SENTINEL",
+        "entry": "lib/dai/execution.py",
+        "kind": "execution-api",
     },
     "research": {
         "role": "gather outside evidence and synthesize a research briefing",
@@ -111,7 +117,10 @@ def redact_sensitive(text: str) -> str:
     value = str(text)
     patterns = (
         (r"(?i)(authorization\s*:\s*bearer\s+)[^\s,;]+", r"\1[REDACTED]"),
-        (r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+", r"\1[REDACTED]"),
+        (
+            r"(?i)((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|secret)\s*[:=]\s*)[^\s,;]+",
+            r"\1[REDACTED]",
+        ),
         (r"(?i)(freellmapi-)[a-f0-9]{24,}", r"\1[REDACTED]"),
         (r"(?i)(sk-or-v1-)[a-z0-9]{16,}", r"\1[REDACTED]"),
         (r"(?i)(gsk_)[a-z0-9_-]{12,}", r"\1[REDACTED]"),
@@ -170,10 +179,14 @@ def select_team(task: str, requested_mode: str = "auto") -> List[str]:
     team = ["plan"]
     if primary != "plan":
         team.append(primary)
+    if primary == "code":
+        team.append("execution")
     # A diagnostic request becomes diagnose -> execute when the owner explicitly
     # asks for a repair/fix. Pure diagnosis remains read-only.
-    if primary == "debug" and re.search(r"\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\b", task, re.I):
-        team.append("code")
+    if primary == "debug" and re.search(
+        r"\b(fix|repair|remediate|restore|recover|restart|correct|unblock)\b", task, re.I
+    ):
+        team.extend(("code", "execution"))
     team.append("review")
     return team
 
@@ -189,7 +202,7 @@ def load_jsonl(path: Path, limit: int = MAX_SHARED_RUNS) -> List[Dict[str, Any]]
     except OSError:
         return []
     results: List[Dict[str, Any]] = []
-    for line in lines[-max(1, limit * 3):]:
+    for line in lines[-max(1, limit * 3) :]:
         try:
             row = json.loads(line)
         except (ValueError, TypeError):
@@ -227,6 +240,7 @@ def build_shared_context(
     context = "\n\n".join(sections)
     return context[-max_chars:]
 
+
 def append_jsonl(path: Path, row: Mapping[str, Any]) -> None:
     """Append one redacted record under a private directory."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -252,17 +266,29 @@ def capability_status(root: Path) -> List[Dict[str, Any]]:
         elif kind == "tool-agent":
             path = shutil.which(entry) or str(Path.home() / ".npm-global" / "bin" / entry)
             available = bool(shutil.which(entry) or Path(path).is_file())
+        elif kind == "execution-api":
+            try:
+                from lib.dai.execution import ExecutionClient
+
+                available = (
+                    ExecutionClient("omega", timeout=3).health().get("ok") is True
+                    and ExecutionClient("sentinel", timeout=3).health().get("ok") is True
+                )
+            except (OSError, RuntimeError, ValueError):
+                available = False
         elif kind in {"local-cli", "local-config", "local-file"}:
             available = Path(entry).expanduser().exists()
         else:
             available = (root / entry).exists()
-        output.append({
-            "name": name,
-            "role": item["role"],
-            "entry": entry,
-            "kind": item["kind"],
-            "available": available,
-        })
+        output.append(
+            {
+                "name": name,
+                "role": item["role"],
+                "entry": entry,
+                "kind": item["kind"],
+                "available": available,
+            }
+        )
     return output
 
 
@@ -288,6 +314,8 @@ def make_run_record(
         "status": status,
         "verification": verification,
         "failure_class": redact_sensitive(failure_class)[:220],
-        "verified_lesson": redact_sensitive(verified_lesson.strip())[:240] if verified_lesson.strip() and status == "verified" else "",
+        "verified_lesson": redact_sensitive(verified_lesson.strip())[:240]
+        if verified_lesson.strip() and status == "verified"
+        else "",
         "artifacts": list(artifacts or []),
     }
